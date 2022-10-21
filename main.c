@@ -8,21 +8,45 @@
 #include <string.h>
 
 typedef struct State {
+  const char *file;
   const char *c;
   size_t line;
   size_t column;
 } State;
 
-State State_new(const char *c) {
-  return (State){.c = c, .line = 1, .column = 1};
+State State_new(const char *c, const char *file) {
+  return (State){.file = file, .c = c, .line = 1, .column = 1};
 }
 
-void FATAL(const char *format, ...) {
+struct {
+  State states[128];
+  int size;
+} traceStack;
+
+void FATAL(State *s, const char *format, ...);
+void traceStack_push(State *s) {
+  if (traceStack.size == 128)
+    FATAL(&(State){.file = s->file, .line = 0, .column = 0},
+          "not enough buffer for stack trace");
+  traceStack.states[traceStack.size] = *s;
+  traceStack.size++;
+}
+
+void traceStack_pop() { traceStack.size--; }
+
+void FATAL(State *st, const char *format, ...) {
   va_list args;
+  fprintf(stderr, "%s:%zu:%zu error: ", st->file, st->line, st->column);
   va_start(args, format);
-  fputs("Error: ", stderr);
   vfprintf(stderr, format, args);
   va_end(args);
+  fputs("\n", stderr);
+
+  for (int i = traceStack.size - 1; i >= 0; --i) {
+    State *sst = &traceStack.states[i];
+    fprintf(stderr, " - %s:%zu:%zu\n", sst->file, sst->line, sst->column);
+  }
+
   exit(1);
 }
 
@@ -165,6 +189,7 @@ typedef struct Use {
 
 typedef struct Klass {
   const char *path;
+  const char *name;
   Use *use;
   Variable *member;
   Function *fn;
@@ -193,7 +218,7 @@ Program Program_new(char *buffer, size_t cap) {
 
 void *Program_alloc(Program *p, size_t size) {
   if (p->arena.len + size > p->arena.cap)
-    FATAL("Out of memory");
+    FATAL(&(State){.file = "", .line = 0, .column = 0}, "Out of memory");
   void *d = (p->arena.buffer + p->arena.len);
   p->arena.len += size;
   return d;
@@ -255,10 +280,16 @@ Function *Program_add_fn(Program *p, Klass *c) {
   return fn;
 }
 
+Variable *Program_new_variable(Program *p, Variable *next) {
+  Variable *v = Program_alloc(p, sizeof(Variable));
+  v->next = next;
+  return v;
+}
+
 void skip_whitespace(State *st) {
   while (*st->c && isspace(*st->c)) {
     if (*st->c == '\n') {
-      st->line = 1;
+      st->line++;
       st->column = 1;
     } else
       ++st->column;
@@ -318,7 +349,7 @@ const char *read_identifier(Program *p, State *st) {
   return NULL;
 }
 
-Klass *Program_parse_file(Program *p, const char *path);
+Klass *Program_parse_file(Program *p, const char *path, State *st);
 
 bool Program_parse_use_path(Program *p, Klass *c, State *st) {
   skip_whitespace(st);
@@ -338,7 +369,7 @@ bool Program_parse_use_path(Program *p, Klass *c, State *st) {
       old = *st;
 
       if (!check_identifier(st))
-        FATAL("Error parsing use statement!");
+        FATAL(st, "Error parsing use statement!");
       inb += snprintf(buffer + inb, 256 - inb, "%.*s", (int)(st->c - old.c),
                       old.c);
       old = *st;
@@ -346,50 +377,44 @@ bool Program_parse_use_path(Program *p, Klass *c, State *st) {
   } else
     return false;
 
-  Klass *use = Program_parse_file(p, buffer);
+  Klass *use = Program_parse_file(p, buffer, &old);
   Program_add_use(p, c, use);
   return true;
 }
 
-void Program_parse_variable_declaration(Program *p, State *st,
-                                        const char *end) {
+Variable *Program_parse_variable_declaration(Program *p, State *st,
+                                             const char *end) {
   skip_whitespace(st);
   State old = *st;
+  Variable *top = NULL;
   while (*st->c) {
     if (check_op(st, end))
-      return;
-    if (check_identifier(st)) {
+      return top;
+    top = Program_new_variable(p, top);
+    if ((top->name = read_identifier(p, st))) {
       skip_whitespace(st);
       if (check_identifier(st)) {
         ;
       } else
-        FATAL("missing member name");
+        FATAL(st, "missing type");
     } else
-      FATAL("missing type name");
+      FATAL(st, "missing variable name");
     check_op(st, ",");
   }
-  FATAL("Missing closing '%s'", end);
-}
-
-void Program_parse_struct_body(Program *p, Klass *c, State *st) {
-  skip_whitespace(st);
-
-  if (check_op(st, "{")) {
-    Program_parse_variable_declaration(p, st, "}");
-  } else
-    FATAL("Missing struct body");
+  FATAL(st, "Missing closing '%s'", end);
+  return NULL;
 }
 
 void Program_parse_type(Program *p, Klass *c, State *st) {
   skip_whitespace(st);
 
-  if (check_identifier(st)) {
-    if (check_word(st, "struct")) {
-      Program_parse_struct_body(p, c, st);
-    } else
-      FATAL("Missing type declaration");
+  if ((c->name = read_identifier(p, st))) {
+    if (check_word(st, "struct") && check_op(st, "{"))
+      c->member = Program_parse_variable_declaration(p, st, "}");
+    else
+      FATAL(st, "Missing type declaration");
   } else
-    FATAL("Missing type name");
+    FATAL(st, "Missing type name");
 }
 
 void Program_parse_function_body(Program *p, Klass *c, Function *fn,
@@ -400,7 +425,7 @@ void Program_parse_function_body(Program *p, Klass *c, Function *fn,
       return;
     break;
   }
-  FATAL("Missing closing '}' for function body");
+  FATAL(st, "Missing closing '}' for function body");
 }
 
 void Program_parse_fn(Program *p, Klass *c, State *st) {
@@ -408,46 +433,47 @@ void Program_parse_fn(Program *p, Klass *c, State *st) {
 
   Function *fn = Program_add_fn(p, c);
   if ((fn->name = read_identifier(p, st))) {
-
     if (check_op(st, "(")) {
-      Program_parse_variable_declaration(p, st, ")");
+      fn->parameter = Program_parse_variable_declaration(p, st, ")");
       skip_whitespace(st);
       if (check_identifier(st)) {
         ;
       } else
-        ; // void
+        fn->returnType = NULL; // void
       if (check_op(st, "{"))
-        Program_parse_function_body(p, c, NULL, st);
+        Program_parse_function_body(p, c, fn, st);
       else
-        FATAL("Missing function body");
+        FATAL(st, "Missing function body");
     } else
-      FATAL("Missing parameterlist");
+      FATAL(st, "Missing parameterlist");
   } else
-    FATAL("Missing type name");
+    FATAL(st, "Missing type name");
 }
 
 void Program_parse_class(Program *p, Klass *c, State *st) {
   while (st->c[0]) {
     skip_whitespace(st);
-    if (!st->c[0])
-      break;
-    if (check_word(st, "use"))
-      Program_parse_use_path(p, c, st);
-    else if (check_word(st, "type"))
-      Program_parse_type(p, c, st);
-    else if (check_word(st, "fn"))
-      Program_parse_fn(p, c, st);
-    else {
-      FATAL("Unknown keyword >>'%s'\n", st->c);
-      break;
+    traceStack_push(st);
+    if (st->c[0]) {
+      if (check_word(st, "use"))
+        Program_parse_use_path(p, c, st);
+      else if (check_word(st, "type"))
+        Program_parse_type(p, c, st);
+      else if (check_word(st, "fn"))
+        Program_parse_fn(p, c, st);
+      else {
+        FATAL(st, "Unknown keyword >>'%s'\n", st->c);
+        break;
+      }
     }
+    traceStack_pop();
   }
 }
 
-Klass *Program_parse_file(Program *p, const char *path) {
+Klass *Program_parse_file(Program *p, const char *path, State *outer_st) {
   Klass *c = Program_find_class(p, path);
   if (c && !c->finished)
-    FATAL("Circular dependencies!");
+    FATAL(outer_st, "Circular dependencies!");
   if (c)
     return c;
 
@@ -463,9 +489,9 @@ Klass *Program_parse_file(Program *p, const char *path) {
 
   char *code = readFile(tempPath);
   if (!code)
-    FATAL("missing file! '%s'", tempPath);
+    FATAL(outer_st, "missing file! '%s'", tempPath);
 
-  State st = State_new(code);
+  State st = State_new(code, tempPath);
   Program_parse_class(p, c, &st);
   c->finished = true;
 
@@ -474,10 +500,13 @@ Klass *Program_parse_file(Program *p, const char *path) {
 }
 
 int main(int argc, char *argv[]) {
+  traceStack.size = 0;
+
   char buffer[1024 * 64];
   Program p = Program_new(buffer, 1024 * 64);
 
-  Program_parse_file(&p, "main");
+  Program_parse_file(&p, "main",
+                     &(State){.file = "main.jnq", .line = 0, .column = 0});
 
   return 0;
 }
