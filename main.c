@@ -257,6 +257,34 @@ Module *Program_find_module(Program *p, const char *path) {
   return NULL;
 }
 
+Klass Bool = (Klass){"bool", NULL, NULL};
+Klass Char = (Klass){"char", NULL, NULL};
+Klass Int = (Klass){"int", NULL, NULL};
+Klass Float = (Klass){"float", NULL, NULL};
+Klass String = (Klass){"string", NULL, NULL};
+
+Klass *Module_find_type(Program *p, Module *m, const char *b, const char *e) {
+  if (4 == e - b && strncmp(Bool.name, b, 4) == 0)
+    return &Bool;
+  if (3 == e - b && strncmp(Int.name, b, 3) == 0)
+    return &Int;
+  if (4 == e - b && strncmp(Char.name, b, 4) == 0)
+    return &Bool;
+  if (5 == e - b && strncmp(Float.name, b, 5) == 0)
+    return &Float;
+  if (6 == e - b && strncmp(String.name, b, 6) == 0)
+    return &String;
+
+  for (Klass *c = m->types; c; c = c->next)
+    if (strlen(c->name) == e - b && strncmp(c->name, b, e - b) == 0)
+      return c;
+  for (Use *u = m->use; u; u = u->next)
+    for (Klass *c = u->use->types; c; c = c->next)
+      if (strlen(c->name) == e - b && strncmp(c->name, b, e - b) == 0)
+        return c;
+  return NULL;
+}
+
 Module *Program_add_module(Program *p, const char *pathc) {
   size_t size = strlen(pathc) + 1;
   char *path = (char *)Program_alloc(p, size);
@@ -395,7 +423,21 @@ bool Program_parse_use_path(Program *p, Module *m, State *st) {
   return true;
 }
 
-Variable *Program_parse_variable_declaration(Program *p, State *st,
+Klass *Program_parse_declared_type(Program *p, Module *m, State *st) {
+  skip_whitespace(st);
+  State old = *st;
+  if (check_identifier(st)) {
+    Klass *t = Module_find_type(p, m, old.c, st->c);
+    if (!t)
+      FATAL(&old, "Unknown type '%.*s'", (int)(st->c - old.c), old.c);
+    return t;
+  }
+
+  *st = old;
+  return NULL;
+}
+
+Variable *Program_parse_variable_declaration(Program *p, Module *m, State *st,
                                              const char *end) {
   skip_whitespace(st);
   State old = *st;
@@ -405,8 +447,7 @@ Variable *Program_parse_variable_declaration(Program *p, State *st,
       return top;
     top = Program_new_variable(p, top);
     if ((top->name = read_identifier(p, st))) {
-      skip_whitespace(st);
-      if (check_identifier(st)) {
+      if ((top->type = Program_parse_declared_type(p, m, st))) {
         ;
       } else
         FATAL(st, "missing type");
@@ -424,7 +465,7 @@ void Program_parse_type(Program *p, Module *m, State *st) {
   Klass *c = Program_add_type(p, m);
   if ((c->name = read_identifier(p, st))) {
     if (check_word(st, "struct") && check_op(st, "{"))
-      c->member = Program_parse_variable_declaration(p, st, "}");
+      c->member = Program_parse_variable_declaration(p, m, st, "}");
     else
       FATAL(st, "Missing type declaration");
   } else
@@ -447,12 +488,8 @@ void Program_parse_fn(Program *p, Module *m, State *st) {
   Function *fn = Program_add_fn(p, m);
   if ((fn->name = read_identifier(p, st))) {
     if (check_op(st, "(")) {
-      fn->parameter = Program_parse_variable_declaration(p, st, ")");
-      skip_whitespace(st);
-      if (check_identifier(st)) {
-        ;
-      } else
-        fn->returnType = NULL; // void
+      fn->parameter = Program_parse_variable_declaration(p, m, st, ")");
+      fn->returnType = Program_parse_declared_type(p, m, st);
       if (check_op(st, "{"))
         Program_parse_function_body(p, fn, st);
       else
