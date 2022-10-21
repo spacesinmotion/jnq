@@ -68,6 +68,7 @@ typedef struct WhileStatement WhileStatement;
 typedef struct DoWhileStatement DoWhileStatement;
 
 typedef struct Klass Klass;
+typedef struct Module Module;
 
 typedef struct Expression {
   union {
@@ -183,19 +184,24 @@ typedef struct Function {
 
 typedef struct Use Use;
 typedef struct Use {
-  Klass *use;
+  Module *use;
   Use *next;
 } Use;
 
 typedef struct Klass {
-  const char *path;
   const char *name;
-  Use *use;
   Variable *member;
-  Function *fn;
-  bool finished;
   Klass *next;
 } Klass;
+
+typedef struct Module {
+  const char *path;
+  Use *use;
+  Klass *types;
+  Function *fn;
+  bool finished;
+  Module *next;
+} Module;
 
 typedef struct Program {
   struct {
@@ -204,7 +210,7 @@ typedef struct Program {
     size_t cap;
   } arena;
 
-  Klass *classes;
+  Module *modules;
 } Program;
 
 Program Program_new(char *buffer, size_t cap) {
@@ -212,7 +218,7 @@ Program Program_new(char *buffer, size_t cap) {
   p.arena.buffer = buffer;
   p.arena.len = 0;
   p.arena.cap = cap;
-  p.classes = NULL;
+  p.modules = NULL;
   return p;
 }
 
@@ -243,40 +249,47 @@ char *readFile(const char *filename) {
   return buffer;
 }
 
-Klass *Program_find_class(Program *p, const char *path) {
-  for (Klass *c = p->classes; c; c = c->next) {
-    if (strcmp(c->path, path) == 0)
-      return c;
-  }
+Module *Program_find_module(Program *p, const char *path) {
+  for (Module *m = p->modules; m; m = m->next)
+    if (strcmp(m->path, path) == 0)
+      return m;
+
   return NULL;
 }
 
-Klass *Program_add_class(Program *p, const char *pathc) {
+Module *Program_add_module(Program *p, const char *pathc) {
   size_t size = strlen(pathc) + 1;
   char *path = (char *)Program_alloc(p, size);
   strcpy(path, pathc);
-  Klass *c = (Klass *)Program_alloc(p, sizeof(Klass));
-  c->path = path;
-  c->use = NULL;
-  c->member = NULL;
-  c->fn = NULL;
-  c->next = p->classes;
-  p->classes = c;
-  return c;
+  Module *m = (Module *)Program_alloc(p, sizeof(Module));
+  m->path = path;
+  m->use = NULL;
+  m->types = NULL;
+  m->fn = NULL;
+  m->next = p->modules;
+  p->modules = m;
+  return m;
 }
 
-Use *Program_add_use(Program *p, Klass *c, Klass *use) {
+Use *Program_add_use(Program *p, Module *m, Module *use) {
   Use *u = Program_alloc(p, sizeof(Use));
   u->use = use;
-  u->next = c->use;
-  c->use = u;
+  u->next = m->use;
+  m->use = u;
   return u;
 }
 
-Function *Program_add_fn(Program *p, Klass *c) {
+Klass *Program_add_type(Program *p, Module *m) {
+  Klass *c = (Klass *)Program_alloc(p, sizeof(Klass));
+  c->next = m->types;
+  m->types = c;
+  return c;
+}
+
+Function *Program_add_fn(Program *p, Module *m) {
   Function *fn = Program_alloc(p, sizeof(Function));
-  fn->next = c->fn;
-  c->fn = fn;
+  fn->next = m->fn;
+  m->fn = fn;
   return fn;
 }
 
@@ -349,9 +362,9 @@ const char *read_identifier(Program *p, State *st) {
   return NULL;
 }
 
-Klass *Program_parse_file(Program *p, const char *path, State *st);
+Module *Program_parse_file(Program *p, const char *path, State *st);
 
-bool Program_parse_use_path(Program *p, Klass *c, State *st) {
+bool Program_parse_use_path(Program *p, Module *m, State *st) {
   skip_whitespace(st);
   State old = *st;
 
@@ -377,8 +390,8 @@ bool Program_parse_use_path(Program *p, Klass *c, State *st) {
   } else
     return false;
 
-  Klass *use = Program_parse_file(p, buffer, &old);
-  Program_add_use(p, c, use);
+  Module *use = Program_parse_file(p, buffer, &old);
+  Program_add_use(p, m, use);
   return true;
 }
 
@@ -405,9 +418,10 @@ Variable *Program_parse_variable_declaration(Program *p, State *st,
   return NULL;
 }
 
-void Program_parse_type(Program *p, Klass *c, State *st) {
+void Program_parse_type(Program *p, Module *m, State *st) {
   skip_whitespace(st);
 
+  Klass *c = Program_add_type(p, m);
   if ((c->name = read_identifier(p, st))) {
     if (check_word(st, "struct") && check_op(st, "{"))
       c->member = Program_parse_variable_declaration(p, st, "}");
@@ -417,8 +431,7 @@ void Program_parse_type(Program *p, Klass *c, State *st) {
     FATAL(st, "Missing type name");
 }
 
-void Program_parse_function_body(Program *p, Klass *c, Function *fn,
-                                 State *st) {
+void Program_parse_function_body(Program *p, Function *fn, State *st) {
   skip_whitespace(st);
   while (*st->c) {
     if (check_op(st, "}"))
@@ -428,10 +441,10 @@ void Program_parse_function_body(Program *p, Klass *c, Function *fn,
   FATAL(st, "Missing closing '}' for function body");
 }
 
-void Program_parse_fn(Program *p, Klass *c, State *st) {
+void Program_parse_fn(Program *p, Module *m, State *st) {
   skip_whitespace(st);
 
-  Function *fn = Program_add_fn(p, c);
+  Function *fn = Program_add_fn(p, m);
   if ((fn->name = read_identifier(p, st))) {
     if (check_op(st, "(")) {
       fn->parameter = Program_parse_variable_declaration(p, st, ")");
@@ -441,7 +454,7 @@ void Program_parse_fn(Program *p, Klass *c, State *st) {
       } else
         fn->returnType = NULL; // void
       if (check_op(st, "{"))
-        Program_parse_function_body(p, c, fn, st);
+        Program_parse_function_body(p, fn, st);
       else
         FATAL(st, "Missing function body");
     } else
@@ -450,17 +463,17 @@ void Program_parse_fn(Program *p, Klass *c, State *st) {
     FATAL(st, "Missing type name");
 }
 
-void Program_parse_class(Program *p, Klass *c, State *st) {
+void Program_parse_module(Program *p, Module *m, State *st) {
   while (st->c[0]) {
     skip_whitespace(st);
     traceStack_push(st);
     if (st->c[0]) {
       if (check_word(st, "use"))
-        Program_parse_use_path(p, c, st);
+        Program_parse_use_path(p, m, st);
       else if (check_word(st, "type"))
-        Program_parse_type(p, c, st);
+        Program_parse_type(p, m, st);
       else if (check_word(st, "fn"))
-        Program_parse_fn(p, c, st);
+        Program_parse_fn(p, m, st);
       else {
         FATAL(st, "Unknown keyword >>'%s'\n", st->c);
         break;
@@ -470,15 +483,15 @@ void Program_parse_class(Program *p, Klass *c, State *st) {
   }
 }
 
-Klass *Program_parse_file(Program *p, const char *path, State *outer_st) {
-  Klass *c = Program_find_class(p, path);
-  if (c && !c->finished)
+Module *Program_parse_file(Program *p, const char *path, State *outer_st) {
+  Module *m = Program_find_module(p, path);
+  if (m && !m->finished)
     FATAL(outer_st, "Circular dependencies!");
-  if (c)
-    return c;
+  if (m)
+    return m;
 
-  c = Program_add_class(p, path);
-  c->finished = false;
+  m = Program_add_module(p, path);
+  m->finished = false;
 
   char tempPath[256];
   strcpy(tempPath, path);
@@ -492,11 +505,11 @@ Klass *Program_parse_file(Program *p, const char *path, State *outer_st) {
     FATAL(outer_st, "missing file! '%s'", tempPath);
 
   State st = State_new(code, tempPath);
-  Program_parse_class(p, c, &st);
-  c->finished = true;
+  Program_parse_module(p, m, &st);
+  m->finished = true;
 
   free(code);
-  return c;
+  return m;
 }
 
 int main(int argc, char *argv[]) {
