@@ -1,0 +1,11 @@
+
+type SomeThing struct {
+  a int, 
+  b float,
+  text string, 
+}
+
+fn new(a int, b float) SomeThing {
+  
+}
+

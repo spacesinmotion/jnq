@@ -1,0 +1,6 @@
+
+use test.SomeThing
+
+fn main() int {
+  return 0
+}
