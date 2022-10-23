@@ -746,11 +746,25 @@ Statement *Program_parse_statement(Program *p, State *st, Statement *next) {
     }
   } else if (check_word(st, "for"))
     ;
-  else if (check_word(st, "while"))
-    ;
-  else if (check_word(st, "do"))
-    ;
-  else if ((temp_e = Program_parse_expression(p, st, false))) {
+  else if (check_word(st, "while")) {
+    statement = Program_new_Statement(p, While, next);
+    if ((temp_e = Program_parse_expression(p, st, false)))
+      statement->whileS->condition = temp_e;
+    else
+      FATAL(st, "Missing while conditon");
+    statement->whileS->body = Program_parse_scope_block(p, st);
+    if (!statement->whileS->body)
+      FATAL(st, "Missing while block");
+  } else if (check_word(st, "do")) {
+    statement = Program_new_Statement(p, DoWhile, next);
+    statement->doWhileS->body = Program_parse_scope_block(p, st);
+    if (!check_word(st, "while"))
+      FATAL(st, "Missing 'while' for do block");
+    if ((temp_e = Program_parse_expression(p, st, false)))
+      statement->doWhileS->condition = temp_e;
+    else
+      FATAL(st, "Missing do while conditon");
+  } else if ((temp_e = Program_parse_expression(p, st, false))) {
     statement = Program_new_Statement(p, ExpressionS, next);
     statement->express->e = temp_e;
   }
@@ -992,7 +1006,7 @@ void c_scope_as_body(FILE *f, Statement *s, int indent) {
   if (s->type == Scope) {
     fprintf(f, " {\n");
     c_statements(f, s->scope->body, indent + 2);
-    fprintf(f, "%.*s}\n", indent, SPACE);
+    fprintf(f, "%.*s}", indent, SPACE);
   } else {
     fprintf(f, "\n");
     c_statements(f, s, indent + 2);
@@ -1033,15 +1047,30 @@ void c_statements(FILE *f, Statement *s, int indent) {
     c_expression(f, s->ifS->condition);
     c_scope_as_body(f, s->ifS->ifBody, indent);
     if (s->ifS->elseBody) {
-      fprintf(f, "%.*selse", indent, SPACE);
+      fprintf(f, "%.*s", (s->ifS->ifBody->type == Scope ? 1 : indent), SPACE);
+      fprintf(f, "else");
       c_scope_as_body(f, s->ifS->elseBody, indent);
-    }
+      if (s->ifS->elseBody->type == Scope)
+        fprintf(f, "\n");
+    } else if (s->ifS->ifBody->type == Scope)
+      fprintf(f, "\n");
     break;
   case For:
     break;
   case While:
+    fprintf(f, "while ");
+    c_expression(f, s->whileS->condition);
+    c_scope_as_body(f, s->whileS->body, indent);
+    if (s->whileS->body->type == Scope)
+      fprintf(f, "\n");
     break;
   case DoWhile:
+    fprintf(f, "do");
+    c_scope_as_body(f, s->doWhileS->body, indent);
+    fprintf(f, "%.*s", (s->doWhileS->body->type == Scope ? 1 : indent), SPACE);
+    fprintf(f, "while ");
+    c_expression(f, s->doWhileS->condition);
+    fprintf(f, ";\n");
     break;
   }
 }
@@ -1055,9 +1084,13 @@ void c_fn(FILE *f, Function *fn) {
   c_type_declare(f, fn->returnType);
   printf(" %s(", fn->name);
   c_var_list(f, fn->parameter);
-  printf(") {\n");
-  c_statements(f, fn->body, 2);
-  printf("}\n\n");
+  if (!fn->body)
+    printf(") {}\n\n");
+  else {
+    printf(") {\n");
+    c_statements(f, fn->body, 2);
+    printf("}\n\n");
+  }
 }
 
 void c_Module(FILE *f, const Module *m) {
