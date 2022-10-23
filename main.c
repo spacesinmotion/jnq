@@ -719,11 +719,15 @@ Expression *Program_parse_expression(Program *p, State *st, bool ignoreSuffix) {
   return e;
 }
 
+Statement *Program_parse_scope(Program *p, State *st);
 Statement *Program_parse_scope_block(Program *p, State *st);
 Statement *Program_parse_statement(Program *p, State *st, Statement *next) {
   Statement *statement = NULL;
   Expression *temp_e = NULL;
-  if (check_word(st, "return")) {
+  if (check_op(st, "{")) {
+    statement = Program_new_Statement(p, Scope, next);
+    statement->scope->body = Program_parse_scope(p, st);
+  } else if (check_word(st, "return")) {
     statement = Program_new_Statement(p, Return, next);
     statement->express->e = Program_parse_expression(p, st, false);
   } else if (check_word(st, "break"))
