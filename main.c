@@ -659,10 +659,16 @@ Expression *Program_parse_expression_suffix(Program *p, State *st,
   return e;
 }
 
-Expression *Program_parse_binary_operation(Program *p, State *st,
-                                           Expression *e) {
+Expression *Program_parse_binary_operation(Program *p, State *st, Expression *e,
+                                           Expression *prefix) {
 
   e = Program_parse_expression_suffix(p, st, e);
+  if (!e && prefix)
+    FATAL(st, "prefix operation without expression '%s'", prefix->unop->op);
+  if (prefix) {
+    prefix->unop->o = e;
+    e = prefix;
+  }
   const char *bin_ops[] = {
       ">>=", "<<=", "==", "!=", ">=", "<=", "+=", "-=", "*=",
       "/=",  "%=",  "&=", "|=", "^=", "&&", "||", "->", ">>",
@@ -673,7 +679,6 @@ Expression *Program_parse_binary_operation(Program *p, State *st,
       bin->binop->o1 = e;
       bin->binop->op = bin_ops[i];
       bin->binop->o2 = Program_parse_expression(p, st, false);
-      // bin = Program_parse_expression_suffix(p, st, bin);
       return bin;
     }
   }
@@ -705,19 +710,19 @@ Expression *Program_parse_expression(Program *p, State *st, bool ignoreSuffix) {
   } else
     e = Program_parse_atom(p, st);
 
-  if (!e && prefix)
-    FATAL(st, "prefix operation without expression '%s'", prefix->unop->op);
+  // if (!e && prefix)
+  //   FATAL(st, "prefix operation without expression '%s'", prefix->unop->op);
 
   if (!e)
     return NULL;
 
   if (!ignoreSuffix)
-    e = Program_parse_binary_operation(p, st, e);
+    e = Program_parse_binary_operation(p, st, e, prefix);
 
-  if (prefix) {
-    prefix->unop->o = e;
-    return prefix;
-  }
+  // if (prefix) {
+  //   prefix->unop->o = e;
+  //   return prefix;
+  // }
 
   return e;
 }
@@ -836,32 +841,6 @@ void lisp_parameter(FILE *f, Parameter *param) {
   lisp_expression(f, param->p);
 }
 
-void c_member_call_split(FILE *f, Expression *e) {
-  if (e->type == CallE)
-    c_member_call_split(f, e->call->o);
-  else if (e->type == AccessE)
-    c_member_call_split(f, e->access->o);
-  else if (e->type == BraceE)
-    c_member_call_split(f, e->brace->o);
-  else if (e->type != BinaryOperationE || strcmp(e->binop->op, ".") == 0) {
-    c_member_call_split(f, e->binop->o1);
-  } else {
-    lisp_expression(f, e->binop->o1);
-    fprintf(f, " %s ", e->binop->op);
-  }
-}
-void c_member_call_x(FILE *f, Call *call) {
-  c_member_call_split(f, call->o->binop->o1);
-  fprintf(f, "xxx_");
-  lisp_expression(f, call->o->binop->o2);
-  fprintf(f, "(");
-  // c_expression(f, call->o->binop->o1);
-  if (call->p)
-    fprintf(f, ", ");
-  lisp_parameter(f, call->p);
-  fprintf(f, ")");
-}
-
 void lisp_expression(FILE *f, Expression *e) {
   if (!e)
     return;
@@ -889,7 +868,8 @@ void lisp_expression(FILE *f, Expression *e) {
   case CallE:
     fprintf(f, "(__ ");
     lisp_expression(f, e->call->o);
-    fprintf(f, " ");
+    if (e->call->p)
+      fprintf(f, " ");
     lisp_parameter(f, e->call->p);
     fprintf(f, ")");
     break;
@@ -920,6 +900,70 @@ void lisp_expression(FILE *f, Expression *e) {
   }
 }
 
+void c_expression(FILE *f, Expression *e);
+
+void c_parameter(FILE *f, Parameter *param) {
+  if (!param)
+    return;
+
+  c_parameter(f, param->next);
+  if (param->next)
+    fprintf(f, ", ");
+  c_expression(f, param->p);
+}
+
+void c_expression(FILE *f, Expression *e) {
+  if (!e)
+    return;
+
+  switch (e->type) {
+  case BoolA:
+    fprintf(f, "%s", e->b ? "true" : "false");
+    break;
+  case CharA:
+    fprintf(f, "%c", e->c);
+  case IntA:
+    fprintf(f, "\"%d\"", e->i);
+  case FloatA:
+    fprintf(f, "%g", e->f);
+  case StringA:
+    fprintf(f, "\"%s\"", e->s);
+  case IdentifierA:
+    fprintf(f, "%s", e->id);
+    break;
+  case BraceE:
+    fprintf(f, "(");
+    c_expression(f, e->brace->o);
+    fprintf(f, ")");
+    break;
+  case CallE:
+    c_expression(f, e->call->o);
+    fprintf(f, "(");
+    c_parameter(f, e->call->p);
+    fprintf(f, ")");
+    break;
+  case AccessE:
+    c_expression(f, e->access->o);
+    fprintf(f, "[");
+    c_expression(f, e->access->p);
+    fprintf(f, "]");
+    break;
+  case MemberAccessE:
+    c_expression(f, e->member->o);
+    fprintf(f, ".%s", e->member->member);
+    break;
+  case UnaryOperationE:
+    fprintf(f, "%s", e->unop->op);
+    c_expression(f, e->unop->o);
+    break;
+  case BinaryOperationE:
+    c_expression(f, e->binop->o1);
+    fprintf(f, " %s ", e->binop->op);
+    c_expression(f, e->binop->o2);
+    break;
+  }
+}
+
 void c_statements(FILE *f, Statement *s) {
   if (!s)
     return;
@@ -930,11 +974,11 @@ void c_statements(FILE *f, Statement *s) {
     break;
   case ExpressionS:
     fprintf(f, "  ");
-    lisp_expression(f, s->express->e);
+    c_expression(f, s->express->e);
     break;
   case Return:
     fprintf(f, "  return ");
-    lisp_expression(f, s->ret->e);
+    c_expression(f, s->ret->e);
     break;
   case Break:
     break;

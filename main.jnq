@@ -23,5 +23,5 @@ fn add(a Vec2, b Vec2) Vec2 {
 }
 
 fn main()  {
-  t + a.b().c[x] * r + rr
+  return t + !a.b[x] / r
 }
