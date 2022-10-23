@@ -135,10 +135,21 @@ typedef struct Statement {
   Statement *next;
 } Statement;
 
+typedef enum TypeDeclareType { ArrayT, PointerT, TypeT } TypeDeclareType;
+typedef struct TypeDeclare TypeDeclare;
+typedef struct TypeDeclare {
+  union {
+    Klass *cl;
+    int count;
+  };
+  TypeDeclareType type;
+  TypeDeclare *next;
+} TypeDeclare;
+
 typedef struct Variable Variable;
 typedef struct Variable {
   const char *name;
-  Klass *type;
+  TypeDeclare *type;
   Variable *next;
 } Variable;
 
@@ -229,7 +240,7 @@ typedef struct Function Function;
 typedef struct Function {
   const char *name;
   Variable *parameter;
-  Klass *returnType;
+  TypeDeclare *returnType;
   Statement *body;
   Function *next;
 } Function;
@@ -505,6 +516,23 @@ bool check_identifier(State *st) {
   return false;
 }
 
+bool read_int(State *st, int *i) {
+  State old = *st;
+  if (isdigit(*st->c)) {
+    while (*st->c && isdigit(*st->c)) {
+      ++st->column;
+      ++st->c;
+    }
+    char buf[128] = {0};
+    if (st->c - old.c > 126)
+      FATAL(&old, "Buffer to short for integer conversion!");
+    strncpy(buf, old.c, st->c - old.c);
+    *i = atoi(buf);
+    return true;
+  }
+  return false;
+}
+
 const char *read_identifier(Program *p, State *st) {
   State old = *st;
   if (check_identifier(st)) {
@@ -546,14 +574,37 @@ bool Program_parse_use_path(Program *p, Module *m, State *st) {
   return true;
 }
 
-Klass *Program_parse_declared_type(Program *p, Module *m, State *st) {
+TypeDeclare *Program_parse_declared_type(Program *p, Module *m, State *st) {
   skip_whitespace(st);
   State old = *st;
+
+  if (check_op(st, "*")) {
+    TypeDeclare *td = Program_alloc(p, sizeof(TypeDeclare));
+    td->type = PointerT;
+    td->next = Program_parse_declared_type(p, m, st);
+    return td;
+  }
+
+  if (check_op(st, "[")) {
+    TypeDeclare *td = Program_alloc(p, sizeof(TypeDeclare));
+    td->type = ArrayT;
+    if (!read_int(st, &td->count))
+      FATAL(&old, "Unknown array size!");
+    if (!check_op(st, "]"))
+      FATAL(&old, "missing closing ']'!");
+    td->next = Program_parse_declared_type(p, m, st);
+    return td;
+  }
+
   if (check_identifier(st)) {
     Klass *t = Module_find_type(p, m, old.c, st->c);
     if (!t)
       FATAL(&old, "Unknown type '%.*s'", (int)(st->c - old.c), old.c);
-    return t;
+    TypeDeclare *td = Program_alloc(p, sizeof(TypeDeclare));
+    td->type = TypeT;
+    td->cl = t;
+    td->next = NULL;
+    return td;
   }
 
   *st = old;
@@ -632,21 +683,13 @@ Expression *Program_parse_atom(Program *p, State *st) {
     e->s = str;
     ++st->column;
     ++st->c;
-    printf("string %s\n", st->c);
     return e;
   }
 
-  if (isdigit(*st->c)) {
-    while (*st->c && isdigit(*st->c)) {
-      ++st->column;
-      ++st->c;
-    }
-    char buf[128] = {0};
-    if (st->c - old.c > 126)
-      FATAL(&old, "Buffer to short for integer conversion!");
-    strncpy(buf, old.c, st->c - old.c);
+  int temp_i;
+  if (read_int(st, &temp_i)) {
     Expression *e = Program_new_Expression(p, IntA);
-    e->i = atoi(buf);
+    e->i = temp_i;
     return e;
   }
 
@@ -901,11 +944,22 @@ void c_use(FILE *f, Use *u) {
   fprintf(f, "use %s\n", u->use->path);
 }
 
-void c_type_declare(FILE *f, Klass *ty) {
-  if (ty)
-    printf("%s", ty->name);
-  else
-    printf("void");
+void c_type_declare(FILE *f, TypeDeclare *ty) {
+  if (!ty)
+    return;
+
+  c_type_declare(f, ty->next);
+  switch (ty->type) {
+  case ArrayT:
+    fprintf(f, "[%d]", ty->count);
+    break;
+  case PointerT:
+    fprintf(f, "*");
+    break;
+  case TypeT:
+    fprintf(f, "%s", ty->cl->name);
+    break;
+  }
 }
 
 void c_var_list(FILE *f, Variable *v, const char *br) {
