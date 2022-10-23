@@ -14,9 +14,7 @@ typedef struct State {
   size_t column;
 } State;
 
-State State_new(const char *c, const char *file) {
-  return (State){.file = file, .c = c, .line = 1, .column = 1};
-}
+State State_new(const char *c, const char *file) { return (State){.file = file, .c = c, .line = 1, .column = 1}; }
 
 struct {
   State states[128];
@@ -26,8 +24,7 @@ struct {
 void FATAL(State *s, const char *format, ...);
 void traceStack_push(State *s) {
   if (traceStack.size == 128)
-    FATAL(&(State){.file = s->file, .line = 0, .column = 0},
-          "not enough buffer for stack trace");
+    FATAL(&(State){.file = s->file, .line = 0, .column = 0}, "not enough buffer for stack trace");
   traceStack.states[traceStack.size] = *s;
   traceStack.size++;
 }
@@ -516,8 +513,7 @@ bool Program_parse_use_path(Program *p, Module *m, State *st) {
   char buffer[256] = {0};
   size_t inb = 0;
   if (check_identifier(st)) {
-    inb +=
-        snprintf(buffer + inb, 256 - inb, "%.*s", (int)(st->c - old.c), old.c);
+    inb += snprintf(buffer + inb, 256 - inb, "%.*s", (int)(st->c - old.c), old.c);
     old = *st;
     for (;;) {
       if (!check_op(st, "."))
@@ -528,8 +524,7 @@ bool Program_parse_use_path(Program *p, Module *m, State *st) {
 
       if (!check_identifier(st))
         FATAL(st, "Error parsing use statement!");
-      inb += snprintf(buffer + inb, 256 - inb, "%.*s", (int)(st->c - old.c),
-                      old.c);
+      inb += snprintf(buffer + inb, 256 - inb, "%.*s", (int)(st->c - old.c), old.c);
       old = *st;
     }
   } else
@@ -554,8 +549,7 @@ Klass *Program_parse_declared_type(Program *p, Module *m, State *st) {
   return NULL;
 }
 
-Variable *Program_parse_variable_declaration(Program *p, Module *m, State *st,
-                                             const char *end) {
+Variable *Program_parse_variable_declaration(Program *p, Module *m, State *st, const char *end) {
   skip_whitespace(st);
   State old = *st;
   Variable *top = NULL;
@@ -621,8 +615,7 @@ Parameter *Program_parse_parameter_list(Program *p, State *st) {
   return param;
 }
 
-Expression *Program_parse_expression_suffix(Program *p, State *st,
-                                            Expression *e) {
+Expression *Program_parse_expression_suffix(Program *p, State *st, Expression *e) {
 
   if (check_op(st, ".")) {
     const char *member = read_identifier(p, st);
@@ -659,18 +652,15 @@ Expression *Program_parse_expression_suffix(Program *p, State *st,
   return e;
 }
 
-Expression *Program_parse_binary_operation(Program *p, State *st, Expression *e,
-                                           Expression *prefix) {
+Expression *Program_parse_binary_operation(Program *p, State *st, Expression *e, Expression *prefix) {
 
   e = Program_parse_expression_suffix(p, st, e);
   if (prefix) {
     prefix->unop->o = e;
     e = prefix;
   }
-  const char *bin_ops[] = {
-      ">>=", "<<=", "==", "!=", ">=", "<=", "+=", "-=", "*=",
-      "/=",  "%=",  "&=", "|=", "^=", "&&", "||", "->", ">>",
-      "<<",  "+",   "-",  "*",  "/",  "%",  "&",  "|",  "."};
+  const char *bin_ops[] = {">>=", "<<=", "==", "!=", ">=", "<=", "+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=",
+                           "&&",  "||",  "->", ">>", "<<", "+",  "-",  "*",  "/",  "%",  "&",  "|",  "."};
   for (int i = 0; i < sizeof(bin_ops) / sizeof(const char *); ++i) {
     if (check_op(st, bin_ops[i])) {
       Expression *bin = Program_new_Expression(p, BinaryOperationE);
@@ -692,8 +682,7 @@ Expression *Program_parse_expression(Program *p, State *st, bool ignoreSuffix) {
       prefix = Program_new_Expression(p, UnaryOperationE);
       prefix->unop->op = un_pre_ops[i];
       break;
-      FATAL(st, "missing implementation for unary operation '-'",
-            un_pre_ops[i]);
+      FATAL(st, "missing implementation for unary operation '-'", un_pre_ops[i]);
     }
   }
 
@@ -1052,8 +1041,7 @@ int main(int argc, char *argv[]) {
   char buffer[1024 * 64];
   Program p = Program_new(buffer, 1024 * 64);
 
-  Module *m = Program_parse_file(
-      &p, "main", &(State){.file = "main.jnq", .line = 0, .column = 0});
+  Module *m = Program_parse_file(&p, "main", &(State){.file = "main.jnq", .line = 0, .column = 0});
 
   printf("---------\n");
   c_Module(stdout, m);
