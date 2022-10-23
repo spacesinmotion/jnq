@@ -9,8 +9,15 @@ type Vec2 struct {
 
 
 type Vec3 struct {
-  x float, 
-  y float,
-  z float, 
+  x float 
+  y float
+  z float 
 }
 
+type Iterator struct {
+  c int
+}
+
+fn incr( i Iterator) Iterator {
+  return Iterator(i.c + 143234566 + 'g') 
+}

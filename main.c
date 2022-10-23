@@ -605,6 +605,32 @@ Expression *Program_parse_atom(Program *p, State *st) {
     return e;
   }
 
+  if (check_op(st, "'")) {
+    Expression *e = Program_new_Expression(p, CharA);
+    if (!st->c[0] || st->c[1] != '\'')
+      FATAL(st, "Wrong char constant");
+    e->c = st->c[0];
+    ++st->column;
+    ++st->c;
+    ++st->column;
+    ++st->c;
+    return e;
+  }
+
+  if (isdigit(*st->c)) {
+    while (*st->c && isdigit(*st->c)) {
+      ++st->column;
+      ++st->c;
+    }
+    char buf[128] = {0};
+    if (st->c - old.c > 126)
+      FATAL(&old, "Buffer to short for integer conversion!");
+    strncpy(buf, old.c, st->c - old.c);
+    Expression *e = Program_new_Expression(p, IntA);
+    e->i = atoi(buf);
+    return e;
+  }
+
   *st = old;
   return NULL;
 }
@@ -880,7 +906,7 @@ void c_type(FILE *f, Klass *t) {
     return;
 
   c_type(f, t->next);
-  
+
   fprintf(f, "typedef struct %s {\n  ", t->name);
   c_var_list(f, t->member, ";\n  ");
   fprintf(f, "");
@@ -908,13 +934,17 @@ void lisp_expression(FILE *f, Expression *e) {
     fprintf(f, "%s", e->b ? "true" : "false");
     break;
   case CharA:
-    fprintf(f, "%c", e->c);
+    fprintf(f, "'%c'", e->c);
+    break;
   case IntA:
-    fprintf(f, "\"%d\"", e->i);
+    fprintf(f, "%d", e->i);
+    break;
   case FloatA:
     fprintf(f, "%g", e->f);
+    break;
   case StringA:
     fprintf(f, "\"%s\"", e->s);
+    break;
   case IdentifierA:
     fprintf(f, "%s", e->id);
     break;
@@ -979,13 +1009,17 @@ void c_expression(FILE *f, Expression *e) {
     fprintf(f, "%s", e->b ? "true" : "false");
     break;
   case CharA:
-    fprintf(f, "%c", e->c);
+    fprintf(f, "'%c'", e->c);
+    break;
   case IntA:
-    fprintf(f, "\"%d\"", e->i);
+    fprintf(f, "%d", e->i);
+    break;
   case FloatA:
     fprintf(f, "%g", e->f);
+    break;
   case StringA:
     fprintf(f, "\"%s\"", e->s);
+    break;
   case IdentifierA:
     fprintf(f, "%s", e->id);
     break;
