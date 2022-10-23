@@ -663,8 +663,6 @@ Expression *Program_parse_binary_operation(Program *p, State *st, Expression *e,
                                            Expression *prefix) {
 
   e = Program_parse_expression_suffix(p, st, e);
-  if (!e && prefix)
-    FATAL(st, "prefix operation without expression '%s'", prefix->unop->op);
   if (prefix) {
     prefix->unop->o = e;
     e = prefix;
@@ -710,19 +708,13 @@ Expression *Program_parse_expression(Program *p, State *st, bool ignoreSuffix) {
   } else
     e = Program_parse_atom(p, st);
 
-  // if (!e && prefix)
-  //   FATAL(st, "prefix operation without expression '%s'", prefix->unop->op);
-
+  if (!e && prefix)
+    FATAL(st, "prefix operation without expression '%s'", prefix->unop->op);
   if (!e)
     return NULL;
 
   if (!ignoreSuffix)
     e = Program_parse_binary_operation(p, st, e, prefix);
-
-  // if (prefix) {
-  //   prefix->unop->o = e;
-  //   return prefix;
-  // }
 
   return e;
 }
