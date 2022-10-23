@@ -23,5 +23,8 @@ fn add(a Vec2, b Vec2) Vec2 {
 }
 
 fn main()  {
-  return t + !a.b[x] / r
+  if (a) 
+    return t + !a.b[x] / r
+  else 
+    return k  
 }

@@ -61,6 +61,8 @@ typedef struct ReturnStatement ReturnStatement;
 typedef struct BreakStatement BreakStatement;
 typedef struct ContinueStatement ContinueStatement;
 
+typedef struct ScopeStatement ScopeStatement;
+
 typedef struct IfStatement IfStatement;
 typedef struct ForStatement ForStatement;
 typedef struct WhileStatement WhileStatement;
@@ -108,6 +110,7 @@ typedef enum StatementType {
   Return,
   Break,
   Continue,
+  Scope,
   If,
   For,
   While,
@@ -122,6 +125,7 @@ typedef struct Statement {
     ReturnStatement *ret;
     BreakStatement *brk;
     ContinueStatement *cont;
+    ScopeStatement *scope;
     IfStatement *ifS;
     ForStatement *forS;
     WhileStatement *whileS;
@@ -194,27 +198,31 @@ typedef struct BreakStatement {
 typedef struct ContinueStatement {
 } ContinueStatement;
 
+typedef struct ScopeStatement {
+  Statement *body;
+} ScopeStatement;
+
 typedef struct IfStatement {
-  Expression condition;
-  Statement ifBody;
-  Statement elseBody;
+  Expression *condition;
+  Statement *ifBody;
+  Statement *elseBody;
 } IfStatement;
 
 typedef struct ForStatement {
-  Expression init;
-  Expression condition;
-  Expression incr;
-  Statement body;
+  Expression *init;
+  Expression *condition;
+  Expression *incr;
+  Statement *body;
 } ForStatement;
 
 typedef struct WhileStatement {
-  Expression condition;
-  Statement body;
+  Expression *condition;
+  Statement *body;
 } WhileStatement;
 
 typedef struct DoWhileStatement {
-  Statement body;
-  Expression condition;
+  Statement *body;
+  Expression *condition;
 } DoWhileStatement;
 
 typedef struct Function Function;
@@ -390,6 +398,9 @@ Statement *Program_new_Statement(Program *p, StatementType t, Statement *n) {
     break;
   case Continue:
     s->cont = Program_alloc(p, sizeof(ContinueStatement));
+    break;
+  case Scope:
+    s->scope = Program_alloc(p, sizeof(ScopeStatement));
     break;
   case If:
     s->ifS = Program_alloc(p, sizeof(IfStatement));
@@ -708,34 +719,64 @@ Expression *Program_parse_expression(Program *p, State *st, bool ignoreSuffix) {
   return e;
 }
 
-void Program_parse_function_body(Program *p, Function *fn, State *st) {
-  Expression *temp_e;
+Statement *Program_parse_scope_block(Program *p, State *st);
+Statement *Program_parse_statement(Program *p, State *st, Statement *next) {
+  Statement *statement = NULL;
+  Expression *temp_e = NULL;
+  if (check_word(st, "return")) {
+    statement = Program_new_Statement(p, Return, next);
+    statement->express->e = Program_parse_expression(p, st, false);
+  } else if (check_word(st, "break"))
+    statement = Program_new_Statement(p, Break, next);
+  else if (check_word(st, "continue"))
+    statement = Program_new_Statement(p, Continue, next);
+  else if (check_word(st, "if")) {
+    statement = Program_new_Statement(p, If, next);
+    if ((temp_e = Program_parse_expression(p, st, false)))
+      statement->ifS->condition = temp_e;
+    else
+      FATAL(st, "Missing if conditon");
+    statement->ifS->ifBody = Program_parse_scope_block(p, st);
+    if (!statement->ifS->ifBody)
+      FATAL(st, "Missing if block");
+    if (check_word(st, "else")) {
+      statement->ifS->elseBody = Program_parse_scope_block(p, st);
+      if (!statement->ifS->elseBody)
+        FATAL(st, "Missing else block");
+    }
+  } else if (check_word(st, "for"))
+    ;
+  else if (check_word(st, "while"))
+    ;
+  else if (check_word(st, "do"))
+    ;
+  else if ((temp_e = Program_parse_expression(p, st, false))) {
+    statement = Program_new_Statement(p, ExpressionS, next);
+    statement->express->e = temp_e;
+  }
+  return statement;
+}
+Statement *Program_parse_scope(Program *p, State *st) {
+  Statement *body = NULL;
+  Expression *temp_e = NULL;
   while (*st->c) {
     skip_whitespace(st);
     if (check_op(st, "}"))
-      return;
-    else if (check_word(st, "return")) {
-      fn->body = Program_new_Statement(p, Return, fn->body);
-      fn->body->express->e = Program_parse_expression(p, st, false);
-    } else if (check_word(st, "break"))
-      fn->body = Program_new_Statement(p, Break, fn->body);
-    else if (check_word(st, "continue"))
-      fn->body = Program_new_Statement(p, Continue, fn->body);
-    else if (check_word(st, "if"))
-      ;
-    else if (check_word(st, "for"))
-      ;
-    else if (check_word(st, "while"))
-      ;
-    else if (check_word(st, "do"))
-      ;
-    else if ((temp_e = Program_parse_expression(p, st, false))) {
-      fn->body = Program_new_Statement(p, ExpressionS, fn->body);
-      fn->body->express->e = temp_e;
-    } else
+      return body;
+    body = Program_parse_statement(p, st, body);
+    if (!body)
       break;
   }
   FATAL(st, "Missing closing '}' for function body");
+  return NULL;
+}
+Statement *Program_parse_scope_block(Program *p, State *st) {
+  if (check_op(st, "{")) {
+    Statement *s = Program_new_Statement(p, Scope, NULL);
+    s->scope->body = Program_parse_scope(p, st);
+    return s;
+  } else
+    return Program_parse_statement(p, st, NULL);
 }
 
 void Program_parse_fn(Program *p, Module *m, State *st) {
@@ -747,7 +788,7 @@ void Program_parse_fn(Program *p, Module *m, State *st) {
       fn->parameter = Program_parse_variable_declaration(p, m, st, ")");
       fn->returnType = Program_parse_declared_type(p, m, st);
       if (check_op(st, "{"))
-        Program_parse_function_body(p, fn, st);
+        fn->body = Program_parse_scope(p, st);
       else
         FATAL(st, "Missing function body");
     } else
@@ -945,27 +986,56 @@ void c_expression(FILE *f, Expression *e) {
   }
 }
 
-void c_statements(FILE *f, Statement *s) {
+const char *SPACE = "                                                ";
+void c_statements(FILE *f, Statement *s, int indent);
+void c_scope_as_body(FILE *f, Statement *s, int indent) {
+  if (s->type == Scope) {
+    fprintf(f, " {\n");
+    c_statements(f, s->scope->body, indent + 2);
+    fprintf(f, "%.*s}\n", indent, SPACE);
+  } else {
+    fprintf(f, "\n");
+    c_statements(f, s, indent + 2);
+  }
+}
+void c_statements(FILE *f, Statement *s, int indent) {
   if (!s)
     return;
 
-  c_statements(f, s->next);
+  c_statements(f, s->next, indent);
+  fprintf(f, "%.*s", indent, SPACE);
   switch (s->type) {
   case Declaration:
+    fprintf(f, "<<decl>>;\n");
     break;
   case ExpressionS:
-    fprintf(f, "  ");
     c_expression(f, s->express->e);
+    fprintf(f, ";\n");
     break;
   case Return:
-    fprintf(f, "  return ");
+    fprintf(f, "return ");
     c_expression(f, s->ret->e);
+    fprintf(f, ";\n");
     break;
   case Break:
+    fprintf(f, "break;\n");
     break;
   case Continue:
+    fprintf(f, "continue;\n");
+    break;
+  case Scope:
+    fprintf(f, "{\n");
+    c_statements(f, s->scope->body, indent + 2);
+    fprintf(f, "%.*s}\n", indent, SPACE);
     break;
   case If:
+    fprintf(f, "if ");
+    c_expression(f, s->ifS->condition);
+    c_scope_as_body(f, s->ifS->ifBody, indent);
+    if (s->ifS->elseBody) {
+      fprintf(f, "%.*selse", indent, SPACE);
+      c_scope_as_body(f, s->ifS->elseBody, indent);
+    }
     break;
   case For:
     break;
@@ -974,7 +1044,6 @@ void c_statements(FILE *f, Statement *s) {
   case DoWhile:
     break;
   }
-  fprintf(f, ";\n");
 }
 
 void c_fn(FILE *f, Function *fn) {
@@ -987,7 +1056,7 @@ void c_fn(FILE *f, Function *fn) {
   printf(" %s(", fn->name);
   c_var_list(f, fn->parameter);
   printf(") {\n");
-  c_statements(f, fn->body);
+  c_statements(f, fn->body, 2);
   printf("}\n\n");
 }
 
