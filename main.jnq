@@ -14,23 +14,3 @@ type Vec3 struct {
   z float, 
 }
 
-fn neg(a Vec2) Vec2 {
-  return Vec2(-a.x, -a.y)
-}
-
-fn add(a Vec2, b Vec2) Vec2 {
-  return Vec2(a.x + b.x, a.y + b.y)
-}
-
-fn main()  {
-  for (a.init(); a.ok(); a.incr()) {
-    t + !a.b[x] / r
-  }
-  {
-    return g
-    {
-    return g
-  }
-  if (d) {}
-  }
-}

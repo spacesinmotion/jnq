@@ -863,13 +863,13 @@ void c_type_declare(FILE *f, Klass *ty) {
     printf("void");
 }
 
-void c_var_list(FILE *f, Variable *v) {
+void c_var_list(FILE *f, Variable *v, const char *br) {
   if (!v)
     return;
 
-  c_var_list(f, v->next);
+  c_var_list(f, v->next, br);
   if (v->next)
-    fprintf(f, ", ");
+    fprintf(f, "%s", br);
 
   c_type_declare(f, v->type);
   fprintf(f, " %s", v->name);
@@ -880,7 +880,11 @@ void c_type(FILE *f, Klass *t) {
     return;
 
   c_type(f, t->next);
-  fprintf(f, "type %s\n", t->name);
+  
+  fprintf(f, "typedef struct %s {\n  ", t->name);
+  c_var_list(f, t->member, ";\n  ");
+  fprintf(f, "");
+  fprintf(f, ";\n} %s;\n\n", t->name);
 }
 
 void lisp_expression(FILE *f, Expression *e);
@@ -1115,7 +1119,7 @@ void c_fn(FILE *f, Function *fn) {
 
   c_type_declare(f, fn->returnType);
   printf(" %s(", fn->name);
-  c_var_list(f, fn->parameter);
+  c_var_list(f, fn->parameter, ", ");
   if (!fn->body)
     printf(") {}\n\n");
   else {
