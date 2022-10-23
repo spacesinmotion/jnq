@@ -744,9 +744,23 @@ Statement *Program_parse_statement(Program *p, State *st, Statement *next) {
       if (!statement->ifS->elseBody)
         FATAL(st, "Missing else block");
     }
-  } else if (check_word(st, "for"))
-    ;
-  else if (check_word(st, "while")) {
+  } else if (check_word(st, "for")) {
+    statement = Program_new_Statement(p, For, next);
+    if (!check_op(st, "("))
+      FATAL(st, "Missing for conditon");
+    statement->forS->init = Program_parse_expression(p, st, false);
+    if (!check_op(st, ";"))
+      FATAL(st, "Missing for init");
+    statement->forS->condition = Program_parse_expression(p, st, false);
+    if (!check_op(st, ";"))
+      FATAL(st, "Missing for condition");
+    statement->forS->incr = Program_parse_expression(p, st, false);
+    if (!check_op(st, ")"))
+      FATAL(st, "Missing closing ')' of for condition");
+    statement->forS->body = Program_parse_scope_block(p, st);
+    if (!statement->forS->body)
+      FATAL(st, "Missing for block");
+  } else if (check_word(st, "while")) {
     statement = Program_new_Statement(p, While, next);
     if ((temp_e = Program_parse_expression(p, st, false)))
       statement->whileS->condition = temp_e;
@@ -1056,6 +1070,20 @@ void c_statements(FILE *f, Statement *s, int indent) {
       fprintf(f, "\n");
     break;
   case For:
+    fprintf(f, "for (");
+    if (!s->forS->init && !s->forS->condition && !s->forS->incr)
+      fprintf(f, ";;");
+    else {
+      c_expression(f, s->forS->init);
+      fprintf(f, "; ");
+      c_expression(f, s->forS->condition);
+      fprintf(f, "; ");
+      c_expression(f, s->forS->incr);
+    }
+    fprintf(f, ")");
+    c_scope_as_body(f, s->forS->body, indent);
+    if (s->forS->body->type == Scope)
+      fprintf(f, "\n");
     break;
   case While:
     fprintf(f, "while ");
