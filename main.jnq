@@ -1,6 +1,27 @@
 
+use test.AnotherThing
 use test.SomeThing
 
-fn main() int {
-  return 0
+type Vec2 struct {
+  x float, 
+  y float,
+}
+
+
+type Vec3 struct {
+  x float, 
+  y float,
+  z float, 
+}
+
+fn neg(a Vec2) Vec2 {
+  return Vec2(-a.x, -a.y)
+}
+
+fn add(a Vec2, b Vec2) Vec2 {
+  return Vec2(a.x + b.x, a.y + b.y)
+}
+
+fn main()  {
+  t + a.b().c[x] * r + rr
 }

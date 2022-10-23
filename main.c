@@ -50,8 +50,10 @@ void FATAL(State *st, const char *format, ...) {
   exit(1);
 }
 
+typedef struct Brace Brace;
 typedef struct Call Call;
 typedef struct Access Access;
+typedef struct MemberAccess MemberAccess;
 typedef struct UnaryOperation UnaryOperation;
 typedef struct BinaryOperation BinaryOperation;
 
@@ -70,15 +72,52 @@ typedef struct DoWhileStatement DoWhileStatement;
 typedef struct Klass Klass;
 typedef struct Module Module;
 
+typedef enum ExpressionType {
+  BoolA,
+  CharA,
+  IntA,
+  FloatA,
+  StringA,
+  IdentifierA,
+  BraceE,
+  CallE,
+  AccessE,
+  MemberAccessE,
+  UnaryOperationE,
+  BinaryOperationE,
+} ExpressionType;
+
 typedef struct Expression {
   union {
+    bool b;
+    char c;
+    int i;
+    float f;
+    const char *s;
+    const char *id;
+    Brace *brace;
     Call *call;
     Access *access;
+    MemberAccess *member;
     UnaryOperation *unop;
     BinaryOperation *binop;
   };
+  ExpressionType type;
 } Expression;
 
+typedef enum StatementType {
+  Declaration,
+  ExpressionS,
+  Return,
+  Break,
+  Continue,
+  If,
+  For,
+  While,
+  DoWhile,
+} StatementType;
+
+typedef struct Statement Statement;
 typedef struct Statement {
   union {
     DeclarationStatement *declare;
@@ -91,7 +130,8 @@ typedef struct Statement {
     WhileStatement *whileS;
     DoWhileStatement *doWhileS;
   };
-
+  StatementType type;
+  Statement *next;
 } Statement;
 
 typedef struct Variable Variable;
@@ -103,51 +143,58 @@ typedef struct Variable {
 
 typedef struct Parameter Parameter;
 typedef struct Parameter {
-  Expression p;
+  Expression *p;
   Parameter *next;
 } Parameter;
 
+typedef struct Brace {
+  Expression *o;
+} Brace;
+
 typedef struct Call {
-  Expression o;
-  Parameter p;
+  Expression *o;
+  Parameter *p;
 } Call;
 
 typedef struct Access {
-  Expression o;
-  Expression p;
+  Expression *o;
+  Expression *p;
 } Access;
 
+typedef struct MemberAccess {
+  Expression *o;
+  const char *member;
+} MemberAccess;
+
 typedef struct UnaryOperation {
-  Expression o;
+  Expression *o;
+  const char *op;
 } UnaryOperation;
 
 typedef struct BinaryOperation {
-  Expression o1;
-  Expression o2;
+  Expression *o1;
+  Expression *o2;
+  const char *op;
 } BinaryOperation;
 
 typedef struct ExpressionStatement {
-  Expression e;
+  Expression *e;
   Statement next;
 } ExpressionStatement;
 
 typedef struct DeclarationStatement {
   Expression e;
   Variable *v;
-  Statement next;
 } DeclarationStatement;
 
 typedef struct ReturnStatement {
-  Expression e;
-  Statement next;
+  Expression *e;
 } ReturnStatement;
 
 typedef struct BreakStatement {
-  Statement next;
 } BreakStatement;
 
 typedef struct ContinueStatement {
-  Statement next;
 } ContinueStatement;
 
 typedef struct IfStatement {
@@ -177,8 +224,8 @@ typedef struct Function Function;
 typedef struct Function {
   const char *name;
   Variable *parameter;
-  Statement body;
   Klass *returnType;
+  Statement *body;
   Function *next;
 } Function;
 
@@ -316,6 +363,7 @@ Klass *Program_add_type(Program *p, Module *m) {
 
 Function *Program_add_fn(Program *p, Module *m) {
   Function *fn = Program_alloc(p, sizeof(Function));
+  fn->body = NULL;
   fn->next = m->fn;
   m->fn = fn;
   return fn;
@@ -325,6 +373,75 @@ Variable *Program_new_variable(Program *p, Variable *next) {
   Variable *v = Program_alloc(p, sizeof(Variable));
   v->next = next;
   return v;
+}
+
+Statement *Program_new_Statement(Program *p, StatementType t, Statement *n) {
+  Statement *s = Program_alloc(p, sizeof(Statement));
+  s->type = t;
+  switch (t) {
+  case Declaration:
+    s->declare = Program_alloc(p, sizeof(DeclarationStatement));
+    break;
+  case ExpressionS:
+    s->express = Program_alloc(p, sizeof(ExpressionStatement));
+    break;
+  case Return:
+    s->ret = Program_alloc(p, sizeof(ReturnStatement));
+    break;
+  case Break:
+    s->brk = Program_alloc(p, sizeof(BreakStatement));
+    break;
+  case Continue:
+    s->cont = Program_alloc(p, sizeof(ContinueStatement));
+    break;
+  case If:
+    s->ifS = Program_alloc(p, sizeof(IfStatement));
+    break;
+  case For:
+    s->forS = Program_alloc(p, sizeof(ForStatement));
+    break;
+  case While:
+    s->whileS = Program_alloc(p, sizeof(WhileStatement));
+    break;
+  case DoWhile:
+    s->doWhileS = Program_alloc(p, sizeof(DoWhileStatement));
+    break;
+  }
+  s->next = n;
+  return s;
+}
+
+Expression *Program_new_Expression(Program *p, ExpressionType t) {
+  Expression *e = Program_alloc(p, sizeof(Expression));
+  e->type = t;
+  switch (t) {
+  case BoolA:
+  case CharA:
+  case IntA:
+  case FloatA:
+  case StringA:
+  case IdentifierA:
+    break;
+  case BraceE:
+    e->brace = Program_alloc(p, sizeof(Brace));
+    break;
+  case CallE:
+    e->call = Program_alloc(p, sizeof(Call));
+    break;
+  case AccessE:
+    e->access = Program_alloc(p, sizeof(Access));
+    break;
+  case MemberAccessE:
+    e->access = Program_alloc(p, sizeof(MemberAccess));
+    break;
+  case UnaryOperationE:
+    e->unop = Program_alloc(p, sizeof(UnaryOperation));
+    break;
+  case BinaryOperationE:
+    e->binop = Program_alloc(p, sizeof(BinaryOperation));
+    break;
+  }
+  return e;
 }
 
 void skip_whitespace(State *st) {
@@ -472,12 +589,165 @@ void Program_parse_type(Program *p, Module *m, State *st) {
     FATAL(st, "Missing type name");
 }
 
-void Program_parse_function_body(Program *p, Function *fn, State *st) {
+Expression *Program_parse_atom(Program *p, State *st) {
   skip_whitespace(st);
+  State old = *st;
+  if (check_identifier(st)) {
+    Expression *e = Program_new_Expression(p, IdentifierA);
+    char *id = Program_alloc(p, st->c - old.c + 1);
+    strncpy(id, old.c, st->c - old.c);
+    e->id = id;
+    return e;
+  }
+
+  *st = old;
+  return NULL;
+}
+
+Expression *Program_parse_expression(Program *p, State *st, bool ignoreSuffix);
+
+Parameter *Program_parse_parameter_list(Program *p, State *st) {
+  Parameter *param = NULL;
+  Expression *e = NULL;
+
+  while ((e = Program_parse_expression(p, st, false))) {
+    Parameter *pp = Program_alloc(p, sizeof(Parameter));
+    pp->next = param;
+    pp->p = e;
+    param = pp;
+    if (!check_op(st, ","))
+      break;
+  }
+  return param;
+}
+
+Expression *Program_parse_expression_suffix(Program *p, State *st,
+                                            Expression *e) {
+
+  if (check_op(st, ".")) {
+    const char *member = read_identifier(p, st);
+    if (!member)
+      FATAL(st, "missing id for member access");
+    Expression *ma = Program_new_Expression(p, MemberAccessE);
+    ma->member->o = e;
+    ma->member->member = member;
+    ma = Program_parse_expression_suffix(p, st, ma);
+    return ma;
+  }
+
+  if (check_op(st, "[")) {
+    Expression *acc = Program_new_Expression(p, AccessE);
+    acc->access->o = e;
+    acc->access->p = Program_parse_expression(p, st, false);
+    if (!acc->access->o)
+      FATAL(st, "missing '[]' content");
+    if (!check_op(st, "]"))
+      FATAL(st, "missing closing ']'");
+    acc = Program_parse_expression_suffix(p, st, acc);
+    return acc;
+  }
+
+  if (check_op(st, "(")) {
+    Expression *call = Program_new_Expression(p, CallE);
+    call->call->o = e;
+    call->call->p = Program_parse_parameter_list(p, st);
+    if (!check_op(st, ")"))
+      FATAL(st, "unfinished function call, missing ')'");
+    call = Program_parse_expression_suffix(p, st, call);
+    return call;
+  }
+  return e;
+}
+
+Expression *Program_parse_binary_operation(Program *p, State *st,
+                                           Expression *e) {
+
+  e = Program_parse_expression_suffix(p, st, e);
+  const char *bin_ops[] = {
+      ">>=", "<<=", "==", "!=", ">=", "<=", "+=", "-=", "*=",
+      "/=",  "%=",  "&=", "|=", "^=", "&&", "||", "->", ">>",
+      "<<",  "+",   "-",  "*",  "/",  "%",  "&",  "|",  "."};
+  for (int i = 0; i < sizeof(bin_ops) / sizeof(const char *); ++i) {
+    if (check_op(st, bin_ops[i])) {
+      Expression *bin = Program_new_Expression(p, BinaryOperationE);
+      bin->binop->o1 = e;
+      bin->binop->op = bin_ops[i];
+      bin->binop->o2 = Program_parse_expression(p, st, false);
+      // bin = Program_parse_expression_suffix(p, st, bin);
+      return bin;
+    }
+  }
+  return e;
+}
+
+Expression *Program_parse_expression(Program *p, State *st, bool ignoreSuffix) {
+
+  Expression *prefix = NULL;
+  const char *un_pre_ops[] = {"*", "~", "!", "-", "+", "&"};
+  for (int i = 0; i < sizeof(un_pre_ops) / sizeof(const char *); ++i) {
+    if (check_op(st, un_pre_ops[i])) {
+      prefix = Program_new_Expression(p, UnaryOperationE);
+      prefix->unop->op = un_pre_ops[i];
+      break;
+      FATAL(st, "missing implementation for unary operation '-'",
+            un_pre_ops[i]);
+    }
+  }
+
+  Expression *e = NULL;
+  if (check_op(st, "(")) {
+    e = Program_new_Expression(p, BraceE);
+    e->brace->o = Program_parse_expression(p, st, false);
+    if (!e->brace->o)
+      FATAL(st, "missing '(' content");
+    if (!check_op(st, ")"))
+      FATAL(st, "missing closing ')'");
+  } else
+    e = Program_parse_atom(p, st);
+
+  if (!e && prefix)
+    FATAL(st, "prefix operation without expression '%s'", prefix->unop->op);
+
+  if (!e)
+    return NULL;
+
+  if (!ignoreSuffix)
+    e = Program_parse_binary_operation(p, st, e);
+
+  if (prefix) {
+    prefix->unop->o = e;
+    return prefix;
+  }
+
+  return e;
+}
+
+void Program_parse_function_body(Program *p, Function *fn, State *st) {
+  Expression *temp_e;
   while (*st->c) {
+    skip_whitespace(st);
     if (check_op(st, "}"))
       return;
-    break;
+    else if (check_word(st, "return")) {
+      fn->body = Program_new_Statement(p, Return, fn->body);
+      fn->body->express->e = Program_parse_expression(p, st, false);
+    } else if (check_word(st, "break"))
+      fn->body = Program_new_Statement(p, Break, fn->body);
+    else if (check_word(st, "continue"))
+      fn->body = Program_new_Statement(p, Continue, fn->body);
+    else if (check_word(st, "if"))
+      ;
+    else if (check_word(st, "for"))
+      ;
+    else if (check_word(st, "while"))
+      ;
+    else if (check_word(st, "do"))
+      ;
+    else if ((temp_e = Program_parse_expression(p, st, false))) {
+      fn->body = Program_new_Statement(p, ExpressionS, fn->body);
+      fn->body->express->e = temp_e;
+    } else
+      break;
   }
   FATAL(st, "Missing closing '}' for function body");
 }
@@ -520,6 +790,197 @@ void Program_parse_module(Program *p, Module *m, State *st) {
   }
 }
 
+void c_use(FILE *f, Use *u) {
+  if (u->next)
+    c_use(f, u->next);
+
+  fprintf(f, "use %s\n", u->use->path);
+}
+
+void c_type_declare(FILE *f, Klass *ty) {
+  if (ty)
+    printf("%s", ty->name);
+  else
+    printf("void");
+}
+
+void c_var_list(FILE *f, Variable *v) {
+  if (!v)
+    return;
+
+  c_var_list(f, v->next);
+  if (v->next)
+    fprintf(f, ", ");
+
+  c_type_declare(f, v->type);
+  fprintf(f, " %s", v->name);
+}
+
+void c_type(FILE *f, Klass *t) {
+  if (!t)
+    return;
+
+  c_type(f, t->next);
+  fprintf(f, "type %s\n", t->name);
+}
+
+void lisp_expression(FILE *f, Expression *e);
+
+void lisp_parameter(FILE *f, Parameter *param) {
+  if (!param)
+    return;
+
+  lisp_parameter(f, param->next);
+  if (param->next)
+    fprintf(f, " ");
+  lisp_expression(f, param->p);
+}
+
+void c_member_call_split(FILE *f, Expression *e) {
+  if (e->type == CallE)
+    c_member_call_split(f, e->call->o);
+  else if (e->type == AccessE)
+    c_member_call_split(f, e->access->o);
+  else if (e->type == BraceE)
+    c_member_call_split(f, e->brace->o);
+  else if (e->type != BinaryOperationE || strcmp(e->binop->op, ".") == 0) {
+    c_member_call_split(f, e->binop->o1);
+  } else {
+    lisp_expression(f, e->binop->o1);
+    fprintf(f, " %s ", e->binop->op);
+  }
+}
+void c_member_call_x(FILE *f, Call *call) {
+  c_member_call_split(f, call->o->binop->o1);
+  fprintf(f, "xxx_");
+  lisp_expression(f, call->o->binop->o2);
+  fprintf(f, "(");
+  // c_expression(f, call->o->binop->o1);
+  if (call->p)
+    fprintf(f, ", ");
+  lisp_parameter(f, call->p);
+  fprintf(f, ")");
+}
+
+void lisp_expression(FILE *f, Expression *e) {
+  if (!e)
+    return;
+
+  switch (e->type) {
+  case BoolA:
+    fprintf(f, "%s", e->b ? "true" : "false");
+    break;
+  case CharA:
+    fprintf(f, "%c", e->c);
+  case IntA:
+    fprintf(f, "\"%d\"", e->i);
+  case FloatA:
+    fprintf(f, "%g", e->f);
+  case StringA:
+    fprintf(f, "\"%s\"", e->s);
+  case IdentifierA:
+    fprintf(f, "%s", e->id);
+    break;
+  case BraceE:
+    fprintf(f, "(() ");
+    lisp_expression(f, e->brace->o);
+    fprintf(f, ")");
+    break;
+  case CallE:
+    fprintf(f, "(__ ");
+    lisp_expression(f, e->call->o);
+    fprintf(f, " ");
+    lisp_parameter(f, e->call->p);
+    fprintf(f, ")");
+    break;
+  case AccessE:
+    fprintf(f, "([] ");
+    lisp_expression(f, e->access->o);
+    fprintf(f, " ");
+    lisp_expression(f, e->access->p);
+    fprintf(f, ")");
+    break;
+  case MemberAccessE:
+    fprintf(f, "(. ");
+    lisp_expression(f, e->member->o);
+    fprintf(f, " %s)", e->member->member);
+    break;
+  case UnaryOperationE:
+    fprintf(f, "(%s ", e->unop->op);
+    lisp_expression(f, e->unop->o);
+    fprintf(f, ")");
+    break;
+  case BinaryOperationE:
+    fprintf(f, "(%s ", e->binop->op);
+    lisp_expression(f, e->binop->o1);
+    fprintf(f, " ");
+    lisp_expression(f, e->binop->o2);
+    fprintf(f, ")");
+    break;
+  }
+}
+
+void c_statements(FILE *f, Statement *s) {
+  if (!s)
+    return;
+
+  c_statements(f, s->next);
+  switch (s->type) {
+  case Declaration:
+    break;
+  case ExpressionS:
+    fprintf(f, "  ");
+    lisp_expression(f, s->express->e);
+    break;
+  case Return:
+    fprintf(f, "  return ");
+    lisp_expression(f, s->ret->e);
+    break;
+  case Break:
+    break;
+  case Continue:
+    break;
+  case If:
+    break;
+  case For:
+    break;
+  case While:
+    break;
+  case DoWhile:
+    break;
+  }
+  fprintf(f, ";\n");
+}
+
+void c_fn(FILE *f, Function *fn) {
+  if (!fn)
+    return;
+
+  c_fn(f, fn->next);
+
+  c_type_declare(f, fn->returnType);
+  printf(" %s(", fn->name);
+  c_var_list(f, fn->parameter);
+  printf(") {\n");
+  c_statements(f, fn->body);
+  printf("}\n\n");
+}
+
+void c_Module(FILE *f, const Module *m) {
+  if (m->use) {
+    printf("\n");
+    c_use(f, m->use);
+  }
+  if (m->types) {
+    printf("\n");
+    c_type(f, m->types);
+  }
+  if (m->fn) {
+    printf("\n");
+    c_fn(f, m->fn);
+  }
+}
+
 Module *Program_parse_file(Program *p, const char *path, State *outer_st) {
   Module *m = Program_find_module(p, path);
   if (m && !m->finished)
@@ -555,8 +1016,11 @@ int main(int argc, char *argv[]) {
   char buffer[1024 * 64];
   Program p = Program_new(buffer, 1024 * 64);
 
-  Program_parse_file(&p, "main",
-                     &(State){.file = "main.jnq", .line = 0, .column = 0});
+  Module *m = Program_parse_file(
+      &p, "main", &(State){.file = "main.jnq", .line = 0, .column = 0});
+
+  printf("---------\n");
+  c_Module(stdout, m);
 
   return 0;
 }

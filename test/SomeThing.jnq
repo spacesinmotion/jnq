@@ -7,4 +7,3 @@ type SomeThing struct {
 
 fn new(a int, b float) SomeThing {
 }
-
