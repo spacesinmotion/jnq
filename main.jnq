@@ -19,5 +19,5 @@ type Iterator struct {
 }
 
 fn incr( i Iterator) Iterator {
-  return Iterator(i.c + 143234566 + 'g') 
+  return Iterator(i.c + 143234566 + 'g', "string") 
 }

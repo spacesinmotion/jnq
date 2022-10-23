@@ -617,6 +617,25 @@ Expression *Program_parse_atom(Program *p, State *st) {
     return e;
   }
 
+  if (check_op(st, "\"")) {
+    Expression *e = Program_new_Expression(p, StringA);
+    while (st->c[1] != '"') {
+      if (!st->c[0])
+        FATAL(&old, "unclosed string constant");
+      ++st->column;
+      ++st->c;
+    }
+    ++st->column;
+    ++st->c;
+    char *str = Program_alloc(p, st->c - old.c);
+    strncpy(str, old.c + 1, st->c - old.c - 1);
+    e->s = str;
+    ++st->column;
+    ++st->c;
+    printf("string %s\n", st->c);
+    return e;
+  }
+
   if (isdigit(*st->c)) {
     while (*st->c && isdigit(*st->c)) {
       ++st->column;
