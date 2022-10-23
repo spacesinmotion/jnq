@@ -176,6 +176,7 @@ typedef struct Access {
 typedef struct MemberAccess {
   Expression *o;
   const char *member;
+  bool pointer;
 } MemberAccess;
 
 typedef struct UnaryOperation {
@@ -716,13 +717,15 @@ Parameter *Program_parse_parameter_list(Program *p, State *st) {
 
 Expression *Program_parse_expression_suffix(Program *p, State *st, Expression *e) {
 
-  if (check_op(st, ".")) {
+  bool pointer = check_op(st, "->");
+  if (pointer || check_op(st, "->")) {
     const char *member = read_identifier(p, st);
     if (!member)
       FATAL(st, "missing id for member access");
     Expression *ma = Program_new_Expression(p, MemberAccessE);
     ma->member->o = e;
     ma->member->member = member;
+    ma->member->pointer = pointer;
     ma = Program_parse_expression_suffix(p, st, ma);
     return ma;
   }
@@ -758,8 +761,8 @@ Expression *Program_parse_binary_operation(Program *p, State *st, Expression *e,
     prefix->unop->o = e;
     e = prefix;
   }
-  const char *bin_ops[] = {">>=", "<<=", "==", "!=", ">=", "<=", "+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=",
-                           "&&",  "||",  "->", ">>", "<<", "+",  "-",  "*",  "/",  "%",  "&",  "|",  "."};
+  const char *bin_ops[] = {">>=", "<<=", "==", "!=", ">=", "<=", "+=", "-=", "*=", "/=", "%=", "&=", "|=",
+                           "^=",  "&&",  "||", ">>", "<<", "+",  "-",  "*",  "/",  "%",  "&",  "|",  "="};
   for (int i = 0; i < sizeof(bin_ops) / sizeof(const char *); ++i) {
     if (check_op(st, bin_ops[i])) {
       Expression *bin = Program_new_Expression(p, BinaryOperationE);
@@ -1042,7 +1045,10 @@ void lisp_expression(FILE *f, Expression *e) {
     fprintf(f, ")");
     break;
   case MemberAccessE:
-    fprintf(f, "(. ");
+    if (e->member->pointer)
+      fprintf(f, "(-> ");
+    else
+      fprintf(f, "(. ");
     lisp_expression(f, e->member->o);
     fprintf(f, " %s)", e->member->member);
     break;
@@ -1115,7 +1121,7 @@ void c_expression(FILE *f, Expression *e) {
     break;
   case MemberAccessE:
     c_expression(f, e->member->o);
-    fprintf(f, ".%s", e->member->member);
+    fprintf(f, "%s%s", (e->member->pointer ? "->" : "."), e->member->member);
     break;
   case UnaryOperationE:
     fprintf(f, "%s", e->unop->op);

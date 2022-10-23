@@ -18,6 +18,6 @@ type Iterator struct {
   c int
 }
 
-fn incr(i *[3]Iterator) Iterator {
-  return Iterator(i[0].c + i[1].c + i[2].c) 
+fn incr(i *Iterator) Iterator {
+  a = *i
 }
