@@ -19,5 +19,6 @@ type Iterator struct {
 }
 
 fn incr(i *Iterator) Iterator {
+  a int = i->c
   a = *i
 }

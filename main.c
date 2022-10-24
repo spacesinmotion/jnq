@@ -196,7 +196,7 @@ typedef struct ExpressionStatement {
 } ExpressionStatement;
 
 typedef struct DeclarationStatement {
-  Expression e;
+  Expression *e;
   Variable *v;
 } DeclarationStatement;
 
@@ -612,21 +612,33 @@ TypeDeclare *Program_parse_declared_type(Program *p, Module *m, State *st) {
   return NULL;
 }
 
-Variable *Program_parse_variable_declaration(Program *p, Module *m, State *st, const char *end) {
+Variable *Program_parse_variable_declaration(Program *p, Module *m, State *st, Variable *next) {
+  State old = *st;
+  const char *name = NULL;
+  TypeDeclare *type = NULL;
+  if ((name = read_identifier(p, st))) {
+    if ((type = Program_parse_declared_type(p, m, st))) {
+      Variable *top = Program_new_variable(p, next);
+      top->name = name;
+      top->type = type;
+      return top;
+    }
+    *st = old;
+  }
+  return NULL;
+}
+
+Variable *Program_parse_variable_declaration_list(Program *p, Module *m, State *st, const char *end) {
   skip_whitespace(st);
   State old = *st;
   Variable *top = NULL;
   while (*st->c) {
     if (check_op(st, end))
       return top;
-    top = Program_new_variable(p, top);
-    if ((top->name = read_identifier(p, st))) {
-      if ((top->type = Program_parse_declared_type(p, m, st))) {
-        ;
-      } else
-        FATAL(st, "missing type");
-    } else
+    Variable *tn = Program_parse_variable_declaration(p, m, st, top);
+    if (!tn)
       FATAL(st, "missing variable name");
+    top = tn;
     check_op(st, ",");
   }
   FATAL(st, "Missing closing '%s'", end);
@@ -639,7 +651,7 @@ void Program_parse_type(Program *p, Module *m, State *st) {
   Klass *c = Program_add_type(p, m);
   if ((c->name = read_identifier(p, st))) {
     if (check_word(st, "struct") && check_op(st, "{"))
-      c->member = Program_parse_variable_declaration(p, m, st, "}");
+      c->member = Program_parse_variable_declaration_list(p, m, st, "}");
     else
       FATAL(st, "Missing type declaration");
   } else
@@ -810,14 +822,15 @@ Expression *Program_parse_expression(Program *p, State *st, bool ignoreSuffix) {
   return e;
 }
 
-Statement *Program_parse_scope(Program *p, State *st);
-Statement *Program_parse_scope_block(Program *p, State *st);
-Statement *Program_parse_statement(Program *p, State *st, Statement *next) {
+Statement *Program_parse_scope(Program *p, Module *m, State *st);
+Statement *Program_parse_scope_block(Program *p, Module *m, State *st);
+Statement *Program_parse_statement(Program *p, Module *m, State *st, Statement *next) {
   Statement *statement = NULL;
   Expression *temp_e = NULL;
+  Variable *temp_v = NULL;
   if (check_op(st, "{")) {
     statement = Program_new_Statement(p, Scope, next);
-    statement->scope->body = Program_parse_scope(p, st);
+    statement->scope->body = Program_parse_scope(p, m, st);
   } else if (check_word(st, "return")) {
     statement = Program_new_Statement(p, Return, next);
     statement->express->e = Program_parse_expression(p, st, false);
@@ -831,11 +844,11 @@ Statement *Program_parse_statement(Program *p, State *st, Statement *next) {
       statement->ifS->condition = temp_e;
     else
       FATAL(st, "Missing if conditon");
-    statement->ifS->ifBody = Program_parse_scope_block(p, st);
+    statement->ifS->ifBody = Program_parse_scope_block(p, m, st);
     if (!statement->ifS->ifBody)
       FATAL(st, "Missing if block");
     if (check_word(st, "else")) {
-      statement->ifS->elseBody = Program_parse_scope_block(p, st);
+      statement->ifS->elseBody = Program_parse_scope_block(p, m, st);
       if (!statement->ifS->elseBody)
         FATAL(st, "Missing else block");
     }
@@ -852,7 +865,7 @@ Statement *Program_parse_statement(Program *p, State *st, Statement *next) {
     statement->forS->incr = Program_parse_expression(p, st, false);
     if (!check_op(st, ")"))
       FATAL(st, "Missing closing ')' of for condition");
-    statement->forS->body = Program_parse_scope_block(p, st);
+    statement->forS->body = Program_parse_scope_block(p, m, st);
     if (!statement->forS->body)
       FATAL(st, "Missing for block");
   } else if (check_word(st, "while")) {
@@ -861,45 +874,55 @@ Statement *Program_parse_statement(Program *p, State *st, Statement *next) {
       statement->whileS->condition = temp_e;
     else
       FATAL(st, "Missing while conditon");
-    statement->whileS->body = Program_parse_scope_block(p, st);
+    statement->whileS->body = Program_parse_scope_block(p, m, st);
     if (!statement->whileS->body)
       FATAL(st, "Missing while block");
   } else if (check_word(st, "do")) {
     statement = Program_new_Statement(p, DoWhile, next);
-    statement->doWhileS->body = Program_parse_scope_block(p, st);
+    statement->doWhileS->body = Program_parse_scope_block(p, m, st);
     if (!check_word(st, "while"))
       FATAL(st, "Missing 'while' for do block");
     if ((temp_e = Program_parse_expression(p, st, false)))
       statement->doWhileS->condition = temp_e;
     else
       FATAL(st, "Missing do while conditon");
+  } else if ((temp_v = Program_parse_variable_declaration(p, m, st, NULL))) {
+    statement = Program_new_Statement(p, Declaration, next);
+    statement->declare->v = temp_v;
+    if (check_op(st, "=")) {
+      if ((temp_e = Program_parse_expression(p, st, false)))
+        statement->declare->e = temp_e;
+      else
+        FATAL(st, "Missing assignement");
+    } else
+      statement->declare->e = NULL;
   } else if ((temp_e = Program_parse_expression(p, st, false))) {
     statement = Program_new_Statement(p, ExpressionS, next);
     statement->express->e = temp_e;
   }
   return statement;
 }
-Statement *Program_parse_scope(Program *p, State *st) {
+Statement *Program_parse_scope(Program *p, Module *m, State *st) {
   Statement *body = NULL;
   Expression *temp_e = NULL;
   while (*st->c) {
     skip_whitespace(st);
     if (check_op(st, "}"))
       return body;
-    body = Program_parse_statement(p, st, body);
+    body = Program_parse_statement(p, m, st, body);
     if (!body)
       break;
   }
   FATAL(st, "Missing closing '}' for function body");
   return NULL;
 }
-Statement *Program_parse_scope_block(Program *p, State *st) {
+Statement *Program_parse_scope_block(Program *p, Module *m, State *st) {
   if (check_op(st, "{")) {
     Statement *s = Program_new_Statement(p, Scope, NULL);
-    s->scope->body = Program_parse_scope(p, st);
+    s->scope->body = Program_parse_scope(p, m, st);
     return s;
   } else
-    return Program_parse_statement(p, st, NULL);
+    return Program_parse_statement(p, m, st, NULL);
 }
 
 void Program_parse_fn(Program *p, Module *m, State *st) {
@@ -908,10 +931,10 @@ void Program_parse_fn(Program *p, Module *m, State *st) {
   Function *fn = Program_add_fn(p, m);
   if ((fn->name = read_identifier(p, st))) {
     if (check_op(st, "(")) {
-      fn->parameter = Program_parse_variable_declaration(p, m, st, ")");
+      fn->parameter = Program_parse_variable_declaration_list(p, m, st, ")");
       fn->returnType = Program_parse_declared_type(p, m, st);
       if (check_op(st, "{"))
-        fn->body = Program_parse_scope(p, st);
+        fn->body = Program_parse_scope(p, m, st);
       else
         FATAL(st, "Missing function body");
     } else
@@ -1155,7 +1178,12 @@ void c_statements(FILE *f, Statement *s, int indent) {
   fprintf(f, "%.*s", indent, SPACE);
   switch (s->type) {
   case Declaration:
-    fprintf(f, "<<decl>>;\n");
+    c_var_list(f, s->declare->v, ";");
+    if (s->declare->e) {
+      fprintf(f, " = ");
+      c_expression(f, s->declare->e);
+    }
+    fprintf(f, ";\n");
     break;
   case ExpressionS:
     c_expression(f, s->express->e);
