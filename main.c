@@ -900,6 +900,8 @@ Statement *Program_parse_statement(Program *p, Module *m, State *st, Statement *
     statement = Program_new_Statement(p, ExpressionS, next);
     statement->express->e = temp_e;
   }
+  if (statement)
+    check_op(st, ";");
   return statement;
 }
 Statement *Program_parse_scope(Program *p, Module *m, State *st) {

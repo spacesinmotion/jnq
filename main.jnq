@@ -31,7 +31,7 @@ fn c_fn(f *FILE, fn *Function) {
   c_fn(f, fn->next)
 
   c_type_declare(f, fn->returnType)
-  fprintf(f, " %s(", fn->name)
+  fprintf(f, " %s(", fn->name);
   c_var_list(f, fn->parameter, ", ")
   if (!fn->body)
     fprintf(f, ") {}\n\n")
