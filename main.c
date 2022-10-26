@@ -1259,28 +1259,28 @@ void c_fn(FILE *f, Function *fn) {
   c_fn(f, fn->next);
 
   c_type_declare(f, fn->returnType);
-  printf(" %s(", fn->name);
+  fprintf(f, " %s(", fn->name);
   c_var_list(f, fn->parameter, ", ");
   if (!fn->body)
-    printf(") {}\n\n");
+    fprintf(f, ") {}\n\n");
   else {
-    printf(") {\n");
+    fprintf(f, ") {\n");
     c_statements(f, fn->body, 2);
-    printf("}\n\n");
+    fprintf(f, "}\n\n");
   }
 }
 
 void c_Module(FILE *f, const Module *m) {
   if (m->use) {
-    printf("\n");
+    fprintf(f, "\n");
     c_use(f, m->use);
   }
   if (m->types) {
-    printf("\n");
+    fprintf(f, "\n");
     c_type(f, m->types);
   }
   if (m->fn) {
-    printf("\n");
+    fprintf(f, "\n");
     c_fn(f, m->fn);
   }
 }
