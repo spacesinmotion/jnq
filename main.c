@@ -965,11 +965,13 @@ void Program_parse_module(Program *p, Module *m, State *st) {
   }
 }
 
+void c_Module(FILE *f, const Module *m);
+
 void c_use(FILE *f, Use *u) {
   if (u->next)
     c_use(f, u->next);
 
-  fprintf(f, "use %s\n", u->use->path);
+  c_Module(f, u->use);
 }
 
 void c_type_declare(FILE *f, TypeDeclare *ty) {
@@ -1008,7 +1010,13 @@ void c_type(FILE *f, Klass *t) {
 
   c_type(f, t->next);
 
-  fprintf(f, "typedef struct %s {\n  ", t->name);
+  fprintf(f, "typedef struct %s", t->name);
+  if (!t->member) {
+    fprintf(f, " {} %s;\n\n", t->name);
+    return;
+  }
+
+  fprintf(f, " {\n  ");
   c_var_list(f, t->member, ";\n  ");
   fprintf(f, "");
   fprintf(f, ";\n} %s;\n\n", t->name);
