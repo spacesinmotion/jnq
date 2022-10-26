@@ -965,7 +965,7 @@ void Program_parse_module(Program *p, Module *m, State *st) {
   }
 }
 
-void c_Module(FILE *f, const Module *m);
+void c_Module(FILE *f, Module *m);
 
 void c_use(FILE *f, Use *u) {
   if (u->next)
@@ -1280,7 +1280,11 @@ void c_fn(FILE *f, Function *fn) {
   }
 }
 
-void c_Module(FILE *f, const Module *m) {
+void c_Module(FILE *f, Module *m) {
+  if (!m->finished)
+    return;
+  m->finished = false;
+
   if (m->use) {
     fprintf(f, "\n");
     c_use(f, m->use);
