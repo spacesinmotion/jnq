@@ -5,3 +5,29 @@ type AnotherThing struct {
   y float,
   z float, 
 }
+
+
+type FILE struct { 
+}
+
+type Function struct { 
+}
+
+
+fn c_fn(f *FILE, fn *Function) {
+  if (!fn)
+    return
+
+  c_fn(f, fn->next)
+
+  c_type_declare(f, fn->returnType)
+  fprintf(f, " %s(", fn->name);
+  c_var_list(f, fn->parameter, ", ")
+  if (!fn->body)
+    fprintf(f, ") {}\n\n")
+  else {
+    fprintf(f, ") {\n")
+    c_statements(f, fn->body, 2)
+    fprintf(f, "}\n\n")
+  }
+}

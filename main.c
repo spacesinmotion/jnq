@@ -69,6 +69,7 @@ typedef struct WhileStatement WhileStatement;
 typedef struct DoWhileStatement DoWhileStatement;
 
 typedef struct Klass Klass;
+typedef struct Enum Enum;
 typedef struct Module Module;
 
 typedef enum ExpressionType {
@@ -258,10 +259,25 @@ typedef struct Klass {
   Klass *next;
 } Klass;
 
+typedef struct EnumEntry EnumEntry;
+typedef struct EnumEntry {
+  const char *name;
+  int value;
+  bool valueSet;
+  EnumEntry *next;
+} EnumEntry;
+
+typedef struct Enum {
+  const char *name;
+  EnumEntry *entries;
+  Enum *next;
+} Enum;
+
 typedef struct Module {
   const char *path;
   Use *use;
   Klass *types;
+  Enum *enums;
   Function *fn;
   bool finished;
   Module *next;
@@ -376,6 +392,13 @@ Klass *Program_add_type(Program *p, Module *m) {
   c->next = m->types;
   m->types = c;
   return c;
+}
+
+Enum *Program_add_enum(Program *p, Module *m) {
+  Enum *e = (Enum *)Program_alloc(p, sizeof(Enum));
+  e->next = m->enums;
+  m->enums = e;
+  return e;
 }
 
 Function *Program_add_fn(Program *p, Module *m) {
@@ -645,14 +668,49 @@ Variable *Program_parse_variable_declaration_list(Program *p, Module *m, State *
   return NULL;
 }
 
+EnumEntry *Program_parse_enum_entry_list(Program *p, State *st) {
+  skip_whitespace(st);
+  State old = *st;
+  EnumEntry *top = NULL;
+  while (*st->c) {
+    if (check_op(st, "}"))
+      return top;
+
+    EnumEntry *e = Program_alloc(p, sizeof(EnumEntry));
+    if ((e->name = read_identifier(p, st))) {
+      e->valueSet = false;
+      if (check_op(st, "=")) {
+        e->valueSet = true;
+        const bool neg = check_op(st, "-");
+        if (!read_int(st, &e->value))
+          FATAL(st, "missing enum entry value ");
+        if (neg)
+          e->value *= -1;
+      }
+    } else
+      FATAL(st, "missing enum entry name");
+    check_op(st, ",");
+    e->next = top;
+    top = e;
+  }
+  FATAL(st, "Missing closing '}' for enum");
+  return NULL;
+}
+
 void Program_parse_type(Program *p, Module *m, State *st) {
   skip_whitespace(st);
 
-  Klass *c = Program_add_type(p, m);
-  if ((c->name = read_identifier(p, st))) {
-    if (check_word(st, "struct") && check_op(st, "{"))
+  const char *name = NULL;
+  if ((name = read_identifier(p, st))) {
+    if (check_word(st, "struct") && check_op(st, "{")) {
+      Klass *c = Program_add_type(p, m);
+      c->name = name;
       c->member = Program_parse_variable_declaration_list(p, m, st, "}");
-    else
+    } else if (check_word(st, "enum") && check_op(st, "{")) {
+      Enum *e = Program_add_enum(p, m);
+      e->name = name;
+      e->entries = Program_parse_enum_entry_list(p, st);
+    } else
       FATAL(st, "Missing type declaration");
   } else
     FATAL(st, "Missing type name");
@@ -992,6 +1050,37 @@ void c_type_declare(FILE *f, TypeDeclare *ty) {
   }
 }
 
+void c_enum_entry_list(FILE *f, EnumEntry *ee) {
+  if (!ee)
+    return;
+
+  c_enum_entry_list(f, ee->next);
+  if (ee->next)
+    fprintf(f, ",\n  ");
+
+  fprintf(f, "%s", ee->name);
+  if (ee->valueSet)
+    fprintf(f, " = %d", ee->value);
+}
+
+void c_enum(FILE *f, Enum *e) {
+  if (!e)
+    return;
+
+  c_enum(f, e->next);
+
+  fprintf(f, "typedef enum %s", e->name);
+  if (!e->entries) {
+    fprintf(f, " {} %s;\n\n", e->name);
+    return;
+  }
+
+  fprintf(f, " {\n  ");
+  c_enum_entry_list(f, e->entries);
+  fprintf(f, "");
+  fprintf(f, "\n} %s;\n\n", e->name);
+}
+
 void c_var_list(FILE *f, Variable *v, const char *br) {
   if (!v)
     return;
@@ -1004,11 +1093,11 @@ void c_var_list(FILE *f, Variable *v, const char *br) {
   fprintf(f, " %s", v->name);
 }
 
-void c_type(FILE *f, Klass *t) {
+void c_struct(FILE *f, Klass *t) {
   if (!t)
     return;
 
-  c_type(f, t->next);
+  c_struct(f, t->next);
 
   fprintf(f, "typedef struct %s", t->name);
   if (!t->member) {
@@ -1291,7 +1380,11 @@ void c_Module(FILE *f, Module *m) {
   }
   if (m->types) {
     fprintf(f, "\n");
-    c_type(f, m->types);
+    c_struct(f, m->types);
+  }
+  if (m->enums) {
+    fprintf(f, "\n");
+    c_enum(f, m->enums);
   }
   if (m->fn) {
     fprintf(f, "\n");
