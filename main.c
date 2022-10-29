@@ -260,6 +260,12 @@ typedef struct EnumEntry {
   EnumEntry *next;
 } EnumEntry;
 
+typedef struct UnionEntry UnionEntry;
+typedef struct UnionEntry {
+  TypeDeclare *type;
+  UnionEntry *next;
+} UnionEntry;
+
 typedef enum TypeKind { Klass, Enum, Union } TypeKind;
 
 typedef struct Type {
@@ -267,6 +273,7 @@ typedef struct Type {
   union {
     Variable *member;
     EnumEntry *entries;
+    UnionEntry *union_member;
   };
   TypeKind kind;
   Type *next;
@@ -342,7 +349,6 @@ Type Float = (Type){"float", NULL, Klass, NULL};
 Type String = (Type){"string", NULL, Klass, NULL};
 
 Type *Module_find_type(Program *p, Module *m, const char *b, const char *e) {
-  printf("find type 1 '%.*s'\n", (int)(e - b), b);
   if (4 == e - b && strncmp(Bool.name, b, 4) == 0)
     return &Bool;
   if (3 == e - b && strncmp(Int.name, b, 3) == 0)
@@ -354,12 +360,7 @@ Type *Module_find_type(Program *p, Module *m, const char *b, const char *e) {
   if (6 == e - b && strncmp(String.name, b, 6) == 0)
     return &String;
 
-  printf("find type 2 '%.*s'\n", (int)(e - b), b);
   for (Type *tt = m->types; tt; tt = tt->next) {
-    printf("find type 2.1 '%.*s'\n", (int)(e - b), b);
-    printf("find type 2.1 str %p\n", tt->name);
-    printf("find type 2.1 str %s\n", tt->name);
-    printf("find type 2.1 strlen %d\n", (int)strlen(tt->name));
     if (strlen(tt->name) == e - b && strncmp(tt->name, b, e - b) == 0)
       return tt;
   }
@@ -708,6 +709,23 @@ EnumEntry *Program_parse_enum_entry_list(Program *p, State *st) {
   return NULL;
 }
 
+UnionEntry *Program_parse_union_entry_list(Program *p, Module *m, State *st) {
+  skip_whitespace(st);
+  State old = *st;
+  UnionEntry *top = NULL;
+  while (*st->c) {
+    if (check_op(st, "}"))
+      return top;
+
+    UnionEntry *e = Program_alloc(p, sizeof(UnionEntry));
+    e->type = Program_parse_declared_type(p, m, st);
+    check_op(st, ",");
+    e->next = top;
+    top = e;
+  }
+  FATAL(st, "Missing closing '}' for enum");
+  return NULL;
+}
 void Program_parse_type(Program *p, Module *m, State *st) {
   skip_whitespace(st);
 
@@ -719,6 +737,9 @@ void Program_parse_type(Program *p, Module *m, State *st) {
     } else if (check_word(st, "enum") && check_op(st, "{")) {
       Type *e = Program_add_type(p, Enum, name, m);
       e->entries = Program_parse_enum_entry_list(p, st);
+    } else if (check_word(st, "union") && check_op(st, "{")) {
+      Type *u = Program_add_type(p, Union, name, m);
+      u->union_member = Program_parse_union_entry_list(p, m, st);
     } else
       FATAL(st, "Missing type declaration");
   } else
@@ -1110,6 +1131,58 @@ void c_struct(FILE *f, const char *name, Variable *member) {
   fprintf(f, ";\n} %s;\n\n", name);
 }
 
+int c_union_enum_entry(FILE *f, const char *name, UnionEntry *entry, int i) {
+  if (!entry)
+    return i;
+
+  int all = c_union_enum_entry(f, name, entry->next, i + 1);
+
+  if (entry->next)
+    fprintf(f, ",\n  ");
+  fprintf(f, "%s_u%d_t", name, all - i);
+  return all;
+}
+
+int c_union_entry(FILE *f, UnionEntry *entry, int i) {
+  if (!entry)
+    return i;
+
+  int all = c_union_entry(f, entry->next, i + 1);
+
+  if (entry->next)
+    fprintf(f, ";\n    ");
+  c_type_declare(f, entry->type);
+  fprintf(f, " _u%d", all - i);
+  return all;
+}
+
+void c_union(FILE *f, const char *name, UnionEntry *member) {
+  if (member) {
+    fprintf(f, "typedef enum %sType", name);
+    if (!member) {
+      fprintf(f, " {} %s;\n\n", name);
+      return;
+    }
+
+    fprintf(f, " {\n  ");
+    c_union_enum_entry(f, name, member, 1);
+    fprintf(f, "");
+    fprintf(f, "\n} %sType;\n", name);
+  }
+
+  fprintf(f, "typedef struct %s", name);
+  if (!member) {
+    fprintf(f, " {} %s;\n\n", name);
+    return;
+  }
+
+  fprintf(f, " {\n  union {\n    ");
+  c_union_entry(f, member, 1);
+  fprintf(f, "\n  };\n");
+  fprintf(f, "  %sType type;", name);
+  fprintf(f, "\n} %s;\n\n", name);
+}
+
 void c_type(FILE *f, Type *t) {
   if (!t)
     return;
@@ -1124,6 +1197,7 @@ void c_type(FILE *f, Type *t) {
     c_enum(f, t->name, t->entries);
     break;
   case Union:
+    c_union(f, t->name, t->union_member);
     break;
   }
 }

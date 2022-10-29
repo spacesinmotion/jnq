@@ -17,3 +17,7 @@ type Vec3 struct {
 type Days enum {
   Mon, Tue, Wed, Thu = 4, Fri, Sat = -4, Sun
 }
+
+type Stuff union {
+  *Vec2, *Vec3, [3]Days
+}
