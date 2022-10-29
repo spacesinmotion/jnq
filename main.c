@@ -61,6 +61,8 @@ typedef struct ExpressionStatement ExpressionStatement;
 typedef struct ReturnStatement ReturnStatement;
 typedef struct BreakStatement BreakStatement;
 typedef struct ContinueStatement ContinueStatement;
+typedef struct CaseStatement CaseStatement;
+typedef struct DefaultStatement DefaultStatement;
 
 typedef struct ScopeStatement ScopeStatement;
 
@@ -68,6 +70,7 @@ typedef struct IfStatement IfStatement;
 typedef struct ForStatement ForStatement;
 typedef struct WhileStatement WhileStatement;
 typedef struct DoWhileStatement DoWhileStatement;
+typedef struct SwitchStatement SwitchStatement;
 
 typedef struct Type Type;
 typedef struct Module Module;
@@ -113,11 +116,14 @@ typedef enum StatementType {
   Return,
   Break,
   Continue,
+  Case,
+  Default,
   Scope,
   If,
   For,
   While,
   DoWhile,
+  Switch,
 } StatementType;
 
 typedef struct Statement Statement;
@@ -128,11 +134,14 @@ typedef struct Statement {
     ReturnStatement *ret;
     BreakStatement *brk;
     ContinueStatement *cont;
+    CaseStatement *caseS;
+    DefaultStatement *defaultS;
     ScopeStatement *scope;
     IfStatement *ifS;
     ForStatement *forS;
     WhileStatement *whileS;
     DoWhileStatement *doWhileS;
+    SwitchStatement *switchS;
   };
   StatementType type;
   Statement *next;
@@ -218,6 +227,15 @@ typedef struct BreakStatement {
 typedef struct ContinueStatement {
 } ContinueStatement;
 
+typedef struct CaseStatement {
+  Expression *caseE;
+  Statement *body;
+} CaseStatement;
+
+typedef struct DefaultStatement {
+  Statement *body;
+} DefaultStatement;
+
 typedef struct ScopeStatement {
   Statement *body;
 } ScopeStatement;
@@ -244,6 +262,11 @@ typedef struct DoWhileStatement {
   Statement *body;
   Expression *condition;
 } DoWhileStatement;
+
+typedef struct SwitchStatement {
+  Statement *body;
+  Expression *condition;
+} SwitchStatement;
 
 typedef struct Function Function;
 typedef struct Function {
@@ -413,6 +436,7 @@ Type *Program_add_type(Program *p, TypeKind k, const char *name, Module *m) {
     tt->entries = NULL;
     break;
   case Union:
+    tt->union_member = NULL;
     break;
   }
   tt->next = m->types;
@@ -450,8 +474,14 @@ Statement *Program_new_Statement(Program *p, StatementType t, Statement *n) {
   case Break:
     s->brk = Program_alloc(p, sizeof(BreakStatement));
     break;
+  case Default:
+    s->defaultS = Program_alloc(p, sizeof(DefaultStatement));
+    break;
   case Continue:
     s->cont = Program_alloc(p, sizeof(ContinueStatement));
+    break;
+  case Case:
+    s->caseS = Program_alloc(p, sizeof(CaseStatement));
     break;
   case Scope:
     s->scope = Program_alloc(p, sizeof(ScopeStatement));
@@ -467,6 +497,9 @@ Statement *Program_new_Statement(Program *p, StatementType t, Statement *n) {
     break;
   case DoWhile:
     s->doWhileS = Program_alloc(p, sizeof(DoWhileStatement));
+    break;
+  case Switch:
+    s->switchS = Program_alloc(p, sizeof(SwitchStatement));
     break;
   }
   s->next = n;
@@ -929,6 +962,25 @@ Expression *Program_parse_expression(Program *p, Module *m, State *st, bool igno
   return e;
 }
 
+Statement *Program_parse_statement(Program *p, Module *m, State *st, Statement *next);
+Statement *Program_parse_case_body(Program *p, Module *m, State *st) {
+  Statement *body = NULL;
+  Expression *temp_e = NULL;
+  while (*st->c) {
+    skip_whitespace(st);
+    State old = *st;
+    if (check_op(st, "}") || check_word(st, "case") || check_word(st, "default")) {
+      *st = old;
+      return body;
+    }
+    body = Program_parse_statement(p, m, st, body);
+    if (!body)
+      break;
+  }
+  FATAL(st, "Missing closing '}' for scope");
+  return NULL;
+}
+
 Statement *Program_parse_scope(Program *p, Module *m, State *st);
 Statement *Program_parse_scope_block(Program *p, Module *m, State *st);
 Statement *Program_parse_statement(Program *p, Module *m, State *st, Statement *next) {
@@ -941,6 +993,20 @@ Statement *Program_parse_statement(Program *p, Module *m, State *st, Statement *
   } else if (check_word(st, "return")) {
     statement = Program_new_Statement(p, Return, next);
     statement->express->e = Program_parse_expression(p, m, st, false);
+  } else if (check_word(st, "case")) {
+    statement = Program_new_Statement(p, Case, next);
+    if (!(statement->caseS->caseE = Program_parse_expression(p, m, st, false)))
+      FATAL(st, "Missing case expression");
+    if (check_op(st, ":"))
+      statement->caseS->body = Program_parse_case_body(p, m, st);
+    else
+      FATAL(st, "Missing ':' in case statement");
+  } else if (check_word(st, "default")) {
+    statement = Program_new_Statement(p, Default, next);
+    if (check_op(st, ":"))
+      statement->defaultS->body = Program_parse_case_body(p, m, st);
+    else
+      FATAL(st, "Missing ':' for default statement");
   } else if (check_word(st, "break"))
     statement = Program_new_Statement(p, Break, next);
   else if (check_word(st, "continue"))
@@ -993,6 +1059,13 @@ Statement *Program_parse_statement(Program *p, Module *m, State *st, Statement *
       statement->doWhileS->condition = temp_e;
     else
       FATAL(st, "Missing do while conditon");
+  } else if (check_word(st, "switch")) {
+    statement = Program_new_Statement(p, Switch, next);
+    if ((temp_e = Program_parse_expression(p, m, st, false)))
+      statement->switchS->condition = temp_e;
+    else
+      FATAL(st, "Missing switch expression");
+    statement->switchS->body = Program_parse_scope_block(p, m, st);
   } else if ((temp_v = Program_parse_variable_declaration(p, m, st, NULL))) {
     statement = Program_new_Statement(p, Declaration, next);
     statement->declare->v = temp_v;
@@ -1022,7 +1095,7 @@ Statement *Program_parse_scope(Program *p, Module *m, State *st) {
     if (!body)
       break;
   }
-  FATAL(st, "Missing closing '}' for function body");
+  FATAL(st, "Missing closing '}' for scope");
   return NULL;
 }
 Statement *Program_parse_scope_block(Program *p, Module *m, State *st) {
@@ -1418,6 +1491,20 @@ void c_statements(FILE *f, Statement *s, int indent) {
   case Continue:
     fprintf(f, "continue;\n");
     break;
+  case Case:
+    fprintf(f, "case ");
+    c_expression(f, s->caseS->caseE);
+    fprintf(f, ": {\n");
+    c_statements(f, s->caseS->body, indent + 2);
+    fprintf(f, "%.*sbreak;\n", indent + 2, SPACE);
+    fprintf(f, "%.*s}\n", indent, SPACE);
+    break;
+  case Default:
+    fprintf(f, "default: {\n");
+    c_statements(f, s->defaultS->body, indent + 2);
+    fprintf(f, "%.*sbreak;\n", indent + 2, SPACE);
+    fprintf(f, "%.*s}\n", indent, SPACE);
+    break;
   case Scope:
     fprintf(f, "{\n");
     c_statements(f, s->scope->body, indent + 2);
@@ -1466,6 +1553,11 @@ void c_statements(FILE *f, Statement *s, int indent) {
     fprintf(f, "while ");
     c_expression(f, s->doWhileS->condition);
     fprintf(f, ";\n");
+    break;
+  case Switch:
+    fprintf(f, "switch ");
+    c_expression(f, s->switchS->condition);
+    c_scope_as_body(f, s->doWhileS->body, indent);
     break;
   }
 }
