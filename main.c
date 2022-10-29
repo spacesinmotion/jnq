@@ -68,8 +68,7 @@ typedef struct ForStatement ForStatement;
 typedef struct WhileStatement WhileStatement;
 typedef struct DoWhileStatement DoWhileStatement;
 
-typedef struct Klass Klass;
-typedef struct Enum Enum;
+typedef struct Type Type;
 typedef struct Module Module;
 
 typedef enum ExpressionType {
@@ -140,7 +139,7 @@ typedef enum TypeDeclareType { ArrayT, PointerT, TypeT } TypeDeclareType;
 typedef struct TypeDeclare TypeDeclare;
 typedef struct TypeDeclare {
   union {
-    Klass *cl;
+    Type *t;
     int count;
   };
   TypeDeclareType type;
@@ -253,12 +252,6 @@ typedef struct Use {
   Use *next;
 } Use;
 
-typedef struct Klass {
-  const char *name;
-  Variable *member;
-  Klass *next;
-} Klass;
-
 typedef struct EnumEntry EnumEntry;
 typedef struct EnumEntry {
   const char *name;
@@ -267,17 +260,22 @@ typedef struct EnumEntry {
   EnumEntry *next;
 } EnumEntry;
 
-typedef struct Enum {
+typedef enum TypeKind { Klass, Enum, Union } TypeKind;
+
+typedef struct Type {
   const char *name;
-  EnumEntry *entries;
-  Enum *next;
-} Enum;
+  union {
+    Variable *member;
+    EnumEntry *entries;
+  };
+  TypeKind kind;
+  Type *next;
+} Type;
 
 typedef struct Module {
   const char *path;
   Use *use;
-  Klass *types;
-  Enum *enums;
+  Type *types;
   Function *fn;
   bool finished;
   Module *next;
@@ -337,13 +335,14 @@ Module *Program_find_module(Program *p, const char *path) {
   return NULL;
 }
 
-Klass Bool = (Klass){"bool", NULL, NULL};
-Klass Char = (Klass){"char", NULL, NULL};
-Klass Int = (Klass){"int", NULL, NULL};
-Klass Float = (Klass){"float", NULL, NULL};
-Klass String = (Klass){"string", NULL, NULL};
+Type Bool = (Type){"bool", NULL, Klass, NULL};
+Type Char = (Type){"char", NULL, Klass, NULL};
+Type Int = (Type){"int", NULL, Klass, NULL};
+Type Float = (Type){"float", NULL, Klass, NULL};
+Type String = (Type){"string", NULL, Klass, NULL};
 
-Klass *Module_find_type(Program *p, Module *m, const char *b, const char *e) {
+Type *Module_find_type(Program *p, Module *m, const char *b, const char *e) {
+  printf("find type 1 '%.*s'\n", (int)(e - b), b);
   if (4 == e - b && strncmp(Bool.name, b, 4) == 0)
     return &Bool;
   if (3 == e - b && strncmp(Int.name, b, 3) == 0)
@@ -355,13 +354,20 @@ Klass *Module_find_type(Program *p, Module *m, const char *b, const char *e) {
   if (6 == e - b && strncmp(String.name, b, 6) == 0)
     return &String;
 
-  for (Klass *c = m->types; c; c = c->next)
-    if (strlen(c->name) == e - b && strncmp(c->name, b, e - b) == 0)
-      return c;
+  printf("find type 2 '%.*s'\n", (int)(e - b), b);
+  for (Type *tt = m->types; tt; tt = tt->next) {
+    printf("find type 2.1 '%.*s'\n", (int)(e - b), b);
+    printf("find type 2.1 str %p\n", tt->name);
+    printf("find type 2.1 str %s\n", tt->name);
+    printf("find type 2.1 strlen %d\n", (int)strlen(tt->name));
+    if (strlen(tt->name) == e - b && strncmp(tt->name, b, e - b) == 0)
+      return tt;
+  }
+  printf("find type 3 '%.*s'\n", (int)(e - b), b);
   for (Use *u = m->use; u; u = u->next)
-    for (Klass *c = u->use->types; c; c = c->next)
-      if (strlen(c->name) == e - b && strncmp(c->name, b, e - b) == 0)
-        return c;
+    for (Type *tt = u->use->types; tt; tt = tt->next)
+      if (strlen(tt->name) == e - b && strncmp(tt->name, b, e - b) == 0)
+        return tt;
   return NULL;
 }
 
@@ -387,18 +393,23 @@ Use *Program_add_use(Program *p, Module *m, Module *use) {
   return u;
 }
 
-Klass *Program_add_type(Program *p, Module *m) {
-  Klass *c = (Klass *)Program_alloc(p, sizeof(Klass));
-  c->next = m->types;
-  m->types = c;
-  return c;
-}
-
-Enum *Program_add_enum(Program *p, Module *m) {
-  Enum *e = (Enum *)Program_alloc(p, sizeof(Enum));
-  e->next = m->enums;
-  m->enums = e;
-  return e;
+Type *Program_add_type(Program *p, TypeKind k, const char *name, Module *m) {
+  Type *tt = (Type *)Program_alloc(p, sizeof(Type));
+  tt->name = name;
+  tt->kind = k;
+  switch (k) {
+  case Klass:
+    tt->member = NULL;
+    break;
+  case Enum:
+    tt->entries = NULL;
+    break;
+  case Union:
+    break;
+  }
+  tt->next = m->types;
+  m->types = tt;
+  return tt;
 }
 
 Function *Program_add_fn(Program *p, Module *m) {
@@ -621,12 +632,12 @@ TypeDeclare *Program_parse_declared_type(Program *p, Module *m, State *st) {
   }
 
   if (check_identifier(st)) {
-    Klass *t = Module_find_type(p, m, old.c, st->c);
+    Type *t = Module_find_type(p, m, old.c, st->c);
     if (!t)
       FATAL(&old, "Unknown type '%.*s'", (int)(st->c - old.c), old.c);
     TypeDeclare *td = Program_alloc(p, sizeof(TypeDeclare));
     td->type = TypeT;
-    td->cl = t;
+    td->t = t;
     td->next = NULL;
     return td;
   }
@@ -703,12 +714,10 @@ void Program_parse_type(Program *p, Module *m, State *st) {
   const char *name = NULL;
   if ((name = read_identifier(p, st))) {
     if (check_word(st, "struct") && check_op(st, "{")) {
-      Klass *c = Program_add_type(p, m);
-      c->name = name;
+      Type *c = Program_add_type(p, Klass, name, m);
       c->member = Program_parse_variable_declaration_list(p, m, st, "}");
     } else if (check_word(st, "enum") && check_op(st, "{")) {
-      Enum *e = Program_add_enum(p, m);
-      e->name = name;
+      Type *e = Program_add_type(p, Enum, name, m);
       e->entries = Program_parse_enum_entry_list(p, st);
     } else
       FATAL(st, "Missing type declaration");
@@ -1045,7 +1054,7 @@ void c_type_declare(FILE *f, TypeDeclare *ty) {
     fprintf(f, "*");
     break;
   case TypeT:
-    fprintf(f, "%s", ty->cl->name);
+    fprintf(f, "%s", ty->t->name);
     break;
   }
 }
@@ -1063,22 +1072,17 @@ void c_enum_entry_list(FILE *f, EnumEntry *ee) {
     fprintf(f, " = %d", ee->value);
 }
 
-void c_enum(FILE *f, Enum *e) {
-  if (!e)
-    return;
-
-  c_enum(f, e->next);
-
-  fprintf(f, "typedef enum %s", e->name);
-  if (!e->entries) {
-    fprintf(f, " {} %s;\n\n", e->name);
+void c_enum(FILE *f, const char *name, EnumEntry *entries) {
+  fprintf(f, "typedef enum %s", name);
+  if (!entries) {
+    fprintf(f, " {} %s;\n\n", name);
     return;
   }
 
   fprintf(f, " {\n  ");
-  c_enum_entry_list(f, e->entries);
+  c_enum_entry_list(f, entries);
   fprintf(f, "");
-  fprintf(f, "\n} %s;\n\n", e->name);
+  fprintf(f, "\n} %s;\n\n", name);
 }
 
 void c_var_list(FILE *f, Variable *v, const char *br) {
@@ -1093,22 +1097,35 @@ void c_var_list(FILE *f, Variable *v, const char *br) {
   fprintf(f, " %s", v->name);
 }
 
-void c_struct(FILE *f, Klass *t) {
-  if (!t)
-    return;
-
-  c_struct(f, t->next);
-
-  fprintf(f, "typedef struct %s", t->name);
-  if (!t->member) {
-    fprintf(f, " {} %s;\n\n", t->name);
+void c_struct(FILE *f, const char *name, Variable *member) {
+  fprintf(f, "typedef struct %s", name);
+  if (!member) {
+    fprintf(f, " {} %s;\n\n", name);
     return;
   }
 
   fprintf(f, " {\n  ");
-  c_var_list(f, t->member, ";\n  ");
+  c_var_list(f, member, ";\n  ");
   fprintf(f, "");
-  fprintf(f, ";\n} %s;\n\n", t->name);
+  fprintf(f, ";\n} %s;\n\n", name);
+}
+
+void c_type(FILE *f, Type *t) {
+  if (!t)
+    return;
+
+  c_type(f, t->next);
+
+  switch (t->kind) {
+  case Klass:
+    c_struct(f, t->name, t->member);
+    break;
+  case Enum:
+    c_enum(f, t->name, t->entries);
+    break;
+  case Union:
+    break;
+  }
 }
 
 void lisp_expression(FILE *f, Expression *e);
@@ -1380,11 +1397,7 @@ void c_Module(FILE *f, Module *m) {
   }
   if (m->types) {
     fprintf(f, "\n");
-    c_struct(f, m->types);
-  }
-  if (m->enums) {
-    fprintf(f, "\n");
-    c_enum(f, m->enums);
+    c_type(f, m->types);
   }
   if (m->fn) {
     fprintf(f, "\n");
