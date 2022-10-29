@@ -21,3 +21,18 @@ type Days enum {
 type Stuff union {
   *Vec2, *Vec3, [3]Days
 }
+
+type Module struct {}
+type Program struct {}
+type TypeKind struct {}
+type Type struct {}
+
+fn Program_add_type(p *Program, k  TypeKind, name *char, m *Module) *Type {
+  tt *Type = p->alloc(sizeof(Type)) as *Type
+  tt->name = name;
+  tt->kind = k;
+  
+  tt->next = m->types;
+  m->types = tt;
+  return tt;
+}
