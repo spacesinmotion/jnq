@@ -30,7 +30,7 @@ fn a_fn() {
 	*a = b
 	*a = c
 
-  for (i int = *traceStack.size(); i >= 0; --i) {
+  for (i int = *traceStack.size(); i >= 0; i--) {
     sst *Vec2 = &traceStack.states[i]
     fprintf(stderr, " - %s:%zu:%zu\n", sst->file, sst->line, sst->column)
   }

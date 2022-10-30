@@ -54,7 +54,8 @@ typedef struct Construct Construct;
 typedef struct Access Access;
 typedef struct MemberAccess MemberAccess;
 typedef struct Cast Cast;
-typedef struct UnaryOperation UnaryOperation;
+typedef struct UnaryPrefix UnaryPrefix;
+typedef struct UnaryPostfix UnaryPostfix;
 typedef struct BinaryOperation BinaryOperation;
 
 typedef struct DeclarationStatement DeclarationStatement;
@@ -91,7 +92,8 @@ typedef enum ExpressionType {
   AccessE,
   MemberAccessE,
   AsCast,
-  UnaryOperationE,
+  UnaryPrefixE,
+  UnaryPostfixE,
   BinaryOperationE,
 } ExpressionType;
 
@@ -110,7 +112,8 @@ typedef struct Expression {
     Access *access;
     MemberAccess *member;
     Cast *cast;
-    UnaryOperation *unop;
+    UnaryPrefix *unpre;
+    UnaryPostfix *unpost;
     BinaryOperation *binop;
   };
   ExpressionType type;
@@ -205,10 +208,15 @@ typedef struct Cast {
   TypeDeclare *type;
 } Cast;
 
-typedef struct UnaryOperation {
+typedef struct UnaryPrefix {
   Expression *o;
   const char *op;
-} UnaryOperation;
+} UnaryPrefix;
+
+typedef struct UnaryPostfix {
+  Expression *o;
+  const char *op;
+} UnaryPostfix;
 
 typedef struct BinaryOperation {
   Expression *o1;
@@ -544,8 +552,11 @@ Expression *Program_new_Expression(Program *p, ExpressionType t) {
   case AsCast:
     e->access = Program_alloc(p, sizeof(Cast));
     break;
-  case UnaryOperationE:
-    e->unop = Program_alloc(p, sizeof(UnaryOperation));
+  case UnaryPrefixE:
+    e->unpre = Program_alloc(p, sizeof(UnaryPrefix));
+    break;
+  case UnaryPostfixE:
+    e->unpost = Program_alloc(p, sizeof(UnaryPostfix));
     break;
   case BinaryOperationE:
     e->binop = Program_alloc(p, sizeof(BinaryOperation));
@@ -922,6 +933,15 @@ Expression *Program_parse_expression_suffix(Program *p, Module *m, State *st, Ex
     return ma;
   }
 
+  bool decrement = check_op(st, "--");
+  if (decrement || check_op(st, "++")) {
+    Expression *post = Program_new_Expression(p, UnaryPostfixE);
+    post->unpost->o = e;
+    post->unpost->op = decrement ? "--" : "++";
+    post = Program_parse_expression_suffix(p, m, st, post);
+    return post;
+  }
+
   if (check_op(st, "[")) {
     Expression *acc = Program_new_Expression(p, AccessE);
     acc->access->o = e;
@@ -957,7 +977,7 @@ Expression *Program_parse_binary_operation(Program *p, Module *m, State *st, Exp
 
   e = Program_parse_expression_suffix(p, m, st, e);
   if (prefix) {
-    prefix->unop->o = e;
+    prefix->unpre->o = e;
     e = prefix;
   }
   if (check_whitespace_for_nl(st))
@@ -985,8 +1005,8 @@ Expression *Program_parse_expression(Program *p, Module *m, State *st, bool igno
   const char *un_pre_ops[] = {"++", "--", "*", "~", "!", "-", "+", "&"};
   for (int i = 0; i < sizeof(un_pre_ops) / sizeof(const char *); ++i) {
     if (check_op(st, un_pre_ops[i])) {
-      prefix = Program_new_Expression(p, UnaryOperationE);
-      prefix->unop->op = un_pre_ops[i];
+      prefix = Program_new_Expression(p, UnaryPrefixE);
+      prefix->unpre->op = un_pre_ops[i];
       break;
     }
   }
@@ -1010,7 +1030,7 @@ Expression *Program_parse_expression(Program *p, Module *m, State *st, bool igno
     e = Program_parse_atom(p, st);
 
   if (!e && prefix)
-    FATAL(st, "prefix operation without expression '%s'", prefix->unop->op);
+    FATAL(st, "prefix operation without expression '%s'", prefix->unpre->op);
   if (!e)
     return NULL;
 
@@ -1431,9 +1451,14 @@ void lisp_expression(FILE *f, Expression *e) {
     break;
   case AsCast:
     break;
-  case UnaryOperationE:
-    fprintf(f, "(%s ", e->unop->op);
-    lisp_expression(f, e->unop->o);
+  case UnaryPrefixE:
+    fprintf(f, "(%s ", e->unpre->op);
+    lisp_expression(f, e->unpre->o);
+    fprintf(f, ")");
+    break;
+  case UnaryPostfixE:
+    fprintf(f, "(>>%s ", e->unpost->op);
+    lisp_expression(f, e->unpost->o);
     fprintf(f, ")");
     break;
   case BinaryOperationE:
@@ -1517,9 +1542,13 @@ void c_expression(FILE *f, Expression *e) {
     c_expression(f, e->cast->o);
     fprintf(f, "))");
     break;
-  case UnaryOperationE:
-    fprintf(f, "%s", e->unop->op);
-    c_expression(f, e->unop->o);
+  case UnaryPrefixE:
+    fprintf(f, "%s", e->unpre->op);
+    c_expression(f, e->unpre->o);
+    break;
+  case UnaryPostfixE:
+    c_expression(f, e->unpost->o);
+    fprintf(f, "%s", e->unpost->op);
     break;
   case BinaryOperationE:
     c_expression(f, e->binop->o1);
