@@ -184,7 +184,7 @@ typedef struct Call {
 } Call;
 
 typedef struct Construct {
-  Expression *o;
+  Type *type;
   Parameter *p;
 } Construct;
 
@@ -883,6 +883,27 @@ Parameter *Program_parse_parameter_list(Program *p, Module *m, State *st) {
   return param;
 }
 
+Expression *Program_parse_construction(Program *p, Module *m, State *st) {
+  skip_whitespace(st);
+  State old = *st;
+  if (check_identifier(st)) {
+    const char *id_end = st->c;
+    if (check_op(st, "{")) {
+      Expression *construct = Program_new_Expression(p, ConstructE);
+      construct->construct->p = Program_parse_parameter_list(p, m, st);
+      if (!check_op(st, "}"))
+        FATAL(st, "unfinished constructor call, missing '}'");
+      if (!(construct->construct->type = Module_find_type(p, m, old.c, id_end)))
+        FATAL(st, "Unknow type for construction '%.*s'", (int)(id_end - old.c), old.c);
+
+      return construct;
+    }
+  }
+
+  *st = old;
+  return NULL;
+}
+
 Expression *Program_parse_expression_suffix(Program *p, Module *m, State *st, Expression *e) {
 
   bool pointer = check_op(st, "->");
@@ -918,15 +939,6 @@ Expression *Program_parse_expression_suffix(Program *p, Module *m, State *st, Ex
       FATAL(st, "unfinished function call, missing ')'");
     call = Program_parse_expression_suffix(p, m, st, call);
     return call;
-  }
-
-  if (e->type == IdentifierA && check_op(st, "{")) {
-    Expression *construct = Program_new_Expression(p, ConstructE);
-    construct->construct->o = e;
-    construct->construct->p = Program_parse_parameter_list(p, m, st);
-    if (!check_op(st, "}"))
-      FATAL(st, "unfinished constructor call, missing '}'");
-    return construct;
   }
 
   if (check_word(st, "as")) {
@@ -984,6 +996,8 @@ Expression *Program_parse_expression(Program *p, Module *m, State *st, bool igno
       FATAL(st, "missing '(' content");
     if (!check_op(st, ")"))
       FATAL(st, "missing closing ')'");
+  } else if ((e = Program_parse_construction(p, m, st))) {
+    ;
   } else
     e = Program_parse_atom(p, st);
 
@@ -1378,10 +1392,8 @@ void lisp_expression(FILE *f, Expression *e) {
     lisp_parameter(f, e->call->p);
     fprintf(f, ")");
     break;
-    break;
   case ConstructE:
-    fprintf(f, "(## ");
-    lisp_expression(f, e->construct->o);
+    fprintf(f, "(## %s ", e->construct->type->name);
     if (e->call->p)
       fprintf(f, " ");
     lisp_parameter(f, e->construct->p);
@@ -1466,8 +1478,7 @@ void c_expression(FILE *f, Expression *e) {
     fprintf(f, ")");
     break;
   case ConstructE:
-    c_expression(f, e->construct->o);
-    fprintf(f, "{");
+    fprintf(f, "%s{", e->construct->type->name);
     c_parameter(f, e->construct->p);
     fprintf(f, "}");
     break;
