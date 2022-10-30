@@ -25,7 +25,7 @@ type Days enum {
 
 fn a_fn() {
   a *Vec3
-	b Vec3
+	b Vec3 = Vec3{x=0,y=2,z=2}
 	c Vec3 = *a
 	*a = b
 	*a = c

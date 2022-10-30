@@ -84,6 +84,7 @@ typedef enum ExpressionType {
   IdentifierA,
   BraceE,
   CallE,
+  ConstructE,
   AccessE,
   MemberAccessE,
   AsCast,
@@ -101,6 +102,7 @@ typedef struct Expression {
     const char *id;
     Brace *brace;
     Call *call;
+    Call *construct;
     Access *access;
     MemberAccess *member;
     Cast *cast;
@@ -523,6 +525,9 @@ Expression *Program_new_Expression(Program *p, ExpressionType t) {
   case CallE:
     e->call = Program_alloc(p, sizeof(Call));
     break;
+  case ConstructE:
+    e->construct = Program_alloc(p, sizeof(Call));
+    break;
   case AccessE:
     e->access = Program_alloc(p, sizeof(Access));
     break;
@@ -905,6 +910,16 @@ Expression *Program_parse_expression_suffix(Program *p, Module *m, State *st, Ex
     call->call->p = Program_parse_parameter_list(p, m, st);
     if (!check_op(st, ")"))
       FATAL(st, "unfinished function call, missing ')'");
+    call = Program_parse_expression_suffix(p, m, st, call);
+    return call;
+  }
+
+  if (e->type == IdentifierA && check_op(st, "{")) {
+    Expression *call = Program_new_Expression(p, ConstructE);
+    call->call->o = e;
+    call->call->p = Program_parse_parameter_list(p, m, st);
+    if (!check_op(st, "}"))
+      FATAL(st, "unfinished constructor call, missing '}'");
     call = Program_parse_expression_suffix(p, m, st, call);
     return call;
   }
@@ -1358,6 +1373,15 @@ void lisp_expression(FILE *f, Expression *e) {
     lisp_parameter(f, e->call->p);
     fprintf(f, ")");
     break;
+    break;
+  case ConstructE:
+    fprintf(f, "(## ");
+    lisp_expression(f, e->construct->o);
+    if (e->call->p)
+      fprintf(f, " ");
+    lisp_parameter(f, e->construct->p);
+    fprintf(f, ")");
+    break;
   case AccessE:
     fprintf(f, "([] ");
     lisp_expression(f, e->access->o);
@@ -1435,6 +1459,12 @@ void c_expression(FILE *f, Expression *e) {
     fprintf(f, "(");
     c_parameter(f, e->call->p);
     fprintf(f, ")");
+    break;
+  case ConstructE:
+    c_expression(f, e->construct->o);
+    fprintf(f, "{");
+    c_parameter(f, e->construct->p);
+    fprintf(f, "}");
     break;
   case AccessE:
     c_expression(f, e->access->o);

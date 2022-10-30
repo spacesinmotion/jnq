@@ -46,9 +46,9 @@ fn add_type(p *Program, k TypeKind, name *char, m *Module) *Type {
 
   switch (k) {
   case Klass:
-    tt->member = NULL;
+    tt->member = NULL
   case Enum:
-    tt->entries = NULL;
+    tt->entries = NULL
   case Union:
   default:
   }
