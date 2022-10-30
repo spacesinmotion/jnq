@@ -390,6 +390,12 @@ Module *Program_find_module(Program *p, const char *path) {
   return NULL;
 }
 
+Module *Program_reset_module_finished(Program *p) {
+  for (Module *m = p->modules; m; m = m->next)
+    m->finished = false;
+  return NULL;
+}
+
 Type Bool = (Type){"bool", NULL, Klass, NULL};
 Type Char = (Type){"char", NULL, Klass, NULL};
 Type Int = (Type){"int", NULL, Klass, NULL};
@@ -1213,13 +1219,44 @@ void Program_parse_module(Program *p, Module *m, State *st) {
   }
 }
 
-void c_Module(FILE *f, Module *m);
+Module *Program_parse_file(Program *p, const char *path, State *outer_st) {
+  Module *m = Program_find_module(p, path);
+  if (m && !m->finished)
+    FATAL(outer_st, "Circular dependencies!");
+  if (m)
+    return m;
 
-void c_use(FILE *f, Use *u) {
+  m = Program_add_module(p, path);
+  m->finished = false;
+
+  char tempPath[256];
+  strcpy(tempPath, path);
+  for (char *t = tempPath; *t; ++t)
+    if (*t == '.')
+      *t = '/';
+  strcat(tempPath, ".jnq");
+
+  char *code = readFile(tempPath);
+  if (!code)
+    FATAL(outer_st, "missing file! '%s'", tempPath);
+
+  State st = State_new(code, tempPath);
+  Program_parse_module(p, m, &st);
+  m->finished = true;
+
+  free(code);
+  return m;
+}
+
+void c_Module_types(FILE *f, Module *m);
+
+typedef void (*ModuleFileCB)(FILE *, Module *);
+
+void c_use(FILE *f, Use *u, ModuleFileCB cb) {
   if (u->next)
-    c_use(f, u->next);
+    c_use(f, u->next, cb);
 
-  c_Module(f, u->use);
+  cb(f, u->use);
 }
 
 void c_type_declare(FILE *f, TypeDeclare *ty) {
@@ -1316,7 +1353,7 @@ int c_union_entry(FILE *f, UnionEntry *entry, int i) {
   return all;
 }
 
-void c_union(FILE *f, const char *name, UnionEntry *member) {
+void c_union_forward(FILE *f, const char *name, UnionEntry *member) {
   if (member) {
     fprintf(f, "typedef enum %sType", name);
     if (!member) {
@@ -1330,6 +1367,10 @@ void c_union(FILE *f, const char *name, UnionEntry *member) {
     fprintf(f, "\n} %sType;\n", name);
   }
 
+  fprintf(f, "typedef struct %s %s;\n", name, name);
+}
+
+void c_union(FILE *f, const char *name, UnionEntry *member) {
   fprintf(f, "typedef struct %s", name);
   if (!member) {
     fprintf(f, " {} %s;\n\n", name);
@@ -1354,7 +1395,7 @@ void c_type(FILE *f, Type *t) {
     c_struct(f, t->name, t->member);
     break;
   case Enum:
-    c_enum(f, t->name, t->entries);
+    // c_enum(f, t->name, t->entries);
     break;
   case Union:
     c_union(f, t->name, t->union_member);
@@ -1521,7 +1562,7 @@ void c_expression(FILE *f, Expression *e) {
     fprintf(f, ")");
     break;
   case ConstructE:
-    fprintf(f, "%s{", e->construct->type->name);
+    fprintf(f, "(%s){", e->construct->type->name);
     c_parameter(f, e->construct->p);
     fprintf(f, "}");
     break;
@@ -1687,18 +1728,29 @@ void c_fn(FILE *f, Function *fn) {
   }
 }
 
-void c_Module(FILE *f, Module *m) {
-  if (!m->finished)
+void c_Module_types(FILE *f, Module *m) {
+  if (m->finished)
     return;
-  m->finished = false;
+  m->finished = true;
 
   if (m->use) {
     fprintf(f, "\n");
-    c_use(f, m->use);
+    c_use(f, m->use, c_Module_types);
   }
   if (m->types) {
     fprintf(f, "\n");
     c_type(f, m->types);
+  }
+}
+
+void c_Module_fn(FILE *f, Module *m) {
+  if (m->finished)
+    return;
+  m->finished = true;
+
+  if (m->use) {
+    fprintf(f, "\n");
+    c_use(f, m->use, c_Module_fn);
   }
   if (m->fn) {
     fprintf(f, "\n");
@@ -1706,33 +1758,85 @@ void c_Module(FILE *f, Module *m) {
   }
 }
 
-Module *Program_parse_file(Program *p, const char *path, State *outer_st) {
-  Module *m = Program_find_module(p, path);
-  if (m && !m->finished)
-    FATAL(outer_st, "Circular dependencies!");
-  if (m)
-    return m;
+void c_type_forward(FILE *f, Type *t) {
+  if (!t)
+    return;
 
-  m = Program_add_module(p, path);
-  m->finished = false;
+  c_type_forward(f, t->next);
 
-  char tempPath[256];
-  strcpy(tempPath, path);
-  for (char *t = tempPath; *t; ++t)
-    if (*t == '.')
-      *t = '/';
-  strcat(tempPath, ".jnq");
+  switch (t->kind) {
+  case Klass:
+    fprintf(f, "typedef %s struct %s;\n", t->name, t->name);
+    break;
+  case Enum:
+    c_enum(f, t->name, t->entries);
+    break;
+  case Union:
+    c_union_forward(f, t->name, t->union_member);
+    break;
+  }
+}
 
-  char *code = readFile(tempPath);
-  if (!code)
-    FATAL(outer_st, "missing file! '%s'", tempPath);
-
-  State st = State_new(code, tempPath);
-  Program_parse_module(p, m, &st);
+void c_Module_forward_types(FILE *f, Module *m) {
+  if (m->finished)
+    return;
   m->finished = true;
 
-  free(code);
-  return m;
+  if (m->use) {
+    fprintf(f, "\n");
+    c_use(f, m->use, c_Module_forward_types);
+  }
+  if (m->types) {
+    fprintf(f, "\n");
+    c_type_forward(f, m->types);
+  }
+}
+
+void c_fn_forward(FILE *f, Function *fn) {
+  if (!fn)
+    return;
+
+  c_fn_forward(f, fn->next);
+
+  if (fn->returnType)
+    c_type_declare(f, fn->returnType);
+  else
+    fprintf(f, "void");
+  fprintf(f, " %s(", fn->name);
+  if (fn->parameter)
+    c_var_list(f, fn->parameter, ", ");
+  else
+    fprintf(f, "void");
+  fprintf(f, ");\n");
+}
+
+void c_Module_forward_fn(FILE *f, Module *m) {
+  if (m->finished)
+    return;
+  m->finished = true;
+
+  if (m->use) {
+    fprintf(f, "\n");
+    c_use(f, m->use, c_Module_forward_fn);
+  }
+  if (m->fn) {
+    fprintf(f, "\n");
+    c_fn_forward(f, m->fn);
+  }
+}
+
+void c_Program(FILE *f, Program *p, Module *m) {
+  Program_reset_module_finished(p);
+  c_Module_forward_types(f, m);
+
+  Program_reset_module_finished(p);
+  c_Module_forward_fn(f, m);
+
+  Program_reset_module_finished(p);
+  c_Module_types(f, m);
+
+  Program_reset_module_finished(p);
+  c_Module_fn(f, m);
 }
 
 int main(int argc, char *argv[]) {
@@ -1744,7 +1848,7 @@ int main(int argc, char *argv[]) {
   Module *m = Program_parse_file(&p, "main", &(State){.file = "main.jnq", .line = 0, .column = 0});
 
   printf("---------\n");
-  c_Module(stdout, m);
+  c_Program(stdout, &p, m);
 
   return 0;
 }
