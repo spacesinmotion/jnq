@@ -1573,7 +1573,7 @@ void c_expression(FILE *f, Expression *e) {
     fprintf(f, ")");
     break;
   case ConstructE:
-    fprintf(f, "(%s){", e->construct->type->name);
+    fprintf(f, "(%s%s){", e->construct->type->module->c_name, e->construct->type->name);
     c_parameter(f, e->construct->p);
     fprintf(f, "}");
     break;
