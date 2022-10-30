@@ -49,6 +49,7 @@ void FATAL(State *st, const char *format, ...) {
 
 typedef struct Brace Brace;
 typedef struct Call Call;
+typedef struct Construct Construct;
 typedef struct Access Access;
 typedef struct MemberAccess MemberAccess;
 typedef struct Cast Cast;
@@ -102,7 +103,7 @@ typedef struct Expression {
     const char *id;
     Brace *brace;
     Call *call;
-    Call *construct;
+    Construct *construct;
     Access *access;
     MemberAccess *member;
     Cast *cast;
@@ -181,6 +182,11 @@ typedef struct Call {
   Expression *o;
   Parameter *p;
 } Call;
+
+typedef struct Construct {
+  Expression *o;
+  Parameter *p;
+} Construct;
 
 typedef struct Access {
   Expression *o;
@@ -526,7 +532,7 @@ Expression *Program_new_Expression(Program *p, ExpressionType t) {
     e->call = Program_alloc(p, sizeof(Call));
     break;
   case ConstructE:
-    e->construct = Program_alloc(p, sizeof(Call));
+    e->construct = Program_alloc(p, sizeof(Construct));
     break;
   case AccessE:
     e->access = Program_alloc(p, sizeof(Access));
@@ -915,13 +921,12 @@ Expression *Program_parse_expression_suffix(Program *p, Module *m, State *st, Ex
   }
 
   if (e->type == IdentifierA && check_op(st, "{")) {
-    Expression *call = Program_new_Expression(p, ConstructE);
-    call->call->o = e;
-    call->call->p = Program_parse_parameter_list(p, m, st);
+    Expression *construct = Program_new_Expression(p, ConstructE);
+    construct->construct->o = e;
+    construct->construct->p = Program_parse_parameter_list(p, m, st);
     if (!check_op(st, "}"))
       FATAL(st, "unfinished constructor call, missing '}'");
-    call = Program_parse_expression_suffix(p, m, st, call);
-    return call;
+    return construct;
   }
 
   if (check_word(st, "as")) {
