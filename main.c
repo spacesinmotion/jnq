@@ -329,6 +329,7 @@ typedef struct Type {
 
 typedef struct Module {
   const char *path;
+  const char *c_name;
   Use *use;
   Type *types;
   Function *fn;
@@ -428,9 +429,15 @@ Type *Module_find_type(Program *p, Module *m, const char *b, const char *e) {
 Module *Program_add_module(Program *p, const char *pathc) {
   size_t size = strlen(pathc) + 1;
   char *path = (char *)Program_alloc(p, size);
+  char *cname = (char *)Program_alloc(p, size);
   strcpy(path, pathc);
+  strcpy(cname, pathc);
+  for (char *c = cname; *c; ++c)
+    if (*c == '.')
+      *c = '_';
   Module *m = (Module *)Program_alloc(p, sizeof(Module));
   m->path = path;
+  m->c_name = cname;
   m->use = NULL;
   m->types = NULL;
   m->fn = NULL;
@@ -1277,30 +1284,30 @@ void c_type_declare(FILE *f, TypeDeclare *ty) {
   }
 }
 
-void c_enum_entry_list(FILE *f, EnumEntry *ee) {
+void c_enum_entry_list(FILE *f, const char *module_name, EnumEntry *ee) {
   if (!ee)
     return;
 
-  c_enum_entry_list(f, ee->next);
+  c_enum_entry_list(f, module_name, ee->next);
   if (ee->next)
     fprintf(f, ",\n  ");
 
-  fprintf(f, "%s", ee->name);
+  fprintf(f, "%s_%s", module_name, ee->name);
   if (ee->valueSet)
     fprintf(f, " = %d", ee->value);
 }
 
-void c_enum(FILE *f, const char *name, EnumEntry *entries) {
-  fprintf(f, "typedef enum %s", name);
+void c_enum(FILE *f, const char *module_name, const char *name, EnumEntry *entries) {
+  fprintf(f, "typedef enum %s_%s", module_name, name);
   if (!entries) {
-    fprintf(f, " {} %s;\n\n", name);
+    fprintf(f, " {} %s_%s;\n\n", module_name, name);
     return;
   }
 
   fprintf(f, " {\n  ");
-  c_enum_entry_list(f, entries);
+  c_enum_entry_list(f, module_name, entries);
   fprintf(f, "");
-  fprintf(f, "\n} %s;\n\n", name);
+  fprintf(f, "\n} %s_%s;\n\n", module_name, name);
 }
 
 void c_var_list(FILE *f, Variable *v, const char *br) {
@@ -1315,28 +1322,28 @@ void c_var_list(FILE *f, Variable *v, const char *br) {
   fprintf(f, " %s", v->name);
 }
 
-void c_struct(FILE *f, const char *name, Variable *member) {
-  fprintf(f, "typedef struct %s", name);
+void c_struct(FILE *f, const char *module_name, const char *name, Variable *member) {
+  fprintf(f, "typedef struct %s_%s", module_name, name);
   if (!member) {
-    fprintf(f, " {} %s;\n\n", name);
+    fprintf(f, " {} %s_%s;\n\n", module_name, name);
     return;
   }
 
   fprintf(f, " {\n  ");
   c_var_list(f, member, ";\n  ");
   fprintf(f, "");
-  fprintf(f, ";\n} %s;\n\n", name);
+  fprintf(f, ";\n} %s_%s;\n\n", module_name, name);
 }
 
-int c_union_enum_entry(FILE *f, const char *name, UnionEntry *entry, int i) {
+int c_union_enum_entry(FILE *f, const char *module_name, const char *name, UnionEntry *entry, int i) {
   if (!entry)
     return i;
 
-  int all = c_union_enum_entry(f, name, entry->next, i + 1);
+  int all = c_union_enum_entry(f, module_name, name, entry->next, i + 1);
 
   if (entry->next)
     fprintf(f, ",\n  ");
-  fprintf(f, "%s_u%d_t", name, all - i);
+  fprintf(f, "%s_%s_u%d_t", module_name, name, all - i);
   return all;
 }
 
@@ -1353,52 +1360,51 @@ int c_union_entry(FILE *f, UnionEntry *entry, int i) {
   return all;
 }
 
-void c_union_forward(FILE *f, const char *name, UnionEntry *member) {
+void c_union_forward(FILE *f, const char *module_name, const char *name, UnionEntry *member) {
   if (member) {
-    fprintf(f, "typedef enum %sType", name);
+    fprintf(f, "typedef enum %s_%sType", module_name, name);
     if (!member) {
-      fprintf(f, " {} %s;\n\n", name);
+      fprintf(f, " {} %s_%sType;\n\n", module_name, name);
       return;
     }
 
     fprintf(f, " {\n  ");
-    c_union_enum_entry(f, name, member, 1);
+    c_union_enum_entry(f, module_name, name, member, 1);
     fprintf(f, "");
-    fprintf(f, "\n} %sType;\n", name);
+    fprintf(f, "\n} %s_%sType;\n", module_name, name);
   }
 
-  fprintf(f, "typedef struct %s %s;\n", name, name);
+  fprintf(f, "typedef struct %s_%s %s_%s;\n", module_name, name, module_name, name);
 }
 
-void c_union(FILE *f, const char *name, UnionEntry *member) {
-  fprintf(f, "typedef struct %s", name);
+void c_union(FILE *f, const char *module_name, const char *name, UnionEntry *member) {
+  fprintf(f, "typedef struct %s_%s", module_name, name);
   if (!member) {
-    fprintf(f, " {} %s;\n\n", name);
+    fprintf(f, " {} %s_%s;\n\n", module_name, name);
     return;
   }
 
   fprintf(f, " {\n  union {\n    ");
   c_union_entry(f, member, 1);
   fprintf(f, "\n  };\n");
-  fprintf(f, "  %sType type;", name);
-  fprintf(f, "\n} %s;\n\n", name);
+  fprintf(f, "  %s_%sType type;", module_name, name);
+  fprintf(f, "\n} %s_%s;\n\n", module_name, name);
 }
 
-void c_type(FILE *f, Type *t) {
+void c_type(FILE *f, const char *module_name, Type *t) {
   if (!t)
     return;
 
-  c_type(f, t->next);
+  c_type(f, module_name, t->next);
 
   switch (t->kind) {
   case Klass:
-    c_struct(f, t->name, t->member);
+    c_struct(f, module_name, t->name, t->member);
     break;
   case Enum:
-    // c_enum(f, t->name, t->entries);
     break;
   case Union:
-    c_union(f, t->name, t->union_member);
+    c_union(f, module_name, t->name, t->union_member);
     break;
   }
 }
@@ -1704,17 +1710,17 @@ void c_statements(FILE *f, Statement *s, int indent) {
   }
 }
 
-void c_fn(FILE *f, Function *fn) {
+void c_fn(FILE *f, const char *module_name, Function *fn) {
   if (!fn)
     return;
 
-  c_fn(f, fn->next);
+  c_fn(f, module_name, fn->next);
 
   if (fn->returnType)
     c_type_declare(f, fn->returnType);
   else
     fprintf(f, "void");
-  fprintf(f, " %s(", fn->name);
+  fprintf(f, " %s_%s(", module_name, fn->name);
   if (fn->parameter)
     c_var_list(f, fn->parameter, ", ");
   else
@@ -1739,7 +1745,7 @@ void c_Module_types(FILE *f, Module *m) {
   }
   if (m->types) {
     fprintf(f, "\n");
-    c_type(f, m->types);
+    c_type(f, m->c_name, m->types);
   }
 }
 
@@ -1754,25 +1760,25 @@ void c_Module_fn(FILE *f, Module *m) {
   }
   if (m->fn) {
     fprintf(f, "\n");
-    c_fn(f, m->fn);
+    c_fn(f, m->c_name, m->fn);
   }
 }
 
-void c_type_forward(FILE *f, Type *t) {
+void c_type_forward(FILE *f, const char *module_name, Type *t) {
   if (!t)
     return;
 
-  c_type_forward(f, t->next);
+  c_type_forward(f, module_name, t->next);
 
   switch (t->kind) {
   case Klass:
-    fprintf(f, "typedef %s struct %s;\n", t->name, t->name);
+    fprintf(f, "typedef %s_%s struct %s_%s;\n", module_name, t->name, module_name, t->name);
     break;
   case Enum:
-    c_enum(f, t->name, t->entries);
+    c_enum(f, module_name, t->name, t->entries);
     break;
   case Union:
-    c_union_forward(f, t->name, t->union_member);
+    c_union_forward(f, module_name, t->name, t->union_member);
     break;
   }
 }
@@ -1786,23 +1792,24 @@ void c_Module_forward_types(FILE *f, Module *m) {
     fprintf(f, "\n");
     c_use(f, m->use, c_Module_forward_types);
   }
+
   if (m->types) {
     fprintf(f, "\n");
-    c_type_forward(f, m->types);
+    c_type_forward(f, m->c_name, m->types);
   }
 }
 
-void c_fn_forward(FILE *f, Function *fn) {
+void c_fn_forward(FILE *f, const char *module_name, Function *fn) {
   if (!fn)
     return;
 
-  c_fn_forward(f, fn->next);
+  c_fn_forward(f, module_name, fn->next);
 
   if (fn->returnType)
     c_type_declare(f, fn->returnType);
   else
     fprintf(f, "void");
-  fprintf(f, " %s(", fn->name);
+  fprintf(f, " %s_%s(", module_name, fn->name);
   if (fn->parameter)
     c_var_list(f, fn->parameter, ", ");
   else
@@ -1821,7 +1828,7 @@ void c_Module_forward_fn(FILE *f, Module *m) {
   }
   if (m->fn) {
     fprintf(f, "\n");
-    c_fn_forward(f, m->fn);
+    c_fn_forward(f, m->c_name, m->fn);
   }
 }
 
