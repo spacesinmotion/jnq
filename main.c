@@ -553,6 +553,14 @@ void skip_whitespace(State *st) {
   }
 }
 
+bool check_whitespace_for_nl(State *st) {
+  if (st->line > 1)
+    for (int i = 1; i <= st->column; ++i)
+      if (!isspace(st->c[-i]))
+        return false;
+  return true;
+}
+
 bool check_word(State *st, const char *word) {
   skip_whitespace(st);
   State old = *st;
@@ -661,6 +669,8 @@ TypeDeclare *Program_parse_declared_type(Program *p, Module *m, State *st) {
     TypeDeclare *td = Program_alloc(p, sizeof(TypeDeclare));
     td->type = PointerT;
     td->next = Program_parse_declared_type(p, m, st);
+    if (!td->next)
+      FATAL(st, "missing type name");
     return td;
   }
 
@@ -672,13 +682,17 @@ TypeDeclare *Program_parse_declared_type(Program *p, Module *m, State *st) {
     if (!check_op(st, "]"))
       FATAL(&old, "missing closing ']'!");
     td->next = Program_parse_declared_type(p, m, st);
+    if (!td->next)
+      FATAL(st, "missing type name");
     return td;
   }
 
   if (check_identifier(st)) {
     Type *t = Module_find_type(p, m, old.c, st->c);
-    if (!t)
-      FATAL(&old, "Unknown type '%.*s'", (int)(st->c - old.c), old.c);
+    if (!t) {
+      *st = old;
+      return NULL;
+    }
     TypeDeclare *td = Program_alloc(p, sizeof(TypeDeclare));
     td->type = TypeT;
     td->t = t;
@@ -911,6 +925,9 @@ Expression *Program_parse_binary_operation(Program *p, Module *m, State *st, Exp
     prefix->unop->o = e;
     e = prefix;
   }
+  if (check_whitespace_for_nl(st))
+    return e;
+
   const char *bin_ops[] = {">>=", "<<=", "==", "!=", ">=", "<=", "+=", "-=", "*=", "/=", "%=", "&=", "|=",
                            "^=",  "&&",  "||", ">>", "<<", "+",  "-",  "*",  "/",  "%",  "&",  "|",  "="};
   for (int i = 0; i < sizeof(bin_ops) / sizeof(const char *); ++i) {
@@ -936,7 +953,6 @@ Expression *Program_parse_expression(Program *p, Module *m, State *st, bool igno
       prefix = Program_new_Expression(p, UnaryOperationE);
       prefix->unop->op = un_pre_ops[i];
       break;
-      FATAL(st, "missing implementation for unary operation '-'", un_pre_ops[i]);
     }
   }
 
@@ -1568,9 +1584,15 @@ void c_fn(FILE *f, Function *fn) {
 
   c_fn(f, fn->next);
 
-  c_type_declare(f, fn->returnType);
+  if (fn->returnType)
+    c_type_declare(f, fn->returnType);
+  else
+    fprintf(f, "void");
   fprintf(f, " %s(", fn->name);
-  c_var_list(f, fn->parameter, ", ");
+  if (fn->parameter)
+    c_var_list(f, fn->parameter, ", ");
+  else
+    fprintf(f, "void");
   if (!fn->body)
     fprintf(f, ") {}\n\n");
   else {

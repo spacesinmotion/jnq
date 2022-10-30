@@ -32,3 +32,28 @@ fn c_fn(f *FILE, fn *Function) {
     fprintf(f, "}\n\n")
   }
 }
+
+
+type Module struct {}
+type Program struct {}
+type TypeKind struct {}
+type Type struct {}
+
+fn add_type(p *Program, k TypeKind, name *char, m *Module) *Type {
+  tt *Type = p->alloc(sizeof(Type)) as *Type
+  tt->name = name;
+  tt->kind = k;
+
+  switch (k) {
+  case Klass:
+    tt->member = NULL;
+  case Enum:
+    tt->entries = NULL;
+  case Union:
+  default:
+  }
+  
+  tt->next = m->types;
+  m->types = tt;
+  return tt;
+}

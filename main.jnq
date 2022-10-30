@@ -14,34 +14,19 @@ type Vec3 struct {
   z float 
 }
 
+type Stuff union {
+  *Vec2, *Vec3
+}
+
 type Days enum {
   Mon, Tue, Wed, Thu = 4, Fri, Sat = -4, Sun
 }
 
-type Stuff union {
-  *Vec2, *Vec3, [3]Days
-}
 
-type Module struct {}
-type Program struct {}
-type TypeKind struct {}
-type Type struct {}
-
-fn add_type(p *Program, k TypeKind, name *char, m *Module) *Type {
-  tt *Type = p->alloc(sizeof(Type)) as *Type
-  tt->name = name;
-  tt->kind = k;
-
-  switch (k) {
-  case Klass:
-    tt->member = NULL;
-  case Enum:
-    tt->entries = NULL;
-  case Union:
-  default:
-  }
-  
-  tt->next = m->types;
-  m->types = tt;
-  return tt;
+fn a_fn() {
+  a *Vec3
+	b Vec3
+	c Vec3 = *a
+	*a = b
+	*a = c
 }
