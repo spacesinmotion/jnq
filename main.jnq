@@ -29,4 +29,9 @@ fn a_fn() {
 	c Vec3 = *a
 	*a = b
 	*a = c
+
+  for (i int = *traceStack.size(); i >= 0; --i) {
+    sst *Vec2 = &traceStack.states[i]
+    fprintf(stderr, " - %s:%zu:%zu\n", sst->file, sst->line, sst->column)
+  }
 }

@@ -47,6 +47,7 @@ void FATAL(State *st, const char *format, ...) {
   exit(1);
 }
 
+typedef struct Variable Variable;
 typedef struct Brace Brace;
 typedef struct Call Call;
 typedef struct Construct Construct;
@@ -83,6 +84,7 @@ typedef enum ExpressionType {
   FloatA,
   StringA,
   IdentifierA,
+  VarE,
   BraceE,
   CallE,
   ConstructE,
@@ -101,6 +103,7 @@ typedef struct Expression {
     float f;
     const char *s;
     const char *id;
+    Variable *var;
     Brace *brace;
     Call *call;
     Construct *construct;
@@ -114,7 +117,6 @@ typedef struct Expression {
 } Expression;
 
 typedef enum StatementType {
-  Declaration,
   ExpressionS,
   Return,
   Break,
@@ -161,7 +163,6 @@ typedef struct TypeDeclare {
   TypeDeclare *next;
 } TypeDeclare;
 
-typedef struct Variable Variable;
 typedef struct Variable {
   const char *name;
   TypeDeclare *type;
@@ -470,9 +471,6 @@ Statement *Program_new_Statement(Program *p, StatementType t, Statement *n) {
   Statement *s = Program_alloc(p, sizeof(Statement));
   s->type = t;
   switch (t) {
-  case Declaration:
-    s->declare = Program_alloc(p, sizeof(DeclarationStatement));
-    break;
   case ExpressionS:
     s->express = Program_alloc(p, sizeof(ExpressionStatement));
     break;
@@ -524,6 +522,9 @@ Expression *Program_new_Expression(Program *p, ExpressionType t) {
   case FloatA:
   case StringA:
   case IdentifierA:
+    break;
+  case VarE:
+    e->var = Program_alloc(p, sizeof(Variable));
     break;
   case BraceE:
     e->brace = Program_alloc(p, sizeof(Brace));
@@ -720,12 +721,14 @@ Variable *Program_parse_variable_declaration(Program *p, Module *m, State *st, V
   const char *name = NULL;
   TypeDeclare *type = NULL;
   if ((name = read_identifier(p, st))) {
-    if ((type = Program_parse_declared_type(p, m, st))) {
-      Variable *top = Program_new_variable(p, next);
-      top->name = name;
-      top->type = type;
-      return top;
-    }
+    skip_whitespace(st);
+    if (!check_whitespace_for_nl(st))
+      if ((type = Program_parse_declared_type(p, m, st))) {
+        Variable *top = Program_new_variable(p, next);
+        top->name = name;
+        top->type = type;
+        return top;
+      }
     *st = old;
   }
   return NULL;
@@ -979,7 +982,7 @@ Expression *Program_parse_binary_operation(Program *p, Module *m, State *st, Exp
 Expression *Program_parse_expression(Program *p, Module *m, State *st, bool ignoreSuffix) {
 
   Expression *prefix = NULL;
-  const char *un_pre_ops[] = {"*", "~", "!", "-", "+", "&"};
+  const char *un_pre_ops[] = {"++", "--", "*", "~", "!", "-", "+", "&"};
   for (int i = 0; i < sizeof(un_pre_ops) / sizeof(const char *); ++i) {
     if (check_op(st, un_pre_ops[i])) {
       prefix = Program_new_Expression(p, UnaryOperationE);
@@ -989,6 +992,7 @@ Expression *Program_parse_expression(Program *p, Module *m, State *st, bool igno
   }
 
   Expression *e = NULL;
+  Variable *temp_v = NULL;
   if (check_op(st, "(")) {
     e = Program_new_Expression(p, BraceE);
     e->brace->o = Program_parse_expression(p, m, st, false);
@@ -998,6 +1002,10 @@ Expression *Program_parse_expression(Program *p, Module *m, State *st, bool igno
       FATAL(st, "missing closing ')'");
   } else if ((e = Program_parse_construction(p, m, st))) {
     ;
+  } else if ((temp_v = Program_parse_variable_declaration(p, m, st, NULL))) {
+    e = Program_alloc(p, sizeof(Expression));
+    e->type = VarE;
+    e->var = temp_v;
   } else
     e = Program_parse_atom(p, st);
 
@@ -1116,16 +1124,6 @@ Statement *Program_parse_statement(Program *p, Module *m, State *st, Statement *
     else
       FATAL(st, "Missing switch expression");
     statement->switchS->body = Program_parse_scope_block(p, m, st);
-  } else if ((temp_v = Program_parse_variable_declaration(p, m, st, NULL))) {
-    statement = Program_new_Statement(p, Declaration, next);
-    statement->declare->v = temp_v;
-    if (check_op(st, "=")) {
-      if ((temp_e = Program_parse_expression(p, m, st, false)))
-        statement->declare->e = temp_e;
-      else
-        FATAL(st, "Missing assignement");
-    } else
-      statement->declare->e = NULL;
   } else if ((temp_e = Program_parse_expression(p, m, st, false))) {
     statement = Program_new_Statement(p, ExpressionS, next);
     statement->express->e = temp_e;
@@ -1379,6 +1377,23 @@ void lisp_expression(FILE *f, Expression *e) {
   case IdentifierA:
     fprintf(f, "%s", e->id);
     break;
+  case VarE:
+    fprintf(f, "(:: %s ", e->var->name);
+    for (TypeDeclare *t = e->var->type; t; t = t->next) {
+      switch (t->type) {
+      case ArrayT:
+        fprintf(f, "[%d]", t->count);
+        break;
+      case PointerT:
+        fprintf(f, "*");
+        break;
+      case TypeT:
+        fprintf(f, "%s", t->t->name);
+        break;
+      }
+    }
+    fprintf(f, ")");
+    break;
   case BraceE:
     fprintf(f, "(() ");
     lisp_expression(f, e->brace->o);
@@ -1466,6 +1481,9 @@ void c_expression(FILE *f, Expression *e) {
   case IdentifierA:
     fprintf(f, "%s", e->id);
     break;
+  case VarE:
+    c_var_list(f, e->var, ";");
+    break;
   case BraceE:
     fprintf(f, "(");
     c_expression(f, e->brace->o);
@@ -1530,14 +1548,6 @@ void c_statements(FILE *f, Statement *s, int indent) {
   c_statements(f, s->next, indent);
   fprintf(f, "%.*s", indent, SPACE);
   switch (s->type) {
-  case Declaration:
-    c_var_list(f, s->declare->v, ";");
-    if (s->declare->e) {
-      fprintf(f, " = ");
-      c_expression(f, s->declare->e);
-    }
-    fprintf(f, ";\n");
-    break;
   case ExpressionS:
     c_expression(f, s->express->e);
     fprintf(f, ";\n");
