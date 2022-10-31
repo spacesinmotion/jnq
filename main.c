@@ -174,30 +174,7 @@ typedef struct Statement {
 typedef struct Function Function;
 typedef struct EnumEntry EnumEntry;
 
-typedef enum TypeDeclareType { ArrayT, PointerT, TypeT, FnT } TypeDeclareType;
 typedef struct TypeDeclare TypeDeclare;
-typedef struct TypeDeclare {
-  union {
-    Type *t;
-    Function *fn;
-    int count;
-  };
-  TypeDeclareType type;
-  TypeDeclare *next;
-} TypeDeclare;
-
-bool TypeDeclare_equal(TypeDeclare *t1, TypeDeclare *t2) {
-  if (!t1 && !t2)
-    return true;
-  if ((!t1 && t2) || (t1 && !t2))
-    return false;
-
-  if (t1->type != t2->type)
-    return false;
-  if (t1->type == TypeT && t1->t != t2->t)
-    return false;
-  return TypeDeclare_equal(t1->next, t2->next);
-}
 
 typedef struct Identifier {
   const char *name;
@@ -363,6 +340,30 @@ typedef struct Type {
   Module *module;
   Type *next;
 } Type;
+
+typedef enum TypeDeclareType { ArrayT, PointerT, TypeT, FnT } TypeDeclareType;
+typedef struct TypeDeclare {
+  union {
+    Type *t;
+    Function *fn;
+    int count;
+  };
+  TypeDeclareType type;
+  TypeDeclare *next;
+} TypeDeclare;
+
+bool TypeDeclare_equal(TypeDeclare *t1, TypeDeclare *t2) {
+  if (!t1 && !t2)
+    return true;
+  if ((!t1 && t2) || (t1 && !t2))
+    return false;
+
+  if (t1->type != t2->type)
+    return false;
+  if (t1->type == TypeT && t1->t != t2->t)
+    return false;
+  return TypeDeclare_equal(t1->next, t2->next);
+}
 
 typedef struct Module {
   const char *path;
