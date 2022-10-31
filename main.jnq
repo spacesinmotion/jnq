@@ -7,6 +7,9 @@ type Vec2 struct {
   y float,
 }
 
+fn neg(v Vec2) Vec2 {
+  return Vec2{-v.x, -v.y}
+}
 
 type Vec3 struct {
   x float 
@@ -25,6 +28,10 @@ type Days enum {
 
 fn a_fn(a *Vec3, b Vec2) float {
   if (a) 
-    return a.x * b.x 
-  return 0
+    return a.x * b.x
+  
+  x Vec2 = Vec2{}
+  x.x = a_fn(a, Vec2{})
+  
+  y Vec2 = x.neg()
 }

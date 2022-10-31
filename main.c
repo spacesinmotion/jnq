@@ -21,10 +21,10 @@ struct {
   int size;
 } traceStack;
 
-void FATAL(State *s, const char *format, ...);
+void FATALX(const char *format, ...);
 void traceStack_push(State *s) {
   if (traceStack.size == 128)
-    FATAL(&(State){.file = s->file, .line = 0, .column = 0}, "not enough buffer for stack trace");
+    FATALX("not enough buffer for stack trace");
   traceStack.states[traceStack.size] = *s;
   traceStack.size++;
 }
@@ -34,6 +34,21 @@ void traceStack_pop() { traceStack.size--; }
 void FATAL(State *st, const char *format, ...) {
   va_list args;
   fprintf(stderr, "%s:%zu:%zu error: ", st->file, st->line, st->column);
+  va_start(args, format);
+  vfprintf(stderr, format, args);
+  va_end(args);
+  fputs("\n", stderr);
+
+  for (int i = traceStack.size - 1; i >= 0; --i) {
+    State *sst = &traceStack.states[i];
+    fprintf(stderr, " - %s:%zu:%zu\n", sst->file, sst->line, sst->column);
+  }
+
+  exit(1);
+}
+void FATALX(const char *format, ...) {
+  va_list args;
+  fprintf(stderr, "%s:%zu:%zu error: ", "unknown.jnq", (long)0, (long)0);
   va_start(args, format);
   vfprintf(stderr, format, args);
   va_end(args);
@@ -156,16 +171,32 @@ typedef struct Statement {
   Statement *next;
 } Statement;
 
-typedef enum TypeDeclareType { ArrayT, PointerT, TypeT } TypeDeclareType;
+typedef struct Function Function;
+
+typedef enum TypeDeclareType { ArrayT, PointerT, TypeT, FnT } TypeDeclareType;
 typedef struct TypeDeclare TypeDeclare;
 typedef struct TypeDeclare {
   union {
     Type *t;
+    Function *fn;
     int count;
   };
   TypeDeclareType type;
   TypeDeclare *next;
 } TypeDeclare;
+
+bool TypeDeclare_equal(TypeDeclare *t1, TypeDeclare *t2) {
+  if (!t1 && !t2)
+    return true;
+  if ((!t1 && t2) || (t1 && !t2))
+    return false;
+
+  if (t1->type != t2->type)
+    return false;
+  if (t1->type == TypeT && t1->t != t2->t)
+    return false;
+  return TypeDeclare_equal(t1->next, t2->next);
+}
 
 typedef struct Identifier {
   const char *name;
@@ -194,7 +225,7 @@ typedef struct Call {
 } Call;
 
 typedef struct Construct {
-  Type *type;
+  TypeDeclare *type;
   Parameter *p;
 } Construct;
 
@@ -205,7 +236,7 @@ typedef struct Access {
 
 typedef struct MemberAccess {
   Expression *o;
-  const char *member;
+  Identifier *member;
   bool pointer;
 } MemberAccess;
 
@@ -291,7 +322,6 @@ typedef struct SwitchStatement {
   Expression *condition;
 } SwitchStatement;
 
-typedef struct Function Function;
 typedef struct Function {
   const char *name;
   Variable *parameter;
@@ -365,7 +395,7 @@ Program Program_new(char *buffer, size_t cap) {
 
 void *Program_alloc(Program *p, size_t size) {
   if (p->arena.len + size > p->arena.cap)
-    FATAL(&(State){.file = "", .line = 0, .column = 0}, "Out of memory");
+    FATALX("Out of memory");
   void *d = (p->arena.buffer + p->arena.len);
   p->arena.len += size;
   return d;
@@ -410,6 +440,12 @@ Type Char = (Type){"char", NULL, Klass, &global, NULL};
 Type Int = (Type){"int", NULL, Klass, &global, NULL};
 Type Float = (Type){"float", NULL, Klass, &global, NULL};
 Type String = (Type){"string", NULL, Klass, &global, NULL};
+
+TypeDeclare BoolT = (TypeDeclare){&Bool, TypeT, NULL};
+TypeDeclare CharT = (TypeDeclare){&Char, TypeT, NULL};
+TypeDeclare IntT = (TypeDeclare){&Int, TypeT, NULL};
+TypeDeclare FloatT = (TypeDeclare){&Float, TypeT, NULL};
+TypeDeclare StringT = (TypeDeclare){&String, TypeT, NULL};
 
 Type *Module_find_type(Program *p, Module *m, const char *b, const char *e) {
   if (4 == e - b && strncmp(Bool.name, b, 4) == 0)
@@ -933,9 +969,11 @@ Expression *Program_parse_construction(Program *p, Module *m, State *st) {
       construct->construct->p = Program_parse_parameter_list(p, m, st);
       if (!check_op(st, "}"))
         FATAL(st, "unfinished constructor call, missing '}'");
-      if (!(construct->construct->type = Module_find_type(p, m, old.c, id_end)))
+      TypeDeclare *t = Program_alloc(p, sizeof(TypeDeclare));
+      t->type = TypeT;
+      if (!(t->t = Module_find_type(p, m, old.c, id_end)))
         FATAL(st, "Unknow type for construction '%.*s'", (int)(id_end - old.c), old.c);
-
+      construct->construct->type = t;
       return construct;
     }
   }
@@ -953,7 +991,9 @@ Expression *Program_parse_expression_suffix(Program *p, Module *m, State *st, Ex
       FATAL(st, "missing id for member access");
     Expression *ma = Program_new_Expression(p, MemberAccessE);
     ma->member->o = e;
-    ma->member->member = member;
+    ma->member->member = Program_alloc(p, sizeof(Identifier));
+    ma->member->member->name = member;
+    ma->member->member->type = NULL;
     ma->member->pointer = pointer;
     ma = Program_parse_expression_suffix(p, m, st, ma);
     return ma;
@@ -1294,6 +1334,10 @@ void c_type_declare(FILE *f, TypeDeclare *ty) {
   case TypeT:
     fprintf(f, "%s%s", ty->t->module->c_name, ty->t->name);
     break;
+  case FnT:
+    c_type_declare(f, ty->fn->returnType);
+    fprintf(f, "(*())");
+    break;
   }
 }
 
@@ -1470,6 +1514,9 @@ void lisp_expression(FILE *f, Expression *e) {
       case TypeT:
         fprintf(f, "%s", t->t->name);
         break;
+      case FnT:
+        fprintf(f, "(*())");
+        break;
       }
     }
     fprintf(f, ")");
@@ -1488,7 +1535,23 @@ void lisp_expression(FILE *f, Expression *e) {
     fprintf(f, ")");
     break;
   case ConstructE:
-    fprintf(f, "(## %s ", e->construct->type->name);
+    fprintf(f, "(## ");
+    for (TypeDeclare *t = e->construct->type; t; t = t->next) {
+      switch (t->type) {
+      case ArrayT:
+        fprintf(f, "[%d]", t->count);
+        break;
+      case PointerT:
+        fprintf(f, "*");
+        break;
+      case TypeT:
+        fprintf(f, "%s", t->t->name);
+        break;
+      case FnT:
+        FATALX("Construction from Function type not implemented!");
+        break;
+      }
+    }
     if (e->call->p)
       fprintf(f, " ");
     lisp_parameter(f, e->construct->p);
@@ -1507,7 +1570,7 @@ void lisp_expression(FILE *f, Expression *e) {
     else
       fprintf(f, "(. ");
     lisp_expression(f, e->member->o);
-    fprintf(f, " %s)", e->member->member);
+    fprintf(f, " %s)", e->member->member->name);
     break;
   case AsCast:
     break;
@@ -1564,6 +1627,9 @@ void c_expression(FILE *f, Expression *e) {
     fprintf(f, "\"%s\"", e->s);
     break;
   case IdentifierA:
+    if (e->id->type && e->id->type->type == FnT) {
+      // fprintf(f, "%s_", e->id->type->fn); module_name
+    }
     fprintf(f, "%s", e->id->name);
     if (e->id->type) {
       fprintf(f, "<");
@@ -1586,7 +1652,9 @@ void c_expression(FILE *f, Expression *e) {
     fprintf(f, ")");
     break;
   case ConstructE:
-    fprintf(f, "(%s%s){", e->construct->type->module->c_name, e->construct->type->name);
+    if (e->construct->type->type != TypeT)
+      FATALX("unexpect typw for construction (missing impementation)");
+    fprintf(f, "(%s%s){", e->construct->type->t->module->c_name, e->construct->type->t->name);
     c_parameter(f, e->construct->p);
     fprintf(f, "}");
     break;
@@ -1598,7 +1666,12 @@ void c_expression(FILE *f, Expression *e) {
     break;
   case MemberAccessE:
     c_expression(f, e->member->o);
-    fprintf(f, "%s%s", (e->member->pointer ? "->" : "."), e->member->member);
+    fprintf(f, "%s%s", (e->member->pointer ? "->" : "."), e->member->member->name);
+    if (e->member->member->type) {
+      fprintf(f, "<");
+      c_type_declare(f, e->member->member->type);
+      fprintf(f, ">");
+    }
     break;
   case AsCast:
     fprintf(f, "((");
@@ -1862,7 +1935,7 @@ typedef struct VariableStack {
 
 void VariableStack_push(VariableStack *s, const char *n, TypeDeclare *t) {
   if (s->stackSize >= 256)
-    FATAL(&(State){"", NULL, 1, 1}, "Variable stack limit reached");
+    FATALX("Variable stack limit reached");
   s->stack[s->stackSize] = (StackVar){n, t};
   s->stackSize++;
 }
@@ -1874,57 +1947,97 @@ TypeDeclare *VariableStack_find(VariableStack *s, const char *n) {
   return NULL;
 }
 
-void c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m, Expression *e) {
+TypeDeclare *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m, Expression *e) {
   if (!e)
-    return;
+    return NULL;
 
   switch (e->type) {
   case BoolA:
+    return &BoolT;
   case CharA:
+    return &CharT;
   case IntA:
+    return &IntT;
   case FloatA:
+    return &FloatT;
   case StringA:
-    break;
+    return &StringT;
+
   case IdentifierA:
     e->id->type = VariableStack_find(s, e->id->name);
-    break;
+    if (!e->id->type) {
+      for (Function *f = m->fn; f; f = f->next)
+        if (strcmp(f->name, e->id->name) == 0) {
+          e->id->type = Program_alloc(p, sizeof(TypeDeclare));
+          e->id->type->type = FnT;
+          e->id->type->fn = f;
+          break;
+        }
+    }
+    return e->id->type;
   case VarE:
     VariableStack_push(s, e->var->name, e->var->type);
-    break;
+    return e->var->type;
   case BraceE:
-    c_Expression_make_variables_typed(s, p, m, e->brace->o);
-    break;
+    return c_Expression_make_variables_typed(s, p, m, e->brace->o);
   case CallE: {
     for (Parameter *pa = e->call->p; pa; pa = pa->next)
       c_Expression_make_variables_typed(s, p, m, pa->p);
-    c_Expression_make_variables_typed(s, p, m, e->call->o);
-    break;
+    TypeDeclare *t = c_Expression_make_variables_typed(s, p, m, e->call->o);
+    if (!t || t->type != FnT)
+      FATALX("Need a function to be called!");
+    return t->fn->returnType;
   }
   case ConstructE:
     for (Parameter *pa = e->construct->p; pa; pa = pa->next)
       c_Expression_make_variables_typed(s, p, m, pa->p);
-    // c_Expression_make_variables_typed(s, p, m, e->construct->p);
-    break;
-  case AccessE:
-    c_Expression_make_variables_typed(s, p, m, e->access->o);
-    break;
-  case MemberAccessE:
-    c_Expression_make_variables_typed(s, p, m, e->member->o);
-    break;
+    return e->construct->type;
+  case AccessE: {
+    TypeDeclare *t = c_Expression_make_variables_typed(s, p, m, e->access->o);
+    if (t->type != ArrayT && t->type != PointerT)
+      FATALX("Expect array/pointer type for access");
+    return t->next;
+  }
+  case MemberAccessE: {
+    TypeDeclare *t = c_Expression_make_variables_typed(s, p, m, e->member->o);
+    if (t->type == PointerT) {
+      t = t->next;
+      e->member->pointer = true;
+    }
+    // union?? enum??
+    if (t->type != TypeT || t->t->kind != Klass)
+      FATALX("Expect struct type for member access");
+    for (Variable *v = t->t->member; v; v = v->next)
+      if (strcmp(v->name, e->member->member->name) == 0) {
+        e->member->member->type = v->type;
+        return v->type;
+      }
+    for (Function *f = t->t->module->fn; f; f = f->next)
+      if (f->parameter && TypeDeclare_equal(f->parameter->type, t) && strcmp(f->name, e->member->member->name) == 0) {
+        e->member->member->type = Program_alloc(p, sizeof(TypeDeclare));
+        e->member->member->type->type = FnT;
+        e->member->member->type->fn = f;
+        return e->member->member->type;
+      }
+    FATALX("unknow struct member '%s' for '%s'", e->member->member->name, t->t->name);
+    return NULL;
+  }
   case AsCast:
     c_Expression_make_variables_typed(s, p, m, e->cast->o);
-    break;
+    return e->cast->type;
   case UnaryPrefixE:
-    c_Expression_make_variables_typed(s, p, m, e->unpre->o);
-    break;
+    return c_Expression_make_variables_typed(s, p, m, e->unpre->o);
   case UnaryPostfixE:
-    c_Expression_make_variables_typed(s, p, m, e->unpost->o);
-    break;
-  case BinaryOperationE:
-    c_Expression_make_variables_typed(s, p, m, e->binop->o1);
-    c_Expression_make_variables_typed(s, p, m, e->binop->o2);
-    break;
+    return c_Expression_make_variables_typed(s, p, m, e->unpost->o);
+  case BinaryOperationE: {
+    TypeDeclare *t1 = c_Expression_make_variables_typed(s, p, m, e->binop->o1);
+    TypeDeclare *t2 = c_Expression_make_variables_typed(s, p, m, e->binop->o2);
+    if (!TypeDeclare_equal(t1, t2))
+      FATALX("Expect equal types for binary operation '%s'", e->binop->op);
+    return t1;
   }
+  }
+  return NULL;
 }
 
 void c_Statement_make_variables_typed(VariableStack *s, Program *p, Module *m, Statement *st) {
