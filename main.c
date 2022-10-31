@@ -47,6 +47,7 @@ void FATAL(State *st, const char *format, ...) {
   exit(1);
 }
 
+typedef struct Identifier Identifier;
 typedef struct Variable Variable;
 typedef struct Brace Brace;
 typedef struct Call Call;
@@ -104,7 +105,7 @@ typedef struct Expression {
     int i;
     float f;
     const char *s;
-    const char *id;
+    Identifier *id;
     Variable *var;
     Brace *brace;
     Call *call;
@@ -165,6 +166,11 @@ typedef struct TypeDeclare {
   TypeDeclareType type;
   TypeDeclare *next;
 } TypeDeclare;
+
+typedef struct Identifier {
+  const char *name;
+  TypeDeclare *type;
+} Identifier;
 
 typedef struct Variable {
   const char *name;
@@ -548,6 +554,7 @@ Expression *Program_new_Expression(Program *p, ExpressionType t) {
   case FloatA:
   case StringA:
   case IdentifierA:
+    e->id = Program_alloc(p, sizeof(Identifier));
     break;
   case VarE:
     e->var = Program_alloc(p, sizeof(Variable));
@@ -853,7 +860,8 @@ Expression *Program_parse_atom(Program *p, State *st) {
     Expression *e = Program_new_Expression(p, IdentifierA);
     char *id = Program_alloc(p, st->c - old.c + 1);
     strncpy(id, old.c, st->c - old.c);
-    e->id = id;
+    e->id->name = id;
+    e->id->type = NULL;
     return e;
   }
 
@@ -1447,7 +1455,7 @@ void lisp_expression(FILE *f, Expression *e) {
     fprintf(f, "\"%s\"", e->s);
     break;
   case IdentifierA:
-    fprintf(f, "%s", e->id);
+    fprintf(f, "%s", e->id->name);
     break;
   case VarE:
     fprintf(f, "(:: %s ", e->var->name);
@@ -1556,7 +1564,7 @@ void c_expression(FILE *f, Expression *e) {
     fprintf(f, "\"%s\"", e->s);
     break;
   case IdentifierA:
-    fprintf(f, "%s", e->id);
+    fprintf(f, "%s", e->id->name);
     break;
   case VarE:
     c_var_list(f, e->var, ";");
