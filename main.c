@@ -1947,19 +1947,27 @@ TypeDeclare *VariableStack_find(VariableStack *s, const char *n) {
 }
 
 TypeDeclare *Module_find_member(Program *p, TypeDeclare *t, Identifier *member) {
-  if (t->t->kind == Klass)
+  if (t->type != TypeT)
+    FATALX("internal error, call of Module_find_member with wrong type");
+  switch (t->t->kind) {
+  case Klass: {
     for (Variable *v = t->t->member; v; v = v->next)
       if (strcmp(v->name, member->name) == 0) {
         member->type = v->type;
         return v->type;
       }
-  if (t->t->kind == Enum) {
+    break;
+  }
+  case Enum: {
     for (EnumEntry *ee = t->t->entries; ee; ee = ee->next)
       if (strcmp(ee->name, member->name) == 0)
         return t;
-    FATALX("'%s' is not part of enum '%s'", member->name, t->t->name);
+    break;
   }
-  // union??
+  case Union:
+    // union?? -> some build in ()
+    break;
+  }
   for (Function *f = t->t->module->fn; f; f = f->next)
     if (f->parameter && TypeDeclare_equal(f->parameter->type, t) && strcmp(f->name, member->name) == 0) {
       member->type = Program_alloc(p, sizeof(TypeDeclare));
@@ -2040,13 +2048,14 @@ TypeDeclare *c_Expression_make_variables_typed(VariableStack *s, Program *p, Mod
       e->member->pointer = true;
     }
     if (t->type != TypeT)
-      FATALX("Expect struct type for member access");
+      FATALX("Expect non pointer type for member access");
     if (!(e->member->member->type = Module_find_member(p, t, e->member->member)))
       FATALX("unknow member '%s' for '%s'", e->member->member->name, t->t->name);
     return e->member->member->type;
   }
   case AsCast:
     c_Expression_make_variables_typed(s, p, m, e->cast->o);
+    // check if cast is valid!
     return e->cast->type;
   case UnaryPrefixE:
     return c_Expression_make_variables_typed(s, p, m, e->unpre->o);
@@ -2060,6 +2069,7 @@ TypeDeclare *c_Expression_make_variables_typed(VariableStack *s, Program *p, Mod
     return t1;
   }
   }
+  FATALX("unknown type for expression!");
   return NULL;
 }
 
@@ -2143,7 +2153,6 @@ void c_Statement_make_variables_typed(VariableStack *s, Program *p, Module *m, S
 }
 
 void c_Function_make_variables_typed(VariableStack *s, Program *p, Module *m, Function *f) {
-  printf("type fn %s\n", f->name);
   int size = s->stackSize;
   for (Variable *p = f->parameter; p; p = p->next)
     VariableStack_push(s, p->name, p->type);
