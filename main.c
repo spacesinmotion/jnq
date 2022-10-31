@@ -1565,6 +1565,11 @@ void c_expression(FILE *f, Expression *e) {
     break;
   case IdentifierA:
     fprintf(f, "%s", e->id->name);
+    if (e->id->type) {
+      fprintf(f, "<");
+      c_type_declare(f, e->id->type);
+      fprintf(f, ">");
+    }
     break;
   case VarE:
     c_var_list(f, e->var, ";");
@@ -1845,7 +1850,190 @@ void c_Module_forward_fn(FILE *f, Module *m) {
   }
 }
 
+typedef struct StackVar {
+  const char *name;
+  TypeDeclare *type;
+} StackVar;
+
+typedef struct VariableStack {
+  StackVar stack[256];
+  int stackSize;
+} VariableStack;
+
+void VariableStack_push(VariableStack *s, const char *n, TypeDeclare *t) {
+  if (s->stackSize >= 256)
+    FATAL(&(State){"", NULL, 1, 1}, "Variable stack limit reached");
+  s->stack[s->stackSize] = (StackVar){n, t};
+  s->stackSize++;
+}
+TypeDeclare *VariableStack_find(VariableStack *s, const char *n) {
+  printf("find %s %d\n", n, s->stackSize);
+  for (int i = s->stackSize - 1; i >= 0; i--)
+    if (strcmp(s->stack[i].name, n) == 0)
+      return s->stack[i].type;
+  return NULL;
+}
+
+void c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m, Expression *e) {
+  if (!e)
+    return;
+
+  switch (e->type) {
+  case BoolA:
+  case CharA:
+  case IntA:
+  case FloatA:
+  case StringA:
+    break;
+  case IdentifierA:
+    e->id->type = VariableStack_find(s, e->id->name);
+    break;
+  case VarE:
+    VariableStack_push(s, e->var->name, e->var->type);
+    break;
+  case BraceE:
+    c_Expression_make_variables_typed(s, p, m, e->brace->o);
+    break;
+  case CallE: {
+    for (Parameter *pa = e->call->p; pa; pa = pa->next)
+      c_Expression_make_variables_typed(s, p, m, pa->p);
+    c_Expression_make_variables_typed(s, p, m, e->call->o);
+    break;
+  }
+  case ConstructE:
+    for (Parameter *pa = e->construct->p; pa; pa = pa->next)
+      c_Expression_make_variables_typed(s, p, m, pa->p);
+    // c_Expression_make_variables_typed(s, p, m, e->construct->p);
+    break;
+  case AccessE:
+    c_Expression_make_variables_typed(s, p, m, e->access->o);
+    break;
+  case MemberAccessE:
+    c_Expression_make_variables_typed(s, p, m, e->member->o);
+    break;
+  case AsCast:
+    c_Expression_make_variables_typed(s, p, m, e->cast->o);
+    break;
+  case UnaryPrefixE:
+    c_Expression_make_variables_typed(s, p, m, e->unpre->o);
+    break;
+  case UnaryPostfixE:
+    c_Expression_make_variables_typed(s, p, m, e->unpost->o);
+    break;
+  case BinaryOperationE:
+    c_Expression_make_variables_typed(s, p, m, e->binop->o1);
+    c_Expression_make_variables_typed(s, p, m, e->binop->o2);
+    break;
+  }
+}
+
+void c_Statement_make_variables_typed(VariableStack *s, Program *p, Module *m, Statement *st) {
+  if (!st)
+    return;
+
+  c_Statement_make_variables_typed(s, p, m, st->next);
+
+  switch (st->type) {
+  case ExpressionS:
+    c_Expression_make_variables_typed(s, p, m, st->express->e);
+    break;
+  case Return:
+    if (st->ret->e)
+      c_Expression_make_variables_typed(s, p, m, st->ret->e);
+    break;
+  case Break:
+  case Continue:
+  case Case: {
+    int size = s->stackSize;
+    c_Expression_make_variables_typed(s, p, m, st->caseS->caseE);
+    c_Statement_make_variables_typed(s, p, m, st->caseS->body);
+    s->stackSize = size;
+    break;
+  }
+  case Default: {
+    int size = s->stackSize;
+    c_Statement_make_variables_typed(s, p, m, st->defaultS->body);
+    s->stackSize = size;
+    break;
+  }
+  case Scope: {
+    int size = s->stackSize;
+    c_Statement_make_variables_typed(s, p, m, st->scope->body);
+    s->stackSize = size;
+    break;
+  }
+  case If: {
+    int size = s->stackSize;
+    c_Expression_make_variables_typed(s, p, m, st->ifS->condition);
+    int sizeI = s->stackSize;
+    c_Statement_make_variables_typed(s, p, m, st->ifS->ifBody);
+    s->stackSize = sizeI;
+    if (st->ifS->elseBody)
+      c_Statement_make_variables_typed(s, p, m, st->ifS->elseBody);
+    s->stackSize = size;
+    break;
+  }
+  case For: {
+    int size = s->stackSize;
+    c_Expression_make_variables_typed(s, p, m, st->forS->init);
+    c_Expression_make_variables_typed(s, p, m, st->forS->condition);
+    c_Expression_make_variables_typed(s, p, m, st->forS->incr);
+    c_Statement_make_variables_typed(s, p, m, st->forS->body);
+    s->stackSize = size;
+    break;
+  }
+  case While: {
+    int size = s->stackSize;
+    c_Expression_make_variables_typed(s, p, m, st->whileS->condition);
+    c_Statement_make_variables_typed(s, p, m, st->whileS->body);
+    s->stackSize = size;
+    break;
+  }
+  case DoWhile: {
+    int size = s->stackSize;
+    c_Statement_make_variables_typed(s, p, m, st->doWhileS->body);
+    s->stackSize = size;
+    c_Expression_make_variables_typed(s, p, m, st->doWhileS->condition);
+    break;
+  }
+  case Switch: {
+    int size = s->stackSize;
+    c_Expression_make_variables_typed(s, p, m, st->switchS->condition);
+    c_Statement_make_variables_typed(s, p, m, st->switchS->body);
+    s->stackSize = size;
+    break;
+  }
+  }
+}
+
+void c_Function_make_variables_typed(VariableStack *s, Program *p, Module *m, Function *f) {
+  printf("type fn %s\n", f->name);
+  int size = s->stackSize;
+  for (Variable *p = f->parameter; p; p = p->next)
+    VariableStack_push(s, p->name, p->type);
+
+  c_Statement_make_variables_typed(s, p, m, f->body);
+
+  s->stackSize = size;
+}
+
+void c_Module_make_variables_typed(Program *p, Module *m) {
+  if (m->finished)
+    return;
+  m->finished = true;
+
+  for (Use *u = m->use; u; u = u->next)
+    c_Module_make_variables_typed(p, u->use);
+
+  VariableStack stack;
+  for (Function *f = m->fn; f; f = f->next)
+    c_Function_make_variables_typed(&stack, p, m, f);
+}
+
 void c_Program(FILE *f, Program *p, Module *m) {
+  Program_reset_module_finished(p);
+  c_Module_make_variables_typed(p, m);
+
   Program_reset_module_finished(p);
   c_Module_forward_types(f, m);
 

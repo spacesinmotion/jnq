@@ -23,15 +23,8 @@ type Days enum {
 }
 
 
-fn a_fn() {
-  a *Vec3
-	b Vec3 = Vec3{x=0,y=2,z=2}
-	c Vec3 = *a
-	*a = b
-	*a = c
-
-  for (i int = *traceStack.size(); i >= 0; i--) {
-    sst *Vec2 = &traceStack.states[i]
-    fprintf(stderr, " - %s:%zu:%zu\n", sst->file, sst->line, sst->column)
-  }
+fn a_fn(a *Vec3, b Vec2) float {
+  if (a) 
+    return a.x * b.x 
+  return 0
 }
