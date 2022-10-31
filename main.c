@@ -338,7 +338,6 @@ typedef struct Type {
   };
   TypeKind kind;
   Module *module;
-  Type *next;
 } Type;
 
 typedef enum TypeDeclareType { ArrayT, PointerT, TypeT, FnT } TypeDeclareType;
@@ -365,11 +364,17 @@ bool TypeDeclare_equal(TypeDeclare *t1, TypeDeclare *t2) {
   return TypeDeclare_equal(t1->next, t2->next);
 }
 
+typedef struct TypeList TypeList;
+typedef struct TypeList {
+  Type *type;
+  TypeList *next;
+} TypeList;
+
 typedef struct Module {
   const char *path;
   const char *c_name;
   Use *use;
-  Type *types;
+  TypeList *types;
   Function *fn;
   bool finished;
   Module *next;
@@ -436,11 +441,11 @@ Module *Program_reset_module_finished(Program *p) {
 }
 
 Module global = (Module){"", "", NULL, NULL, NULL, true, NULL};
-Type Bool = (Type){"bool", NULL, Klass, &global, NULL};
-Type Char = (Type){"char", NULL, Klass, &global, NULL};
-Type Int = (Type){"int", NULL, Klass, &global, NULL};
-Type Float = (Type){"float", NULL, Klass, &global, NULL};
-Type String = (Type){"string", NULL, Klass, &global, NULL};
+Type Bool = (Type){"bool", NULL, Klass, &global};
+Type Char = (Type){"char", NULL, Klass, &global};
+Type Int = (Type){"int", NULL, Klass, &global};
+Type Float = (Type){"float", NULL, Klass, &global};
+Type String = (Type){"string", NULL, Klass, &global};
 
 TypeDeclare BoolT = (TypeDeclare){&Bool, TypeT, NULL};
 TypeDeclare CharT = (TypeDeclare){&Char, TypeT, NULL};
@@ -460,14 +465,14 @@ Type *Module_find_type(Program *p, Module *m, const char *b, const char *e) {
   if (6 == e - b && strncmp(String.name, b, 6) == 0)
     return &String;
 
-  for (Type *tt = m->types; tt; tt = tt->next) {
-    if (strlen(tt->name) == e - b && strncmp(tt->name, b, e - b) == 0)
-      return tt;
+  for (TypeList *tt = m->types; tt; tt = tt->next) {
+    if (strlen(tt->type->name) == e - b && strncmp(tt->type->name, b, e - b) == 0)
+      return tt->type;
   }
   for (Use *u = m->use; u; u = u->next)
-    for (Type *tt = u->use->types; tt; tt = tt->next)
-      if (strlen(tt->name) == e - b && strncmp(tt->name, b, e - b) == 0)
-        return tt;
+    for (TypeList *tt = u->use->types; tt; tt = tt->next)
+      if (strlen(tt->type->name) == e - b && strncmp(tt->type->name, b, e - b) == 0)
+        return tt->type;
   return NULL;
 }
 
@@ -517,8 +522,11 @@ Type *Program_add_type(Program *p, TypeKind k, const char *name, Module *m) {
     tt->union_member = NULL;
     break;
   }
-  tt->next = m->types;
-  m->types = tt;
+
+  TypeList *tl = (TypeList *)Program_alloc(p, sizeof(TypeList));
+  tl->type = tt;
+  tl->next = m->types;
+  m->types = tl;
   return tt;
 }
 
@@ -1449,20 +1457,20 @@ void c_union(FILE *f, const char *module_name, const char *name, UnionEntry *mem
   fprintf(f, "\n} %s%s;\n\n", module_name, name);
 }
 
-void c_type(FILE *f, const char *module_name, Type *t) {
+void c_type(FILE *f, const char *module_name, TypeList *t) {
   if (!t)
     return;
 
   c_type(f, module_name, t->next);
 
-  switch (t->kind) {
+  switch (t->type->kind) {
   case Klass:
-    c_struct(f, module_name, t->name, t->member);
+    c_struct(f, module_name, t->type->name, t->type->member);
     break;
   case Enum:
     break;
   case Union:
-    c_union(f, module_name, t->name, t->union_member);
+    c_union(f, module_name, t->type->name, t->type->union_member);
     break;
   }
 }
@@ -1856,21 +1864,21 @@ void c_Module_fn(FILE *f, Module *m) {
   }
 }
 
-void c_type_forward(FILE *f, const char *module_name, Type *t) {
+void c_type_forward(FILE *f, const char *module_name, TypeList *t) {
   if (!t)
     return;
 
   c_type_forward(f, module_name, t->next);
 
-  switch (t->kind) {
+  switch (t->type->kind) {
   case Klass:
-    fprintf(f, "typedef %s%s struct %s%s;\n", module_name, t->name, module_name, t->name);
+    fprintf(f, "typedef %s%s struct %s%s;\n", module_name, t->type->name, module_name, t->type->name);
     break;
   case Enum:
-    c_enum(f, module_name, t->name, t->entries);
+    c_enum(f, module_name, t->type->name, t->type->entries);
     break;
   case Union:
-    c_union_forward(f, module_name, t->name, t->union_member);
+    c_union_forward(f, module_name, t->type->name, t->type->union_member);
     break;
   }
 }
@@ -2008,11 +2016,11 @@ TypeDeclare *c_Expression_make_variables_typed(VariableStack *s, Program *p, Mod
         }
     }
     if (!e->id->type) {
-      for (Type *t = m->types; t; t = t->next)
-        if (strcmp(t->name, e->id->name) == 0) {
+      for (TypeList *t = m->types; t; t = t->next)
+        if (strcmp(t->type->name, e->id->name) == 0) {
           e->id->type = Program_alloc(p, sizeof(TypeDeclare));
           e->id->type->type = TypeT;
-          e->id->type->t = t;
+          e->id->type->t = t->type;
           break;
         }
     }
