@@ -172,6 +172,7 @@ typedef struct Statement {
 } Statement;
 
 typedef struct Function Function;
+typedef struct EnumEntry EnumEntry;
 
 typedef enum TypeDeclareType { ArrayT, PointerT, TypeT, FnT } TypeDeclareType;
 typedef struct TypeDeclare TypeDeclare;
@@ -336,7 +337,6 @@ typedef struct Use {
   Use *next;
 } Use;
 
-typedef struct EnumEntry EnumEntry;
 typedef struct EnumEntry {
   const char *name;
   int value;
@@ -1940,10 +1940,34 @@ void VariableStack_push(VariableStack *s, const char *n, TypeDeclare *t) {
   s->stackSize++;
 }
 TypeDeclare *VariableStack_find(VariableStack *s, const char *n) {
-  printf("find %s %d\n", n, s->stackSize);
   for (int i = s->stackSize - 1; i >= 0; i--)
     if (strcmp(s->stack[i].name, n) == 0)
       return s->stack[i].type;
+  return NULL;
+}
+
+TypeDeclare *Module_find_member(Program *p, TypeDeclare *t, Identifier *member) {
+  if (t->t->kind == Klass)
+    for (Variable *v = t->t->member; v; v = v->next)
+      if (strcmp(v->name, member->name) == 0) {
+        member->type = v->type;
+        return v->type;
+      }
+  if (t->t->kind == Enum) {
+    for (EnumEntry *ee = t->t->entries; ee; ee = ee->next)
+      if (strcmp(ee->name, member->name) == 0)
+        return t;
+    FATALX("'%s' is not part of enum '%s'", member->name, t->t->name);
+  }
+  // union??
+  for (Function *f = t->t->module->fn; f; f = f->next)
+    if (f->parameter && TypeDeclare_equal(f->parameter->type, t) && strcmp(f->name, member->name) == 0) {
+      member->type = Program_alloc(p, sizeof(TypeDeclare));
+      member->type->type = FnT;
+      member->type->fn = f;
+      return member->type;
+    }
+
   return NULL;
 }
 
@@ -1974,6 +1998,17 @@ TypeDeclare *c_Expression_make_variables_typed(VariableStack *s, Program *p, Mod
           break;
         }
     }
+    if (!e->id->type) {
+      for (Type *t = m->types; t; t = t->next)
+        if (strcmp(t->name, e->id->name) == 0) {
+          e->id->type = Program_alloc(p, sizeof(TypeDeclare));
+          e->id->type->type = TypeT;
+          e->id->type->t = t;
+          break;
+        }
+    }
+    if (!e->id->type)
+      FATALX("unknown type for '%s'", e->id->name);
     return e->id->type;
   case VarE:
     VariableStack_push(s, e->var->name, e->var->type);
@@ -2004,23 +2039,11 @@ TypeDeclare *c_Expression_make_variables_typed(VariableStack *s, Program *p, Mod
       t = t->next;
       e->member->pointer = true;
     }
-    // union?? enum??
-    if (t->type != TypeT || t->t->kind != Klass)
+    if (t->type != TypeT)
       FATALX("Expect struct type for member access");
-    for (Variable *v = t->t->member; v; v = v->next)
-      if (strcmp(v->name, e->member->member->name) == 0) {
-        e->member->member->type = v->type;
-        return v->type;
-      }
-    for (Function *f = t->t->module->fn; f; f = f->next)
-      if (f->parameter && TypeDeclare_equal(f->parameter->type, t) && strcmp(f->name, e->member->member->name) == 0) {
-        e->member->member->type = Program_alloc(p, sizeof(TypeDeclare));
-        e->member->member->type->type = FnT;
-        e->member->member->type->fn = f;
-        return e->member->member->type;
-      }
-    FATALX("unknow struct member '%s' for '%s'", e->member->member->name, t->t->name);
-    return NULL;
+    if (!(e->member->member->type = Module_find_member(p, t, e->member->member)))
+      FATALX("unknow member '%s' for '%s'", e->member->member->name, t->t->name);
+    return e->member->member->type;
   }
   case AsCast:
     c_Expression_make_variables_typed(s, p, m, e->cast->o);
