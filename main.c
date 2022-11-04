@@ -48,7 +48,7 @@ void FATAL(State *st, const char *format, ...) {
 }
 void FATALX(const char *format, ...) {
   va_list args;
-  fprintf(stderr, "%s:%zu:%zu error: ", "unknown.jnq", (long)0, (long)0);
+  fprintf(stderr, "%s:%zu:%zu error: ", "unknown.jnq", (size_t)0, (size_t)0);
   va_start(args, format);
   vfprintf(stderr, format, args);
   va_end(args);
@@ -2179,7 +2179,7 @@ void c_Module_make_variables_typed(Program *p, Module *m) {
   for (Use *u = m->use; u; u = u->next)
     c_Module_make_variables_typed(p, u->use);
 
-  VariableStack stack;
+  VariableStack stack = (VariableStack){};
   for (Function *f = m->fn; f; f = f->next)
     c_Function_make_variables_typed(&stack, p, m, f);
 }
