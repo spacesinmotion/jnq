@@ -504,9 +504,13 @@ Type *Program_add_type(Program *p, TypeKind k, const char *name, Module *m) {
   case Union:
     tt->union_member = NULL;
     break;
-  case ArrayT:
-  case PointerT:
   case FnT:
+    tt->fn = NULL;
+    break;
+  case ArrayT:
+    tt->count = 0;
+    // fallthrough
+  case PointerT:
     FATALX("Only base types are implemented to add types");
     break;
   }
@@ -518,12 +522,14 @@ Type *Program_add_type(Program *p, TypeKind k, const char *name, Module *m) {
   return tt;
 }
 
-Function *Program_add_fn(Program *p, Module *m) {
-  Function *fn = Program_alloc(p, sizeof(Function));
-  fn->body = NULL;
-  fn->next = m->fn;
-  m->fn = fn;
-  return fn;
+Function *Program_add_fn(Program *p, Module *m, const char *name) {
+  Type *fnt = Program_add_type(p, FnT, name, m);
+  fnt->fn = Program_alloc(p, sizeof(Function));
+  fnt->fn->name = name;
+  fnt->fn->body = NULL;
+  fnt->fn->next = m->fn;
+  m->fn = fnt->fn;
+  return fnt->fn;
 }
 
 Variable *Program_new_variable(Program *p, Variable *next) {
@@ -1236,8 +1242,9 @@ Statement *Program_parse_scope_block(Program *p, Module *m, State *st) {
 void Program_parse_fn(Program *p, Module *m, State *st) {
   skip_whitespace(st);
 
-  Function *fn = Program_add_fn(p, m);
-  if ((fn->name = read_identifier(p, st))) {
+  const char *name = read_identifier(p, st);
+  if (name) {
+    Function *fn = Program_add_fn(p, m, name);
     if (check_op(st, "(")) {
       fn->parameter = Program_parse_variable_declaration_list(p, m, st, ")");
       fn->returnType = Program_parse_declared_type(p, m, st);
@@ -1457,9 +1464,11 @@ void c_type(FILE *f, const char *module_name, TypeList *t) {
   case Union:
     c_union(f, module_name, t->type->name, t->type->union_member);
     break;
+  case FnT:
+    // todo!??
+    break;
   case ArrayT:
   case PointerT:
-  case FnT:
     FATALX("Type declaration not implemented for that kind");
     break;
   }
@@ -1874,9 +1883,11 @@ void c_type_forward(FILE *f, const char *module_name, TypeList *t) {
   case Union:
     c_union_forward(f, module_name, t->type->name, t->type->union_member);
     break;
+  case FnT:
+    // todo?!?
+    break;
   case ArrayT:
   case PointerT:
-  case FnT:
     FATALX("unexpect type in forward declaration!");
     break;
   }
@@ -1979,13 +1990,13 @@ Type *Module_find_member(Program *p, Type *t, Identifier *member) {
     FATALX("internal error, call of Module_find_member with wrong type");
     break;
   }
-  for (Function *f = t->module->fn; f; f = f->next)
-    if (f->parameter && TypeDeclare_equal(f->parameter->type, t) && strcmp(f->name, member->name) == 0) {
-      member->type = Program_alloc(p, sizeof(Type));
-      member->type->kind = FnT;
-      member->type->fn = f;
-      return member->type;
-    }
+  for (TypeList *tl = t->module->types; tl; tl = tl->next) {
+    if (tl->type->kind != FnT)
+      continue;
+    Function *f = tl->type->fn;
+    if (f->parameter && TypeDeclare_equal(f->parameter->type, t) && strcmp(f->name, member->name) == 0)
+      return tl->type;
+  }
 
   return NULL;
 }
@@ -2009,13 +2020,13 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
   case IdentifierA:
     e->id->type = VariableStack_find(s, e->id->name);
     if (!e->id->type) {
-      for (Function *f = m->fn; f; f = f->next)
-        if (strcmp(f->name, e->id->name) == 0) {
-          e->id->type = Program_alloc(p, sizeof(Type));
-          e->id->type->kind = FnT;
-          e->id->type->fn = f;
-          break;
-        }
+      for (TypeList *tl = m->types; tl; tl = tl->next) {
+        if (tl->type->kind != FnT)
+          continue;
+        Function *f = tl->type->fn;
+        if (strcmp(f->name, e->id->name) == 0)
+          return tl->type;
+      }
     }
     if (!e->id->type) {
       for (TypeList *t = m->types; t; t = t->next)
