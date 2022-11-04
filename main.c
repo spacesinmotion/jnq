@@ -174,16 +174,16 @@ typedef struct Statement {
 typedef struct Function Function;
 typedef struct EnumEntry EnumEntry;
 
-typedef struct TypeDeclare TypeDeclare;
+typedef struct Type Type;
 
 typedef struct Identifier {
   const char *name;
-  TypeDeclare *type;
+  Type *type;
 } Identifier;
 
 typedef struct Variable {
   const char *name;
-  TypeDeclare *type;
+  Type *type;
   Variable *next;
 } Variable;
 
@@ -203,7 +203,7 @@ typedef struct Call {
 } Call;
 
 typedef struct Construct {
-  TypeDeclare *type;
+  Type *type;
   Parameter *p;
 } Construct;
 
@@ -220,7 +220,7 @@ typedef struct MemberAccess {
 
 typedef struct Cast {
   Expression *o;
-  TypeDeclare *type;
+  Type *type;
 } Cast;
 
 typedef struct UnaryPrefix {
@@ -303,7 +303,7 @@ typedef struct SwitchStatement {
 typedef struct Function {
   const char *name;
   Variable *parameter;
-  TypeDeclare *returnType;
+  Type *returnType;
   Statement *body;
   Function *next;
 } Function;
@@ -323,11 +323,11 @@ typedef struct EnumEntry {
 
 typedef struct UnionEntry UnionEntry;
 typedef struct UnionEntry {
-  TypeDeclare *type;
+  Type *type;
   UnionEntry *next;
 } UnionEntry;
 
-typedef enum TypeKind { Klass, Enum, Union } TypeKind;
+typedef enum TypeKind { Klass, Enum, Union, ArrayT, PointerT, FnT } TypeKind;
 
 typedef struct Type {
   const char *name;
@@ -335,33 +335,22 @@ typedef struct Type {
     Variable *member;
     EnumEntry *entries;
     UnionEntry *union_member;
-  };
-  TypeKind kind;
-  Module *module;
-} Type;
-
-typedef enum TypeDeclareType { ArrayT, PointerT, TypeT, FnT } TypeDeclareType;
-typedef struct TypeDeclare {
-  union {
-    Type *t;
     Function *fn;
     int count;
   };
-  TypeDeclareType type;
-  TypeDeclare *next;
-} TypeDeclare;
+  TypeKind kind;
+  Module *module;
+  Type *child;
+} Type;
 
-bool TypeDeclare_equal(TypeDeclare *t1, TypeDeclare *t2) {
-  if (!t1 && !t2)
+bool TypeDeclare_equal(Type *t1, Type *t2) {
+  if (t1 == t2)
     return true;
   if ((!t1 && t2) || (t1 && !t2))
     return false;
-
-  if (t1->type != t2->type)
+  if (t1->kind != t2->kind)
     return false;
-  if (t1->type == TypeT && t1->t != t2->t)
-    return false;
-  return TypeDeclare_equal(t1->next, t2->next);
+  return TypeDeclare_equal(t1->child, t2->child);
 }
 
 typedef struct TypeList TypeList;
@@ -441,17 +430,11 @@ Module *Program_reset_module_finished(Program *p) {
 }
 
 Module global = (Module){"", "", NULL, NULL, NULL, true, NULL};
-Type Bool = (Type){"bool", NULL, Klass, &global};
-Type Char = (Type){"char", NULL, Klass, &global};
-Type Int = (Type){"int", NULL, Klass, &global};
-Type Float = (Type){"float", NULL, Klass, &global};
-Type String = (Type){"string", NULL, Klass, &global};
-
-TypeDeclare BoolT = (TypeDeclare){&Bool, TypeT, NULL};
-TypeDeclare CharT = (TypeDeclare){&Char, TypeT, NULL};
-TypeDeclare IntT = (TypeDeclare){&Int, TypeT, NULL};
-TypeDeclare FloatT = (TypeDeclare){&Float, TypeT, NULL};
-TypeDeclare StringT = (TypeDeclare){&String, TypeT, NULL};
+Type Bool = (Type){"bool", NULL, Klass, &global, NULL};
+Type Char = (Type){"char", NULL, Klass, &global, NULL};
+Type Int = (Type){"int", NULL, Klass, &global, NULL};
+Type Float = (Type){"float", NULL, Klass, &global, NULL};
+Type String = (Type){"string", NULL, Klass, &global, NULL};
 
 Type *Module_find_type(Program *p, Module *m, const char *b, const char *e) {
   if (4 == e - b && strncmp(Bool.name, b, 4) == 0)
@@ -520,6 +503,11 @@ Type *Program_add_type(Program *p, TypeKind k, const char *name, Module *m) {
     break;
   case Union:
     tt->union_member = NULL;
+    break;
+  case ArrayT:
+  case PointerT:
+  case FnT:
+    FATALX("Only base types are implemented to add types");
     break;
   }
 
@@ -754,28 +742,28 @@ bool Program_parse_use_path(Program *p, Module *m, State *st) {
   return true;
 }
 
-TypeDeclare *Program_parse_declared_type(Program *p, Module *m, State *st) {
+Type *Program_parse_declared_type(Program *p, Module *m, State *st) {
   skip_whitespace(st);
   State old = *st;
 
   if (check_op(st, "*")) {
-    TypeDeclare *td = Program_alloc(p, sizeof(TypeDeclare));
-    td->type = PointerT;
-    td->next = Program_parse_declared_type(p, m, st);
-    if (!td->next)
+    Type *td = Program_alloc(p, sizeof(Type));
+    td->kind = PointerT;
+    td->child = Program_parse_declared_type(p, m, st);
+    if (!td->child)
       FATAL(st, "missing type name");
     return td;
   }
 
   if (check_op(st, "[")) {
-    TypeDeclare *td = Program_alloc(p, sizeof(TypeDeclare));
-    td->type = ArrayT;
+    Type *td = Program_alloc(p, sizeof(Type));
+    td->kind = ArrayT;
     if (!read_int(st, &td->count))
       FATAL(&old, "Unknown array size!");
     if (!check_op(st, "]"))
       FATAL(&old, "missing closing ']'!");
-    td->next = Program_parse_declared_type(p, m, st);
-    if (!td->next)
+    td->child = Program_parse_declared_type(p, m, st);
+    if (!td->child)
       FATAL(st, "missing type name");
     return td;
   }
@@ -786,11 +774,7 @@ TypeDeclare *Program_parse_declared_type(Program *p, Module *m, State *st) {
       *st = old;
       return NULL;
     }
-    TypeDeclare *td = Program_alloc(p, sizeof(TypeDeclare));
-    td->type = TypeT;
-    td->t = t;
-    td->next = NULL;
-    return td;
+    return t;
   }
 
   *st = old;
@@ -800,7 +784,7 @@ TypeDeclare *Program_parse_declared_type(Program *p, Module *m, State *st) {
 Variable *Program_parse_variable_declaration(Program *p, Module *m, State *st, Variable *next) {
   State old = *st;
   const char *name = NULL;
-  TypeDeclare *type = NULL;
+  Type *type = NULL;
   if ((name = read_identifier(p, st))) {
     skip_whitespace(st);
     if (!check_whitespace_for_nl(st))
@@ -978,9 +962,8 @@ Expression *Program_parse_construction(Program *p, Module *m, State *st) {
       construct->construct->p = Program_parse_parameter_list(p, m, st);
       if (!check_op(st, "}"))
         FATAL(st, "unfinished constructor call, missing '}'");
-      TypeDeclare *t = Program_alloc(p, sizeof(TypeDeclare));
-      t->type = TypeT;
-      if (!(t->t = Module_find_type(p, m, old.c, id_end)))
+      Type *t = Module_find_type(p, m, old.c, id_end);
+      if (!t)
         FATAL(st, "Unknow type for construction '%.*s'", (int)(id_end - old.c), old.c);
       construct->construct->type = t;
       return construct;
@@ -1328,23 +1311,25 @@ void c_use(FILE *f, Use *u, ModuleFileCB cb) {
   cb(f, u->use);
 }
 
-void c_type_declare(FILE *f, TypeDeclare *ty) {
-  if (!ty)
+void c_type_declare(FILE *f, Type *t) {
+  if (!t)
     return;
 
-  c_type_declare(f, ty->next);
-  switch (ty->type) {
+  c_type_declare(f, t->child);
+  switch (t->kind) {
   case ArrayT:
-    fprintf(f, "[%d]", ty->count);
+    fprintf(f, "[%d]", t->count);
     break;
   case PointerT:
     fprintf(f, "*");
     break;
-  case TypeT:
-    fprintf(f, "%s%s", ty->t->module->c_name, ty->t->name);
+  case Klass:
+  case Enum:
+  case Union:
+    fprintf(f, "%s%s", t->module->c_name, t->name);
     break;
   case FnT:
-    c_type_declare(f, ty->fn->returnType);
+    c_type_declare(f, t->fn->returnType);
     fprintf(f, "(*())");
     break;
   }
@@ -1472,6 +1457,11 @@ void c_type(FILE *f, const char *module_name, TypeList *t) {
   case Union:
     c_union(f, module_name, t->type->name, t->type->union_member);
     break;
+  case ArrayT:
+  case PointerT:
+  case FnT:
+    FATALX("Type declaration not implemented for that kind");
+    break;
   }
 }
 
@@ -1512,16 +1502,18 @@ void lisp_expression(FILE *f, Expression *e) {
     break;
   case VarE:
     fprintf(f, "(:: %s ", e->var->name);
-    for (TypeDeclare *t = e->var->type; t; t = t->next) {
-      switch (t->type) {
+    for (Type *t = e->var->type; t; t = t->child) {
+      switch (t->kind) {
       case ArrayT:
         fprintf(f, "[%d]", t->count);
         break;
       case PointerT:
         fprintf(f, "*");
         break;
-      case TypeT:
-        fprintf(f, "%s", t->t->name);
+      case Klass:
+      case Enum:
+      case Union:
+        fprintf(f, "%s", t->name);
         break;
       case FnT:
         fprintf(f, "(*())");
@@ -1545,16 +1537,18 @@ void lisp_expression(FILE *f, Expression *e) {
     break;
   case ConstructE:
     fprintf(f, "(## ");
-    for (TypeDeclare *t = e->construct->type; t; t = t->next) {
-      switch (t->type) {
+    for (Type *t = e->construct->type; t; t = t->child) {
+      switch (t->kind) {
       case ArrayT:
         fprintf(f, "[%d]", t->count);
         break;
       case PointerT:
         fprintf(f, "*");
         break;
-      case TypeT:
-        fprintf(f, "%s", t->t->name);
+      case Klass:
+      case Enum:
+      case Union:
+        fprintf(f, "%s", t->name);
         break;
       case FnT:
         FATALX("Construction from Function type not implemented!");
@@ -1636,7 +1630,7 @@ void c_expression(FILE *f, Expression *e) {
     fprintf(f, "\"%s\"", e->s);
     break;
   case IdentifierA:
-    if (e->id->type && e->id->type->type == FnT) {
+    if (e->id->type && e->id->type->kind == FnT) {
       // fprintf(f, "%s_", e->id->type->fn); module_name
     }
     fprintf(f, "%s", e->id->name);
@@ -1661,9 +1655,9 @@ void c_expression(FILE *f, Expression *e) {
     fprintf(f, ")");
     break;
   case ConstructE:
-    if (e->construct->type->type != TypeT)
-      FATALX("unexpect typw for construction (missing impementation)");
-    fprintf(f, "(%s%s){", e->construct->type->t->module->c_name, e->construct->type->t->name);
+    if (e->construct->type->kind != Klass && e->construct->type->kind != Union)
+      FATALX("unexpect type for construction (missing impementation)");
+    fprintf(f, "(%s%s){", e->construct->type->module->c_name, e->construct->type->name);
     c_parameter(f, e->construct->p);
     fprintf(f, "}");
     break;
@@ -1880,6 +1874,11 @@ void c_type_forward(FILE *f, const char *module_name, TypeList *t) {
   case Union:
     c_union_forward(f, module_name, t->type->name, t->type->union_member);
     break;
+  case ArrayT:
+  case PointerT:
+  case FnT:
+    FATALX("unexpect type in forward declaration!");
+    break;
   }
 }
 
@@ -1934,7 +1933,7 @@ void c_Module_forward_fn(FILE *f, Module *m) {
 
 typedef struct StackVar {
   const char *name;
-  TypeDeclare *type;
+  Type *type;
 } StackVar;
 
 typedef struct VariableStack {
@@ -1942,25 +1941,23 @@ typedef struct VariableStack {
   int stackSize;
 } VariableStack;
 
-void VariableStack_push(VariableStack *s, const char *n, TypeDeclare *t) {
+void VariableStack_push(VariableStack *s, const char *n, Type *t) {
   if (s->stackSize >= 256)
     FATALX("Variable stack limit reached");
   s->stack[s->stackSize] = (StackVar){n, t};
   s->stackSize++;
 }
-TypeDeclare *VariableStack_find(VariableStack *s, const char *n) {
+Type *VariableStack_find(VariableStack *s, const char *n) {
   for (int i = s->stackSize - 1; i >= 0; i--)
     if (strcmp(s->stack[i].name, n) == 0)
       return s->stack[i].type;
   return NULL;
 }
 
-TypeDeclare *Module_find_member(Program *p, TypeDeclare *t, Identifier *member) {
-  if (t->type != TypeT)
-    FATALX("internal error, call of Module_find_member with wrong type");
-  switch (t->t->kind) {
+Type *Module_find_member(Program *p, Type *t, Identifier *member) {
+  switch (t->kind) {
   case Klass: {
-    for (Variable *v = t->t->member; v; v = v->next)
+    for (Variable *v = t->member; v; v = v->next)
       if (strcmp(v->name, member->name) == 0) {
         member->type = v->type;
         return v->type;
@@ -1968,7 +1965,7 @@ TypeDeclare *Module_find_member(Program *p, TypeDeclare *t, Identifier *member) 
     break;
   }
   case Enum: {
-    for (EnumEntry *ee = t->t->entries; ee; ee = ee->next)
+    for (EnumEntry *ee = t->entries; ee; ee = ee->next)
       if (strcmp(ee->name, member->name) == 0)
         return t;
     break;
@@ -1976,11 +1973,16 @@ TypeDeclare *Module_find_member(Program *p, TypeDeclare *t, Identifier *member) 
   case Union:
     // union?? -> some build in ()
     break;
+  case ArrayT:
+  case PointerT:
+  case FnT:
+    FATALX("internal error, call of Module_find_member with wrong type");
+    break;
   }
-  for (Function *f = t->t->module->fn; f; f = f->next)
+  for (Function *f = t->module->fn; f; f = f->next)
     if (f->parameter && TypeDeclare_equal(f->parameter->type, t) && strcmp(f->name, member->name) == 0) {
-      member->type = Program_alloc(p, sizeof(TypeDeclare));
-      member->type->type = FnT;
+      member->type = Program_alloc(p, sizeof(Type));
+      member->type->kind = FnT;
       member->type->fn = f;
       return member->type;
     }
@@ -1988,29 +1990,29 @@ TypeDeclare *Module_find_member(Program *p, TypeDeclare *t, Identifier *member) 
   return NULL;
 }
 
-TypeDeclare *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m, Expression *e) {
+Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m, Expression *e) {
   if (!e)
     return NULL;
 
   switch (e->type) {
   case BoolA:
-    return &BoolT;
+    return &Bool;
   case CharA:
-    return &CharT;
+    return &Char;
   case IntA:
-    return &IntT;
+    return &Int;
   case FloatA:
-    return &FloatT;
+    return &Float;
   case StringA:
-    return &StringT;
+    return &String;
 
   case IdentifierA:
     e->id->type = VariableStack_find(s, e->id->name);
     if (!e->id->type) {
       for (Function *f = m->fn; f; f = f->next)
         if (strcmp(f->name, e->id->name) == 0) {
-          e->id->type = Program_alloc(p, sizeof(TypeDeclare));
-          e->id->type->type = FnT;
+          e->id->type = Program_alloc(p, sizeof(Type));
+          e->id->type->kind = FnT;
           e->id->type->fn = f;
           break;
         }
@@ -2018,9 +2020,7 @@ TypeDeclare *c_Expression_make_variables_typed(VariableStack *s, Program *p, Mod
     if (!e->id->type) {
       for (TypeList *t = m->types; t; t = t->next)
         if (strcmp(t->type->name, e->id->name) == 0) {
-          e->id->type = Program_alloc(p, sizeof(TypeDeclare));
-          e->id->type->type = TypeT;
-          e->id->type->t = t->type;
+          e->id->type = t->type;
           break;
         }
     }
@@ -2035,8 +2035,8 @@ TypeDeclare *c_Expression_make_variables_typed(VariableStack *s, Program *p, Mod
   case CallE: {
     for (Parameter *pa = e->call->p; pa; pa = pa->next)
       c_Expression_make_variables_typed(s, p, m, pa->p);
-    TypeDeclare *t = c_Expression_make_variables_typed(s, p, m, e->call->o);
-    if (!t || t->type != FnT)
+    Type *t = c_Expression_make_variables_typed(s, p, m, e->call->o);
+    if (!t || t->kind != FnT)
       FATALX("Need a function to be called!");
     return t->fn->returnType;
   }
@@ -2045,21 +2045,21 @@ TypeDeclare *c_Expression_make_variables_typed(VariableStack *s, Program *p, Mod
       c_Expression_make_variables_typed(s, p, m, pa->p);
     return e->construct->type;
   case AccessE: {
-    TypeDeclare *t = c_Expression_make_variables_typed(s, p, m, e->access->o);
-    if (t->type != ArrayT && t->type != PointerT)
+    Type *t = c_Expression_make_variables_typed(s, p, m, e->access->o);
+    if (t->kind != ArrayT && t->kind != PointerT)
       FATALX("Expect array/pointer type for access");
-    return t->next;
+    return t->child;
   }
   case MemberAccessE: {
-    TypeDeclare *t = c_Expression_make_variables_typed(s, p, m, e->member->o);
-    if (t->type == PointerT) {
-      t = t->next;
+    Type *t = c_Expression_make_variables_typed(s, p, m, e->member->o);
+    if (t->kind == PointerT) {
+      t = t->child;
       e->member->pointer = true;
     }
-    if (t->type != TypeT)
+    if (t->kind != Klass && t->kind != Enum && t->kind != Union)
       FATALX("Expect non pointer type for member access");
     if (!(e->member->member->type = Module_find_member(p, t, e->member->member)))
-      FATALX("unknow member '%s' for '%s'", e->member->member->name, t->t->name);
+      FATALX("unknow member '%s' for '%s'", e->member->member->name, t->name);
     return e->member->member->type;
   }
   case AsCast:
@@ -2071,8 +2071,8 @@ TypeDeclare *c_Expression_make_variables_typed(VariableStack *s, Program *p, Mod
   case UnaryPostfixE:
     return c_Expression_make_variables_typed(s, p, m, e->unpost->o);
   case BinaryOperationE: {
-    TypeDeclare *t1 = c_Expression_make_variables_typed(s, p, m, e->binop->o1);
-    TypeDeclare *t2 = c_Expression_make_variables_typed(s, p, m, e->binop->o2);
+    Type *t1 = c_Expression_make_variables_typed(s, p, m, e->binop->o1);
+    Type *t2 = c_Expression_make_variables_typed(s, p, m, e->binop->o2);
     if (!TypeDeclare_equal(t1, t2))
       FATALX("Expect equal types for binary operation '%s'", e->binop->op);
     return t1;
