@@ -1642,9 +1642,6 @@ void c_expression(FILE *f, Expression *e) {
     fprintf(f, "%s", e->id->name);
     if (!e->id->type)
       FATALX("unknown type for id '%s'", e->id->name);
-    fprintf(f, "<");
-    c_type_declare(f, e->id->type);
-    fprintf(f, ">");
     break;
   case VarE:
     c_var_list(f, e->var, ";");
@@ -1656,7 +1653,10 @@ void c_expression(FILE *f, Expression *e) {
     break;
   case CallE:
     c_expression(f, e->call->o);
-    fprintf(f, "(");
+    if (e->call->o->type != MemberAccessE)
+      fprintf(f, "(");
+    else if (e->call->p)
+      fprintf(f, ", ");
     c_parameter(f, e->call->p);
     fprintf(f, ")");
     break;
@@ -1673,15 +1673,30 @@ void c_expression(FILE *f, Expression *e) {
     c_expression(f, e->access->p);
     fprintf(f, "]");
     break;
-  case MemberAccessE:
-    c_expression(f, e->member->o);
-    fprintf(f, "%s%s", (e->member->pointer ? "->" : "."), e->member->member->name);
-    if (e->member->member->type) {
-      fprintf(f, "<");
-      c_type_declare(f, e->member->member->type);
-      fprintf(f, ">");
+  case MemberAccessE: {
+    if (!e->member->member->type)
+      FATALX("unknown type for id '%s'", e->member->member->name);
+    switch (e->member->member->type->kind) {
+    case Enum:
+      fprintf(f, "%s%s", e->member->member->type->module->c_name, e->member->member->name);
+      break;
+    case Klass:
+    case Union:
+    case PointerT:
+      c_expression(f, e->member->o);
+      fprintf(f, "%s%s", (e->member->pointer ? "->" : "."), e->member->member->name);
+      break;
+    case FnT:
+      fprintf(f, "%s%s(%s", e->member->member->type->module->c_name, e->member->member->name,
+              (e->member->pointer ? "*" : ""));
+      c_expression(f, e->member->o);
+      break;
+    case ArrayT:
+      FATALX("array type has no member '%s'", e->member->member->name);
+      break;
     }
     break;
+  }
   case AsCast:
     fprintf(f, "((");
     c_type_declare(f, e->cast->type);

@@ -35,7 +35,7 @@ fn a_fn(a *Vec3, b Vec2) float {
   
   y Vec2 = x.neg()
 
-  d Days = Days.Mon
+  d Days = Days.Sat
 
   s Stuff = Stuff{a}
 }
