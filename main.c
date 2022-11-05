@@ -1640,12 +1640,11 @@ void c_expression(FILE *f, Expression *e) {
     break;
   case IdentifierA:
     fprintf(f, "%s", e->id->name);
-    if (e->id->type) {
-      fprintf(f, "<");
-      c_type_declare(f, e->id->type);
-      fprintf(f, ">");
-    } else
+    if (!e->id->type)
       FATALX("unknown type for id '%s'", e->id->name);
+    fprintf(f, "<");
+    c_type_declare(f, e->id->type);
+    fprintf(f, ">");
     break;
   case VarE:
     c_var_list(f, e->var, ";");
