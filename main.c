@@ -1639,15 +1639,13 @@ void c_expression(FILE *f, Expression *e) {
     fprintf(f, "\"%s\"", e->s);
     break;
   case IdentifierA:
-    if (e->id->type && e->id->type->kind == FnT) {
-      // fprintf(f, "%s_", e->id->type->fn); module_name
-    }
     fprintf(f, "%s", e->id->name);
     if (e->id->type) {
       fprintf(f, "<");
       c_type_declare(f, e->id->type);
       fprintf(f, ">");
-    }
+    } else
+      FATALX("unknown type for id '%s'", e->id->name);
     break;
   case VarE:
     c_var_list(f, e->var, ";");
@@ -1970,7 +1968,6 @@ Type *Module_find_member(Program *p, Type *t, Identifier *member) {
   case Klass: {
     for (Variable *v = t->member; v; v = v->next)
       if (strcmp(v->name, member->name) == 0) {
-        member->type = v->type;
         return v->type;
       }
     break;
@@ -2017,27 +2014,22 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
   case StringA:
     return &String;
 
-  case IdentifierA:
-    e->id->type = VariableStack_find(s, e->id->name);
-    if (!e->id->type) {
-      for (TypeList *tl = m->types; tl; tl = tl->next) {
-        if (tl->type->kind != FnT)
-          continue;
-        Function *f = tl->type->fn;
-        if (strcmp(f->name, e->id->name) == 0)
-          return tl->type;
-      }
+  case IdentifierA: {
+    if ((e->id->type = VariableStack_find(s, e->id->name)))
+      return e->id->type;
+    for (TypeList *tl = m->types; tl; tl = tl->next) {
+      if (tl->type->kind != FnT)
+        continue;
+      Function *f = tl->type->fn;
+      if (strcmp(f->name, e->id->name) == 0)
+        return e->id->type = tl->type;
     }
-    if (!e->id->type) {
-      for (TypeList *t = m->types; t; t = t->next)
-        if (strcmp(t->type->name, e->id->name) == 0) {
-          e->id->type = t->type;
-          break;
-        }
-    }
-    if (!e->id->type)
-      FATALX("unknown type for '%s'", e->id->name);
-    return e->id->type;
+    for (TypeList *tl = m->types; tl; tl = tl->next)
+      if (strcmp(tl->type->name, e->id->name) == 0)
+        return e->id->type = tl->type;
+    FATALX("unknown type for '%s'", e->id->name);
+    return NULL;
+  }
   case VarE:
     VariableStack_push(s, e->var->name, e->var->type);
     return e->var->type;
