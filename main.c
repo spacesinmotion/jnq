@@ -1433,7 +1433,7 @@ int c_union_entry(FILE *f, UnionEntry *entry, int i) {
 
 void c_union_forward(FILE *f, const char *module_name, const char *name, UnionEntry *member) {
   if (member) {
-    fprintf(f, "typedef enum %s_%sType", module_name, name);
+    fprintf(f, "typedef enum %s%sType", module_name, name);
     if (!member) {
       fprintf(f, " {} %s_%sType;\n\n", module_name, name);
       return;
@@ -1442,7 +1442,7 @@ void c_union_forward(FILE *f, const char *module_name, const char *name, UnionEn
     fprintf(f, " {\n  ");
     c_union_enum_entry(f, module_name, name, member, 1);
     fprintf(f, "");
-    fprintf(f, "\n} %s_%sType;\n", module_name, name);
+    fprintf(f, "\n} %s%sType;\n", module_name, name);
   }
 
   fprintf(f, "typedef struct %s%s %s%s;\n", module_name, name, module_name, name);
@@ -1457,8 +1457,8 @@ void c_union(FILE *f, const char *module_name, const char *name, UnionEntry *mem
 
   fprintf(f, " {\n  union {\n    ");
   c_union_entry(f, member, 1);
-  fprintf(f, "\n  };\n");
-  fprintf(f, "  %s_%sType type;", module_name, name);
+  fprintf(f, ";\n  };\n");
+  fprintf(f, "  %s%sType type;", module_name, name);
   fprintf(f, "\n} %s%s;\n\n", module_name, name);
 }
 
@@ -1652,9 +1652,11 @@ void c_expression(FILE *f, Expression *e) {
     fprintf(f, "\"%s\"", e->s);
     break;
   case IdentifierA:
-    fprintf(f, "%s", e->id->name);
     if (!e->id->type)
       FATALX("unknown type for id '%s'", e->id->name);
+    if (e->id->type->kind == FnT)
+      fprintf(f, "%s", e->id->type->module->c_name);
+    fprintf(f, "%s", e->id->name);
     break;
   case VarE:
     c_var_list(f, e->var, ";");
@@ -1902,7 +1904,7 @@ void c_type_forward(FILE *f, const char *module_name, TypeList *t) {
 
   switch (t->type->kind) {
   case Klass:
-    fprintf(f, "typedef %s%s struct %s%s;\n", module_name, t->type->name, module_name, t->type->name);
+    fprintf(f, "typedef struct %s%s %s%s;\n", module_name, t->type->name, module_name, t->type->name);
     break;
   case Enum:
     c_enum(f, module_name, t->type->name, t->type->entries);
@@ -2225,10 +2227,10 @@ void c_Program(FILE *f, Program *p, Module *m) {
   c_Module_forward_types(f, m);
 
   Program_reset_module_finished(p);
-  c_Module_forward_fn(f, m);
+  c_Module_types(f, m);
 
   Program_reset_module_finished(p);
-  c_Module_types(f, m);
+  c_Module_forward_fn(f, m);
 
   Program_reset_module_finished(p);
   c_Module_fn(f, m);

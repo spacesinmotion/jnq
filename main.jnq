@@ -33,11 +33,13 @@ type Days enum {
 fn a_fn(a *Vec3, b [2]Vec2) float {
   s Stuff = Stuff{a}
   d Days = Days.Sat
-  v [2][3][4]****int
+  v [2]*Vec2
 
   if (a) 
     return a.x * b[0].x
   
-  x float = a_fn(a, Vec2{})
-  y Vec2 = b[0].add(v[0])
+  x float = a_fn(a, &Vec2{})
+  y Vec2 = b[0].add(*v[0])
+
+  return x
 }
