@@ -11,6 +11,10 @@ fn neg(v Vec2) Vec2 {
   return Vec2{-v.x, -v.y}
 }
 
+fn add(v1 Vec2, v2 Vec2) Vec2 {
+  return Vec2{v1.x + v2.x, v1.y + v2.y}
+}
+
 type Vec3 struct {
   x float 
   y float
@@ -26,16 +30,14 @@ type Days enum {
 }
 
 
-fn a_fn(a *Vec3, b Vec2) float {
-  if (a) 
-    return a.x * b.x
-  
-  x Vec2 = Vec2{}
-  x.x = a_fn(a, Vec2{})
-  
-  y Vec2 = x.neg()
-
-  d Days = Days.Sat
-
+fn a_fn(a *Vec3, b [2]Vec2) float {
   s Stuff = Stuff{a}
+  d Days = Days.Sat
+  v [2][3][4]****int
+
+  if (a) 
+    return a.x * b[0].x
+  
+  x float = a_fn(a, Vec2{})
+  y Vec2 = b[0].add(v[0])
 }

@@ -762,16 +762,19 @@ Type *Program_parse_declared_type(Program *p, Module *m, State *st) {
   }
 
   if (check_op(st, "[")) {
-    Type *td = Program_alloc(p, sizeof(Type));
-    td->kind = ArrayT;
-    if (!read_int(st, &td->count))
-      FATAL(&old, "Unknown array size!");
+    int count = -1;
+    read_int(st, &count);
     if (!check_op(st, "]"))
       FATAL(&old, "missing closing ']'!");
-    td->child = Program_parse_declared_type(p, m, st);
-    if (!td->child)
-      FATAL(st, "missing type name");
-    return td;
+    Type *c = Program_parse_declared_type(p, m, st);
+    if (c) {
+      Type *td = Program_alloc(p, sizeof(Type));
+      td->kind = ArrayT;
+      td->count = count;
+      td->child = c;
+      return td;
+    }
+    *st = old;
   }
 
   if (check_identifier(st)) {
@@ -1318,15 +1321,22 @@ void c_use(FILE *f, Use *u, ModuleFileCB cb) {
   cb(f, u->use);
 }
 
-void c_type_declare(FILE *f, Type *t) {
+bool c_type_declare(FILE *f, Type *t, const char *var) {
   if (!t)
-    return;
+    return false;
 
-  c_type_declare(f, t->child);
+  Type *tt = t->child;
+  while (tt && tt->kind == ArrayT)
+    tt = tt->child;
+  bool hasVarWritten = c_type_declare(f, tt, var);
   switch (t->kind) {
   case ArrayT:
-    fprintf(f, "[%d]", t->count);
-    break;
+    fprintf(f, " %s", var);
+    while (t && t->kind == ArrayT) {
+      fprintf(f, "[%d]", t->count);
+      t = t->child;
+    }
+    return true;
   case PointerT:
     fprintf(f, "*");
     break;
@@ -1336,10 +1346,12 @@ void c_type_declare(FILE *f, Type *t) {
     fprintf(f, "%s%s", t->module->c_name, t->name);
     break;
   case FnT:
-    c_type_declare(f, t->fn->returnType);
+    if (c_type_declare(f, t->fn->returnType, ""))
+      FATALX("I don't know right now how to handle array function pointer stuff!");
     fprintf(f, "(*())");
     break;
   }
+  return hasVarWritten;
 }
 
 void c_enum_entry_list(FILE *f, const char *module_name, EnumEntry *ee) {
@@ -1376,8 +1388,8 @@ void c_var_list(FILE *f, Variable *v, const char *br) {
   if (v->next)
     fprintf(f, "%s", br);
 
-  c_type_declare(f, v->type);
-  fprintf(f, " %s", v->name);
+  if (!c_type_declare(f, v->type, v->name))
+    fprintf(f, " %s", v->name);
 }
 
 void c_struct(FILE *f, const char *module_name, const char *name, Variable *member) {
@@ -1413,7 +1425,8 @@ int c_union_entry(FILE *f, UnionEntry *entry, int i) {
 
   if (entry->next)
     fprintf(f, ";\n    ");
-  c_type_declare(f, entry->type);
+  if (c_type_declare(f, entry->type, "<u>"))
+    FATALX("I don't know right now how to handle array union entry stuff!");
   fprintf(f, " _u%d", all - i);
   return all;
 }
@@ -1699,7 +1712,8 @@ void c_expression(FILE *f, Expression *e) {
   }
   case AsCast:
     fprintf(f, "((");
-    c_type_declare(f, e->cast->type);
+    if (c_type_declare(f, e->cast->type, ""))
+      FATALX("I don't know right now how to handle array cast  stuff!");
     fprintf(f, ")(");
     c_expression(f, e->cast->o);
     fprintf(f, "))");
@@ -1831,9 +1845,10 @@ void c_fn(FILE *f, const char *module_name, Function *fn) {
 
   c_fn(f, module_name, fn->next);
 
-  if (fn->returnType)
-    c_type_declare(f, fn->returnType);
-  else
+  if (fn->returnType) {
+    if (c_type_declare(f, fn->returnType, ""))
+      FATALX("array return type not supported -> c backend!");
+  } else
     fprintf(f, "void");
   fprintf(f, " %s%s(", module_name, fn->name);
   if (fn->parameter)
@@ -1927,9 +1942,10 @@ void c_fn_forward(FILE *f, const char *module_name, Function *fn) {
 
   c_fn_forward(f, module_name, fn->next);
 
-  if (fn->returnType)
-    c_type_declare(f, fn->returnType);
-  else
+  if (fn->returnType) {
+    if (c_type_declare(f, fn->returnType, ""))
+      FATALX("array return type not supported -> c backend!");
+  } else
     fprintf(f, "void");
   fprintf(f, " %s%s(", module_name, fn->name);
   if (fn->parameter)
@@ -2217,6 +2233,11 @@ void c_Program(FILE *f, Program *p, Module *m) {
   Program_reset_module_finished(p);
   c_Module_fn(f, m);
 }
+
+typedef struct XXX {
+  int a;
+  float b;
+} XXX;
 
 int main(int argc, char *argv[]) {
   traceStack.size = 0;
