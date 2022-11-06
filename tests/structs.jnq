@@ -19,6 +19,7 @@ fn main() int {
   s = Stuff{3, 2}
   ASSERT(s.a == 3)
   ASSERT(s.b == 2)
+  ASSERT(s.b * s.a == 6)
 
   s.a = 42
   ASSERT(s.a == 42)

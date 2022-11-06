@@ -753,12 +753,14 @@ Type *Program_parse_declared_type(Program *p, Module *m, State *st) {
   State old = *st;
 
   if (check_op(st, "*")) {
-    Type *td = Program_alloc(p, sizeof(Type));
-    td->kind = PointerT;
-    td->child = Program_parse_declared_type(p, m, st);
-    if (!td->child)
-      FATAL(st, "missing type name");
-    return td;
+    Type *c = Program_parse_declared_type(p, m, st);
+    if (c) {
+      Type *td = Program_alloc(p, sizeof(Type));
+      td->kind = PointerT;
+      td->child = c;
+      return td;
+    }
+    *st = old;
   }
 
   if (check_op(st, "[")) {

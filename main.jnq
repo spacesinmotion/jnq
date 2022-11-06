@@ -47,4 +47,8 @@ fn main() int
   printf("Hallo %s\n", "du")
 
   ASSERT(1 != 0)
+
+  a int = 4
+  a *= 2
+  ASSERT(a == 8)
 }
