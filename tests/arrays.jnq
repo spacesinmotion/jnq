@@ -1,0 +1,12 @@
+
+fn main() int {
+  a [3]int;
+
+  a[0] = 1
+  a[1] = 2
+  a[2] = 4
+
+  ASSERT(a[0] == 1)
+  ASSERT(a[1] == 2)
+  ASSERT(a[2] == 4)
+}
