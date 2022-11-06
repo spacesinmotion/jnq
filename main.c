@@ -2238,7 +2238,7 @@ void c_Program(FILE *f, Program *p, Module *m) {
   fputs("#define ASSERT(EXP)                          \\\n", f);
   fputs("  do {                                       \\\n", f);
   fputs("    if (!(EXP)) {                                \\\n", f);
-  fputs("      fprintf(stderr, \"FAILED: \" #EXP \"\\n \"); \\\n", f);
+  fputs("      fprintf(stderr, \"FAILED: '%s'\\n \", #EXP); \\\n", f);
   fputs("      exit(1); \\\n", f);
   fputs("    } \\\n", f);
   fputs("  } while (0)\n", f);
@@ -2302,10 +2302,10 @@ int main(int argc, char *argv[]) {
   fclose(c_tmp_file);
 
   char clang_call[256] = {0};
-  strcat(clang_call, "cat ");
-  strcat(clang_call, main_c);
-  system(clang_call);
-  clang_call[0] = 0;
+  // strcat(clang_call, "cat ");
+  // strcat(clang_call, main_c);
+  // system(clang_call);
+  // clang_call[0] = 0;
   strcat(clang_call, "clang -o jnq_bin -Werror -g ");
   strcat(clang_call, main_c);
   int compile = system(clang_call);

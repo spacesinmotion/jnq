@@ -1,0 +1,14 @@
+
+
+fn main() int {
+  ASSERT(9 == 4 + 5)
+  ASSERT(4 == 6 - 2)
+  ASSERT(1 == 6 % 5)
+  ASSERT(3 == 6 / 2)
+
+  ASSERT(14 == 4 + 5 * 2)
+  ASSERT(17 != 4 + 5 * 2)
+  ASSERT(!(14 != 4 + 5 * 2))
+  
+  ASSERT(18 == (4 + 5) * 2)
+}
