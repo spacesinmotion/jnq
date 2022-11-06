@@ -301,7 +301,6 @@ typedef struct SwitchStatement {
 } SwitchStatement;
 
 typedef struct Function {
-  const char *name;
   Variable *parameter;
   Type *returnType;
   Statement *body;
@@ -434,7 +433,7 @@ Type Int = (Type){"int", NULL, Klass, &global, NULL};
 Type Float = (Type){"float", NULL, Klass, &global, NULL};
 Type String = (Type){"string", NULL, Klass, &global, NULL};
 
-Function print = (Function){"print", NULL, NULL, NULL};
+Function print = (Function){NULL, NULL, NULL};
 Type Print = (Type){"print", .fn = &print, FnT, &global, NULL};
 
 Type *Module_find_type(Program *p, Module *m, const char *b, const char *e) {
@@ -523,7 +522,6 @@ Type *Program_add_type(Program *p, TypeKind k, const char *name, Module *m) {
 Function *Program_add_fn(Program *p, Module *m, const char *name) {
   Type *fnt = Program_add_type(p, FnT, name, m);
   fnt->fn = Program_alloc(p, sizeof(Function));
-  fnt->fn->name = name;
   fnt->fn->body = NULL;
   return fnt->fn;
 }
@@ -1852,7 +1850,7 @@ void c_fn(FILE *f, const char *module_name, TypeList *tl) {
       FATALX("array return type not supported -> c backend!");
   } else
     fprintf(f, "void");
-  fprintf(f, " %s%s(", module_name, fn->name);
+  fprintf(f, " %s%s(", module_name, tl->type->name);
   if (fn->parameter)
     c_var_list(f, fn->parameter, ", ");
   else
@@ -1952,7 +1950,7 @@ void c_fn_forward(FILE *f, const char *module_name, TypeList *tl) {
       FATALX("array return type not supported -> c backend!");
   } else
     fprintf(f, "void");
-  fprintf(f, " %s%s(", module_name, fn->name);
+  fprintf(f, " %s%s(", module_name, tl->type->name);
   if (fn->parameter)
     c_var_list(f, fn->parameter, ", ");
   else
@@ -2026,7 +2024,7 @@ Type *Module_find_member(Program *p, Type *t, Identifier *member) {
     if (tl->type->kind != FnT)
       continue;
     Function *f = tl->type->fn;
-    if (f->parameter && TypeDeclare_equal(f->parameter->type, t) && strcmp(f->name, member->name) == 0)
+    if (f->parameter && TypeDeclare_equal(f->parameter->type, t) && strcmp(tl->type->name, member->name) == 0)
       return tl->type;
   }
 
