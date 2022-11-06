@@ -1,0 +1,30 @@
+
+
+fn main() int {
+  a int = 0
+
+  switch (3) {
+    case 1:
+      ASSERT(0)
+    case 3:
+      a = 42
+    case 5:
+      ASSERT(0)
+    default:
+      ASSERT(0)
+  }
+
+  ASSERT(a == 42)
+
+  switch (9898) {
+    case 1:
+      ASSERT(0)
+    case 3:
+      ASSERT(0)
+    case 5:
+      ASSERT(0)
+    default:
+      a = 63
+  }
+  ASSERT(a == 63)
+}
