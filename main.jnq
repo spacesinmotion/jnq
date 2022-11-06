@@ -29,11 +29,7 @@ type Days enum {
   Mon, Tue, Wed, Thu = 4, Fri, Sat = -4, Sun
 }
 
-
 fn a_fn(a *Vec3, b [2]Vec2) float {
-  print("hallo")
-
-  s Stuff = Stuff{a}
   d Days = Days.Sat
   v [2]*Vec2
 
@@ -44,4 +40,9 @@ fn a_fn(a *Vec3, b [2]Vec2) float {
   y Vec2 = b[0].add(*v[0])
 
   return x
+}
+
+fn main() int
+{
+
 }

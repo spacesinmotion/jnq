@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 typedef struct State {
   const char *file;
@@ -1850,7 +1851,10 @@ void c_fn(FILE *f, const char *module_name, TypeList *tl) {
       FATALX("array return type not supported -> c backend!");
   } else
     fprintf(f, "void");
-  fprintf(f, " %s%s(", module_name, tl->type->name);
+  if (strcmp(tl->type->name, "main") == 0)
+    fprintf(f, " %s(", tl->type->name);
+  else
+    fprintf(f, " %s%s(", module_name, tl->type->name);
   if (fn->parameter)
     c_var_list(f, fn->parameter, ", ");
   else
@@ -1950,7 +1954,10 @@ void c_fn_forward(FILE *f, const char *module_name, TypeList *tl) {
       FATALX("array return type not supported -> c backend!");
   } else
     fprintf(f, "void");
-  fprintf(f, " %s%s(", module_name, tl->type->name);
+  if (strcmp(tl->type->name, "main") == 0)
+    fprintf(f, " %s(", tl->type->name);
+  else
+    fprintf(f, " %s%s(", module_name, tl->type->name);
   if (fn->parameter)
     c_var_list(f, fn->parameter, ", ");
   else
@@ -2214,6 +2221,16 @@ void c_Module_make_variables_typed(Program *p, Module *m) {
 }
 
 void c_Program(FILE *f, Program *p, Module *m) {
+
+  fputs("#include <ctype.h>\n", f);
+  fputs("#include <stdarg.h>\n", f);
+  fputs("#include <stdbool.h>\n", f);
+  fputs("#include <stddef.h>\n", f);
+  fputs("#include <stdio.h>\n", f);
+  fputs("#include <stdlib.h>\n", f);
+  fputs("#include <string.h>\n", f);
+  fputs("\n", f);
+
   Program_reset_module_finished(p);
   c_Module_make_variables_typed(p, m);
 
@@ -2254,8 +2271,48 @@ int main(int argc, char *argv[]) {
   Program p = Program_new(buffer, 1024 * 64);
   Module *m = Program_parse_file(&p, main_mod, &(State){.file = argv[1], .line = 0, .column = 0});
 
-  printf("---------\n");
-  c_Program(stdout, &p, m);
+  char main_c[256] = {0};
+  strncpy(main_c, argv[1], jnq_len - 4);
+  main_c[jnq_len - 4] = '_';
+  main_c[jnq_len - 3] = '.';
+  main_c[jnq_len - 2] = 'c';
+  main_c[jnq_len - 1] = 0;
+
+  if (access(main_c, F_OK) == 0)
+    FATALX("temp file already exisits '%s'", main_c);
+  if (access("jnq_bin", F_OK) == 0)
+    FATALX("temp bin already exisits 'jnq_bin'");
+
+  FILE *c_tmp_file = fopen(main_c, "w");
+  if (!c_tmp_file)
+    FATALX("could not create temp file '%s'", main_c);
+  c_Program(c_tmp_file, &p, m);
+  fclose(c_tmp_file);
+
+  char clang_call[256] = {0};
+  strcat(clang_call, "cat ");
+  strcat(clang_call, main_c);
+  system(clang_call);
+  clang_call[0] = 0;
+  strcat(clang_call, "clang -o jnq_bin -Werror -g ");
+  strcat(clang_call, main_c);
+  int compile = system(clang_call);
+
+  if (remove(main_c) != 0)
+    FATALX("could not remove temp file '%s'", main_c);
+  if (compile != 0)
+    FATALX("failed to compile c '%s'", main_c);
+
+  printf("-------------------\n");
+  printf("run '%s'\n", argv[1]);
+  printf("-------------------\n");
+  int e = system("./jnq_bin");
+  printf("-------------------\n");
+  printf(" ... exit %d\n", e);
+  printf("-------------------\n");
+
+  if (remove("jnq_bin") != 0)
+    FATALX("could not remove temp file '%s'", main_c);
 
   return 0;
 }
