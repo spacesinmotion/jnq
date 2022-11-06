@@ -436,6 +436,9 @@ Type Int = (Type){"int", NULL, Klass, &global, NULL};
 Type Float = (Type){"float", NULL, Klass, &global, NULL};
 Type String = (Type){"string", NULL, Klass, &global, NULL};
 
+Function print = (Function){"print", NULL, NULL, NULL, NULL};
+Type Print = (Type){"print", .fn = &print, FnT, &global, NULL};
+
 Type *Module_find_type(Program *p, Module *m, const char *b, const char *e) {
   if (4 == e - b && strncmp(Bool.name, b, 4) == 0)
     return &Bool;
@@ -447,15 +450,13 @@ Type *Module_find_type(Program *p, Module *m, const char *b, const char *e) {
     return &Float;
   if (6 == e - b && strncmp(String.name, b, 6) == 0)
     return &String;
+  if (5 == e - b && strncmp(Print.name, b, 5) == 0)
+    return &Print;
 
-  for (TypeList *tt = m->types; tt; tt = tt->next) {
-    if (strlen(tt->type->name) == e - b && strncmp(tt->type->name, b, e - b) == 0)
-      return tt->type;
+  for (TypeList *tl = m->types; tl; tl = tl->next) {
+    if (strlen(tl->type->name) == e - b && strncmp(tl->type->name, b, e - b) == 0)
+      return tl->type;
   }
-  for (Use *u = m->use; u; u = u->next)
-    for (TypeList *tt = u->use->types; tt; tt = tt->next)
-      if (strlen(tt->type->name) == e - b && strncmp(tt->type->name, b, e - b) == 0)
-        return tt->type;
   return NULL;
 }
 
@@ -592,6 +593,7 @@ Expression *Program_new_Expression(Program *p, ExpressionType t) {
   case IntA:
   case FloatA:
   case StringA:
+    break;
   case IdentifierA:
     e->id = Program_alloc(p, sizeof(Identifier));
     break;
@@ -2049,16 +2051,8 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
   case IdentifierA: {
     if ((e->id->type = VariableStack_find(s, e->id->name)))
       return e->id->type;
-    for (TypeList *tl = m->types; tl; tl = tl->next) {
-      if (tl->type->kind != FnT)
-        continue;
-      Function *f = tl->type->fn;
-      if (strcmp(f->name, e->id->name) == 0)
-        return e->id->type = tl->type;
-    }
-    for (TypeList *tl = m->types; tl; tl = tl->next)
-      if (strcmp(tl->type->name, e->id->name) == 0)
-        return e->id->type = tl->type;
+    if ((e->id->type = Module_find_type(p, m, e->id->name, e->id->name + strlen(e->id->name))))
+      return e->id->type;
     FATALX("unknown type for '%s'", e->id->name);
     return NULL;
   }
@@ -2242,12 +2236,23 @@ typedef struct XXX {
 } XXX;
 
 int main(int argc, char *argv[]) {
+  if (argc <= 1)
+    FATALX("missing input file\n");
+
+  int jnq_len = strlen(argv[1]);
+  if (jnq_len < 4 || strcmp(argv[1] + (jnq_len - 4), ".jnq") != 0)
+    FATALX("invalid input file '%s'\n", argv[1]);
+
+  char main_mod[256] = {0};
+  if (jnq_len > 255)
+    FATALX("input path too long '%s' (sorry)\n", argv[1]);
+  strncpy(main_mod, argv[1], jnq_len - 4);
+
   traceStack.size = 0;
 
   char buffer[1024 * 64];
   Program p = Program_new(buffer, 1024 * 64);
-
-  Module *m = Program_parse_file(&p, "main", &(State){.file = "main.jnq", .line = 0, .column = 0});
+  Module *m = Program_parse_file(&p, main_mod, &(State){.file = argv[1], .line = 0, .column = 0});
 
   printf("---------\n");
   c_Program(stdout, &p, m);

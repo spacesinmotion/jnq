@@ -31,6 +31,8 @@ type Days enum {
 
 
 fn a_fn(a *Vec3, b [2]Vec2) float {
+  print("hallo")
+
   s Stuff = Stuff{a}
   d Days = Days.Sat
   v [2]*Vec2
