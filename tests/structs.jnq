@@ -1,0 +1,34 @@
+
+type Stuff struct {
+  a int
+  b int
+}
+
+fn swap_a_b(s Stuff) Stuff {
+  x int = s.b
+  s.b = s.a
+  s.a = x
+  return s
+}
+
+fn main() int {
+  s Stuff = Stuff{}
+  ASSERT(s.a == 0)
+  ASSERT(s.b == 0)
+
+  s = Stuff{3, 2}
+  ASSERT(s.a == 3)
+  ASSERT(s.b == 2)
+
+  s.a = 42
+  ASSERT(s.a == 42)
+  ASSERT(s.b == 2)
+
+  ss Stuff = s.swap_a_b()
+  ASSERT(ss.a == 2)
+  ASSERT(ss.b == 42)
+
+  sss Stuff = swap_a_b(s)
+  ASSERT(sss.a == 2)
+  ASSERT(sss.b == 42)
+}

@@ -1,0 +1,15 @@
+
+fn a() int {
+  return 42
+}
+
+fn add(x int, y int) int {
+  return x + y
+}
+
+fn main() int {
+  ASSERT(42 == a())
+  ASSERT(3 == add(1, 2))
+  ASSERT(44 == add(a(), 2))
+  ASSERT(47 == add(5, a()))
+}
