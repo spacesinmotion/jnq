@@ -305,7 +305,6 @@ typedef struct Function {
   Variable *parameter;
   Type *returnType;
   Statement *body;
-  Function *next;
 } Function;
 
 typedef struct Use Use;
@@ -364,7 +363,6 @@ typedef struct Module {
   const char *c_name;
   Use *use;
   TypeList *types;
-  Function *fn;
   bool finished;
   Module *next;
 } Module;
@@ -429,14 +427,14 @@ Module *Program_reset_module_finished(Program *p) {
   return NULL;
 }
 
-Module global = (Module){"", "", NULL, NULL, NULL, true, NULL};
+Module global = (Module){"", "", NULL, NULL, true, NULL};
 Type Bool = (Type){"bool", NULL, Klass, &global, NULL};
 Type Char = (Type){"char", NULL, Klass, &global, NULL};
 Type Int = (Type){"int", NULL, Klass, &global, NULL};
 Type Float = (Type){"float", NULL, Klass, &global, NULL};
 Type String = (Type){"string", NULL, Klass, &global, NULL};
 
-Function print = (Function){"print", NULL, NULL, NULL, NULL};
+Function print = (Function){"print", NULL, NULL, NULL};
 Type Print = (Type){"print", .fn = &print, FnT, &global, NULL};
 
 Type *Module_find_type(Program *p, Module *m, const char *b, const char *e) {
@@ -476,7 +474,6 @@ Module *Program_add_module(Program *p, const char *pathc) {
   m->c_name = cname;
   m->use = NULL;
   m->types = NULL;
-  m->fn = NULL;
   m->next = p->modules;
   p->modules = m;
   return m;
@@ -528,8 +525,6 @@ Function *Program_add_fn(Program *p, Module *m, const char *name) {
   fnt->fn = Program_alloc(p, sizeof(Function));
   fnt->fn->name = name;
   fnt->fn->body = NULL;
-  fnt->fn->next = m->fn;
-  m->fn = fnt->fn;
   return fnt->fn;
 }
 
@@ -1843,12 +1838,15 @@ void c_statements(FILE *f, Statement *s, int indent) {
   }
 }
 
-void c_fn(FILE *f, const char *module_name, Function *fn) {
-  if (!fn)
+void c_fn(FILE *f, const char *module_name, TypeList *tl) {
+  if (!tl)
     return;
 
-  c_fn(f, module_name, fn->next);
+  c_fn(f, module_name, tl->next);
+  if (tl->type->kind != FnT)
+    return;
 
+  Function *fn = tl->type->fn;
   if (fn->returnType) {
     if (c_type_declare(f, fn->returnType, ""))
       FATALX("array return type not supported -> c backend!");
@@ -1892,9 +1890,9 @@ void c_Module_fn(FILE *f, Module *m) {
     fprintf(f, "\n");
     c_use(f, m->use, c_Module_fn);
   }
-  if (m->fn) {
+  if (m->types) {
     fprintf(f, "\n");
-    c_fn(f, m->c_name, m->fn);
+    c_fn(f, m->c_name, m->types);
   }
 }
 
@@ -1940,12 +1938,15 @@ void c_Module_forward_types(FILE *f, Module *m) {
   }
 }
 
-void c_fn_forward(FILE *f, const char *module_name, Function *fn) {
-  if (!fn)
+void c_fn_forward(FILE *f, const char *module_name, TypeList *tl) {
+  if (!tl)
     return;
 
-  c_fn_forward(f, module_name, fn->next);
+  c_fn_forward(f, module_name, tl->next);
+  if (tl->type->kind != FnT)
+    return;
 
+  Function *fn = tl->type->fn;
   if (fn->returnType) {
     if (c_type_declare(f, fn->returnType, ""))
       FATALX("array return type not supported -> c backend!");
@@ -1968,9 +1969,9 @@ void c_Module_forward_fn(FILE *f, Module *m) {
     fprintf(f, "\n");
     c_use(f, m->use, c_Module_forward_fn);
   }
-  if (m->fn) {
+  if (m->types) {
     fprintf(f, "\n");
-    c_fn_forward(f, m->c_name, m->fn);
+    c_fn_forward(f, m->c_name, m->types);
   }
 }
 
@@ -2209,8 +2210,9 @@ void c_Module_make_variables_typed(Program *p, Module *m) {
     c_Module_make_variables_typed(p, u->use);
 
   VariableStack stack = (VariableStack){};
-  for (Function *f = m->fn; f; f = f->next)
-    c_Function_make_variables_typed(&stack, p, m, f);
+  for (TypeList *tl = m->types; tl; tl = tl->next)
+    if (tl->type->kind == FnT)
+      c_Function_make_variables_typed(&stack, p, m, tl->type->fn);
 }
 
 void c_Program(FILE *f, Program *p, Module *m) {
