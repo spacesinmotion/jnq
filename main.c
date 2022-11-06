@@ -1052,8 +1052,8 @@ Expression *Program_parse_binary_operation(Program *p, Module *m, State *st, Exp
   if (check_whitespace_for_nl(st))
     return e;
 
-  const char *bin_ops[] = {">>=", "<<=", "==", "!=", ">=", "<=", "+=", "-=", "*=", "/=", "%=", "&=", "|=",
-                           "^=",  "&&",  "||", ">>", "<<", "+",  "-",  "*",  "/",  "%",  "&",  "|",  "="};
+  const char *bin_ops[] = {">>=", "<<=", "==", "!=", ">=", "<=", "+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=",
+                           "&&",  "||",  ">>", "<<", "+",  "-",  "*",  "/",  "%",  "&",  "|",  "=",  "<",  ">"};
   for (int i = 0; i < sizeof(bin_ops) / sizeof(const char *); ++i) {
     if (check_op(st, bin_ops[i])) {
       Expression *bin = Program_new_Expression(p, BinaryOperationE);
@@ -1175,7 +1175,7 @@ Statement *Program_parse_statement(Program *p, Module *m, State *st, Statement *
   } else if (check_word(st, "for")) {
     statement = Program_new_Statement(p, For, next);
     if (!check_op(st, "("))
-      FATAL(st, "Missing for conditon");
+      FATAL(st, "Missing for loop description");
     statement->forS->init = Program_parse_expression(p, m, st, false);
     if (!check_op(st, ";"))
       FATAL(st, "Missing for init");

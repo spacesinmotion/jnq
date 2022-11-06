@@ -1,0 +1,14 @@
+
+fn main() int {
+  a int = 0
+  for (i int = 0; i < 4; ++i)
+    a += 3
+  
+  ASSERT(a == 4*3)
+
+  a = 0
+  for (i int = 0; i < 4; ++i) {
+    a += 3
+    printf("ok %d %d\n", i, a)
+  }
+}
