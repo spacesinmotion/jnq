@@ -435,7 +435,9 @@ Type Float = (Type){"float", NULL, Klass, &global, NULL};
 Type String = (Type){"string", NULL, Klass, &global, NULL};
 
 Function print = (Function){NULL, NULL, NULL};
-Type Print = (Type){"print", .fn = &print, FnT, &global, NULL};
+Type Printf = (Type){"printf", .fn = &print, FnT, &global, NULL};
+Function assert = (Function){NULL, NULL, NULL};
+Type Assert = (Type){"ASSERT", .fn = &assert, FnT, &global, NULL};
 
 Type *Module_find_type(Program *p, Module *m, const char *b, const char *e) {
   if (4 == e - b && strncmp(Bool.name, b, 4) == 0)
@@ -448,8 +450,10 @@ Type *Module_find_type(Program *p, Module *m, const char *b, const char *e) {
     return &Float;
   if (6 == e - b && strncmp(String.name, b, 6) == 0)
     return &String;
-  if (5 == e - b && strncmp(Print.name, b, 5) == 0)
-    return &Print;
+  if (6 == e - b && strncmp(Printf.name, b, 6) == 0)
+    return &Printf;
+  if (6 == e - b && strncmp(Assert.name, b, 6) == 0)
+    return &Assert;
 
   for (TypeList *tl = m->types; tl; tl = tl->next) {
     if (strlen(tl->type->name) == e - b && strncmp(tl->type->name, b, e - b) == 0)
@@ -2230,6 +2234,14 @@ void c_Program(FILE *f, Program *p, Module *m) {
   fputs("#include <stdlib.h>\n", f);
   fputs("#include <string.h>\n", f);
   fputs("\n", f);
+
+  fputs("#define ASSERT(EXP)                          \\\n", f);
+  fputs("  do {                                       \\\n", f);
+  fputs("    if (!(EXP)) {                                \\\n", f);
+  fputs("      fprintf(stderr, \"FAILED: \" #EXP \"\\n \"); \\\n", f);
+  fputs("      exit(1); \\\n", f);
+  fputs("    } \\\n", f);
+  fputs("  } while (0)\n", f);
 
   Program_reset_module_finished(p);
   c_Module_make_variables_typed(p, m);

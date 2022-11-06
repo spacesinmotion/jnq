@@ -1,5 +1,4 @@
 
-
-fn main() {
-  print("Hello World")
+fn main() int {
+  printf("Hello World\n")
 }
