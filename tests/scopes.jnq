@@ -1,0 +1,16 @@
+
+
+fn main() int {
+  printf("scopes\n")
+
+  a int = 5
+
+  {
+    a int = 6
+    ASSERT(a == 6)
+  }
+
+  ASSERT(a == 5)
+  
+  printf(" ...ok\n")
+}
