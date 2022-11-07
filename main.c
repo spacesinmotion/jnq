@@ -6,7 +6,16 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#ifndef _WIN32
 #include <unistd.h>
+#define JNQ_BIN "./jnq_bin"
+#else
+#include <io.h>
+#define access _access
+#define F_OK 0
+#define JNQ_BIN "jnq_bin.exe"
+#endif
 
 typedef struct State {
   const char *file;
@@ -2294,8 +2303,8 @@ int main(int argc, char *argv[]) {
 
   if (access(main_c, F_OK) == 0)
     FATALX("temp file already exisits '%s'", main_c);
-  if (access("jnq_bin", F_OK) == 0)
-    FATALX("temp bin already exisits 'jnq_bin'");
+  if (access(JNQ_BIN, F_OK) == 0)
+    FATALX("temp bin already exisits '" JNQ_BIN "'");
 
   FILE *c_tmp_file = fopen(main_c, "w");
   if (!c_tmp_file)
@@ -2308,7 +2317,7 @@ int main(int argc, char *argv[]) {
   // strcat(clang_call, main_c);
   // system(clang_call);
   // clang_call[0] = 0;
-  strcat(clang_call, "clang -o jnq_bin -Werror -g ");
+  strcat(clang_call, "clang -o " JNQ_BIN " -Werror -g ");
   strcat(clang_call, main_c);
   int compile = system(clang_call);
 
@@ -2320,13 +2329,13 @@ int main(int argc, char *argv[]) {
   printf("-------------------\n");
   printf("run '%s'\n", argv[1]);
   printf("-------------------\n");
-  int e = system("./jnq_bin");
+  int e = system(JNQ_BIN);
   printf("-------------------\n");
   printf(" ... exit %d\n", e);
   printf("-------------------\n");
 
-  if (remove("jnq_bin") != 0)
-    FATALX("could not remove temp file '%s'", main_c);
+  if (remove(JNQ_BIN) != 0)
+    FATALX("could not remove temp file '" JNQ_BIN " '");
 
   return 0;
 }
