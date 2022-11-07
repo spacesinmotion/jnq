@@ -11,9 +11,9 @@ fn for_loops()
 
   a = 0
   for (i int = 0; i < 4; ++i) {
-    a += 3
-    printf("ok %d %d\n", i, a)
+    a += 7
   }
+  ASSERT(a == 4*7)
 }
 
 fn while_loops()
@@ -45,7 +45,11 @@ fn do_while_loops()
 }
 
 fn main() int {
+  printf("loops\n")
+
   for_loops()
   while_loops()
   do_while_loops()
+  
+  printf(" ...ok\n")
 }

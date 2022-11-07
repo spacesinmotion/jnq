@@ -2326,13 +2326,7 @@ int main(int argc, char *argv[]) {
   if (compile != 0)
     FATALX("failed to compile c '%s'", main_c);
 
-  printf("-------------------\n");
-  printf("run '%s'\n", argv[1]);
-  printf("-------------------\n");
   int e = system(JNQ_BIN);
-  printf("-------------------\n");
-  printf(" ... exit %d\n", e);
-  printf("-------------------\n");
 
   if (remove(JNQ_BIN) != 0)
     FATALX("could not remove temp file '" JNQ_BIN " '");

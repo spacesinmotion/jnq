@@ -1,6 +1,8 @@
 
-fn main() int {
-  a [3]int;
+fn simple() {
+  printf("simple\n")
+
+  a [3]int
 
   a[0] = 1
   a[1] = 2
@@ -9,4 +11,25 @@ fn main() int {
   ASSERT(a[0] == 1)
   ASSERT(a[1] == 2)
   ASSERT(a[2] == 4)
+}
+
+fn multidimension() {
+  printf("multidimension\n")
+
+  a [2][3][4]int
+
+  a[0][0][0] = 1
+  a[1][2][3] = 2
+
+  ASSERT(a[0][0][0] == 1)
+  ASSERT(a[1][2][3] == 2)
+}
+
+fn main() int {
+  printf("array test\n")
+  
+  simple()
+  multidimension()
+  
+  printf(" ...ok\n")
 }

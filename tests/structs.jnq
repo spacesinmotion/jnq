@@ -12,6 +12,8 @@ fn swap_a_b(s Stuff) Stuff {
 }
 
 fn main() int {
+  printf("structs\n")
+
   s Stuff = Stuff{}
   ASSERT(s.a == 0)
   ASSERT(s.b == 0)
@@ -32,4 +34,6 @@ fn main() int {
   sss Stuff = swap_a_b(s)
   ASSERT(sss.a == 2)
   ASSERT(sss.b == 42)
+
+  printf(" ...ok\n")
 }

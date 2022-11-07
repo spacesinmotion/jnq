@@ -1,6 +1,7 @@
 
 
 fn main() int {
+  printf("switches\n")
   a int = 0
 
   switch (3) {
@@ -27,4 +28,6 @@ fn main() int {
       a = 63
   }
   ASSERT(a == 63)
+
+  printf(" ...ok\n")
 }

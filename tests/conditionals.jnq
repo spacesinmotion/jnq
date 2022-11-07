@@ -1,5 +1,7 @@
 
 fn main() int {
+  printf("conditionsls\n")
+
   a int = 3
   b int = 42
 
@@ -8,8 +10,9 @@ fn main() int {
   
   ASSERT(b == 42)
 
-  if (b == 42)
-    b /= 2 
+  if (b == 42) {
+      b /= 2 
+  }
   ASSERT(b == 21)
 
   if (b == 42) 
@@ -18,4 +21,6 @@ fn main() int {
     b = b * 3
 
   ASSERT(b == 21 * 3)
+
+  printf(" ...ok\n")
 }

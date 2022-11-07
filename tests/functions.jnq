@@ -8,8 +8,12 @@ fn add(x int, y int) int {
 }
 
 fn main() int {
+  printf("functions\n")
+
   ASSERT(42 == a())
   ASSERT(3 == add(1, 2))
   ASSERT(44 == add(a(), 2))
   ASSERT(47 == add(5, a()))
+
+  printf(" ...ok\n")
 }
