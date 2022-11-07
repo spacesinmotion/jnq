@@ -335,7 +335,7 @@ typedef struct UnionEntry {
   UnionEntry *next;
 } UnionEntry;
 
-typedef enum TypeKind { Klass, Enum, Union, ArrayT, PointerT, FnT } TypeKind;
+typedef enum TypeKind { Mod, Klass, Enum, Union, ArrayT, PointerT, FnT } TypeKind;
 
 typedef struct Type {
   const char *name;
@@ -344,6 +344,7 @@ typedef struct Type {
     EnumEntry *entries;
     UnionEntry *union_member;
     Function *fn;
+    Module *mod;
     int count;
   };
   TypeKind kind;
@@ -464,10 +465,9 @@ Type *Module_find_type(Program *p, Module *m, const char *b, const char *e) {
   if (6 == e - b && strncmp(Assert.name, b, 6) == 0)
     return &Assert;
 
-  for (TypeList *tl = m->types; tl; tl = tl->next) {
+  for (TypeList *tl = m->types; tl; tl = tl->next)
     if (strlen(tl->type->name) == e - b && strncmp(tl->type->name, b, e - b) == 0)
       return tl->type;
-  }
   return NULL;
 }
 
@@ -492,20 +492,15 @@ Module *Program_add_module(Program *p, const char *pathc) {
   return m;
 }
 
-Use *Program_add_use(Program *p, Module *m, Module *use) {
-  Use *u = Program_alloc(p, sizeof(Use));
-  u->use = use;
-  u->next = m->use;
-  m->use = u;
-  return u;
-}
-
 Type *Program_add_type(Program *p, TypeKind k, const char *name, Module *m) {
   Type *tt = (Type *)Program_alloc(p, sizeof(Type));
   tt->name = name;
   tt->module = m;
   tt->kind = k;
   switch (k) {
+  case Mod:
+    tt->mod = NULL;
+    break;
   case Klass:
     tt->member = NULL;
     break;
@@ -531,6 +526,17 @@ Type *Program_add_type(Program *p, TypeKind k, const char *name, Module *m) {
   tl->next = m->types;
   m->types = tl;
   return tt;
+}
+
+Use *Program_add_use(Program *p, Module *m, Module *use, const char *name) {
+  Type *mod = Program_add_type(p, Mod, name, m);
+  Use *u = Program_alloc(p, sizeof(Use));
+  u->use = use;
+  u->next = m->use;
+  m->use = u;
+  mod->mod = u->use;
+  mod->name = name;
+  return u;
 }
 
 Function *Program_add_fn(Program *p, Module *m, const char *name) {
@@ -733,6 +739,7 @@ bool Program_parse_use_path(Program *p, Module *m, State *st) {
   State old = *st;
 
   char buffer[256] = {0};
+  char *name = buffer;
   size_t inb = 0;
   if (check_identifier(st)) {
     inb += snprintf(buffer + inb, 256 - inb, "%.*s", (int)(st->c - old.c), old.c);
@@ -746,6 +753,7 @@ bool Program_parse_use_path(Program *p, Module *m, State *st) {
 
       if (!check_identifier(st))
         FATAL(st, "Error parsing use statement!");
+      name = buffer + inb;
       inb += snprintf(buffer + inb, 256 - inb, "%.*s", (int)(st->c - old.c), old.c);
       old = *st;
     }
@@ -753,7 +761,11 @@ bool Program_parse_use_path(Program *p, Module *m, State *st) {
     return false;
 
   Module *use = Program_parse_file(p, buffer, &old);
-  Program_add_use(p, m, use);
+
+  char *n = Program_alloc(p, strlen(name) + 1);
+  strcpy(n, name);
+
+  Program_add_use(p, m, use, n);
   return true;
 }
 
@@ -1351,6 +1363,9 @@ bool c_type_declare(FILE *f, Type *t, const char *var) {
   case PointerT:
     fprintf(f, "*");
     break;
+  case Mod:
+    FATALX("declare module type is imposible!");
+    break;
   case Klass:
   case Enum:
   case Union:
@@ -1480,6 +1495,8 @@ void c_type(FILE *f, const char *module_name, TypeList *t) {
   c_type(f, module_name, t->next);
 
   switch (t->type->kind) {
+  case Mod:
+    break;
   case Klass:
     c_struct(f, module_name, t->type->name, t->type->member);
     break;
@@ -1543,6 +1560,7 @@ void lisp_expression(FILE *f, Expression *e) {
       case PointerT:
         fprintf(f, "*");
         break;
+      case Mod:
       case Klass:
       case Enum:
       case Union:
@@ -1578,6 +1596,7 @@ void lisp_expression(FILE *f, Expression *e) {
       case PointerT:
         fprintf(f, "*");
         break;
+      case Mod:
       case Klass:
       case Enum:
       case Union:
@@ -1681,7 +1700,7 @@ void c_expression(FILE *f, Expression *e) {
     c_expression(f, e->call->o);
     if (e->call->o->type != MemberAccessE)
       fprintf(f, "(");
-    else if (e->call->p)
+    else if (e->call->p && (e->call->o->member->o->type != IdentifierA || e->call->o->member->o->id->type->kind != Mod))
       fprintf(f, ", ");
     c_parameter(f, e->call->p);
     fprintf(f, ")");
@@ -1706,17 +1725,22 @@ void c_expression(FILE *f, Expression *e) {
     case Enum:
       fprintf(f, "%s%s", e->member->member->type->module->c_name, e->member->member->name);
       break;
+    case Mod:
     case Klass:
     case Union:
     case PointerT:
       c_expression(f, e->member->o);
       fprintf(f, "%s%s", (e->member->pointer ? "->" : "."), e->member->member->name);
       break;
-    case FnT:
+
+    case FnT: {
       fprintf(f, "%s%s(%s", e->member->member->type->module->c_name, e->member->member->name,
               (e->member->pointer ? "*" : ""));
-      c_expression(f, e->member->o);
+      if (e->member->o->type != IdentifierA || e->member->o->id->type->kind != Mod)
+        c_expression(f, e->member->o);
       break;
+    }
+
     case ArrayT:
       FATALX("array type has no member '%s'", e->member->member->name);
       break;
@@ -1929,6 +1953,8 @@ void c_type_forward(FILE *f, const char *module_name, TypeList *t) {
   case Union:
     c_union_forward(f, module_name, t->type->name, t->type->union_member);
     break;
+  case Mod:
+    break;
   case FnT:
     // todo?!?
     break;
@@ -2036,6 +2062,9 @@ Type *Module_find_member(Program *p, Type *t, Identifier *member) {
   case Union:
     // union?? -> some build in ()
     break;
+  case Mod:
+    return Module_find_type(p, t->mod, member->name, member->name + strlen(member->name));
+
   case ArrayT:
   case PointerT:
   case FnT:
@@ -2106,7 +2135,7 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
       t = t->child;
       e->member->pointer = true;
     }
-    if (t->kind != Klass && t->kind != Enum && t->kind != Union)
+    if (t->kind != Klass && t->kind != Enum && t->kind != Union && t->kind != Mod)
       FATALX("Expect non pointer type for member access");
     if (!(e->member->member->type = Module_find_member(p, t, e->member->member)))
       FATALX("unknow member '%s' for '%s'", e->member->member->name, t->name);

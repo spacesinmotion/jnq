@@ -1,0 +1,10 @@
+
+use sub.util
+
+fn main() int {
+  printf("use sub module\n")
+
+  ASSERT(42 == util.add(31, 11))
+
+  printf(" ...ok\n")
+}
