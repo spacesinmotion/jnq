@@ -1,0 +1,51 @@
+
+fn for_loops()
+{
+  printf("for loops test\n")
+
+  a int = 0
+  for (i int = 0; i < 4; ++i)
+    a += 3
+  
+  ASSERT(a == 4*3)
+
+  a = 0
+  for (i int = 0; i < 4; ++i) {
+    a += 3
+    printf("ok %d %d\n", i, a)
+  }
+}
+
+fn while_loops()
+{
+  printf("while loops test\n")
+
+  a int = 3;
+  while (a > 0)
+    --a;
+  
+  ASSERT(a == 0)
+
+  while (a < 8) {
+    ++a;
+  }
+
+  ASSERT(a == 8)
+}
+
+fn do_while_loops()
+{
+  printf("do while loops test\n")
+  a int = 3;
+  do { 
+    --a;
+  } while (a > 0)
+  
+  ASSERT(a == 0)
+}
+
+fn main() int {
+  for_loops()
+  while_loops()
+  do_while_loops()
+}

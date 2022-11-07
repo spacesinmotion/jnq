@@ -665,7 +665,7 @@ bool check_word(State *st, const char *word) {
     ++st->c;
     ++word;
   }
-  if (*word == 0 && !isalnum(st->c[0]))
+  if (*word == 0 && !isalnum(st->c[0]) && st->c[0] != '_')
     return true;
   *st = old;
   return false;
