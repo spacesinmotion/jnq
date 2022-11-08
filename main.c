@@ -802,11 +802,19 @@ Type *Program_parse_declared_type(Program *p, Module *m, State *st) {
 
   if (check_identifier(st)) {
     Type *t = Module_find_type(p, m, old.c, st->c);
-    if (!t) {
+    if (t) {
+      old = *st;
+      if (t->kind == Mod && check_op(st, ".")) {
+        skip_whitespace(st);
+        const char *s = st->c;
+        if (check_identifier(st)) {
+          if ((t = Module_find_type(p, t->mod, s, st->c)))
+            return t;
+        }
+      }
       *st = old;
-      return NULL;
+      return t;
     }
-    return t;
   }
 
   *st = old;
@@ -1364,8 +1372,6 @@ bool c_type_declare(FILE *f, Type *t, const char *var) {
     fprintf(f, "*");
     break;
   case Mod:
-    FATALX("declare module type is imposible!");
-    break;
   case Klass:
   case Enum:
   case Union:

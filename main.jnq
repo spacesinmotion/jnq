@@ -49,8 +49,10 @@ fn main() int
 
   ASSERT(1 != 0)
 
-  a Vec2
-  a = a.add(a)
+  a util.Point
+  a.x = 21;
+  ASSERT(21 == a.x)
+
   ASSERT(42 == util.add(31, 11))
   printf("sub call %d\n", util.add(31, 11))
 }
