@@ -6,7 +6,10 @@ fn main() int {
 
   ASSERT(42 == util.add(31, 11))
 
-  p util.Point
+  p util.Point = util.Point{9, 7}
+  ASSERT(p.x == 9)
+  ASSERT(p.y == 7)
+
   p.x = 4
   p.y = 5
   ASSERT(p.x == 4)

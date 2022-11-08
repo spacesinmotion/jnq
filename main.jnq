@@ -49,9 +49,9 @@ fn main() int
 
   ASSERT(1 != 0)
 
-  a util.Point
-  a.x = 21;
-  ASSERT(21 == a.x)
+  p util.Point = util.Point{9, 7}
+  ASSERT(p.x == 9)
+  ASSERT(p.y == 7)
 
   ASSERT(42 == util.add(31, 11))
   printf("sub call %d\n", util.add(31, 11))

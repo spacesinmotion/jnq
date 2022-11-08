@@ -995,17 +995,16 @@ Parameter *Program_parse_parameter_list(Program *p, Module *m, State *st) {
 Expression *Program_parse_construction(Program *p, Module *m, State *st) {
   skip_whitespace(st);
   State old = *st;
-  if (check_identifier(st)) {
+
+  Type *type = NULL;
+  if ((type = Program_parse_declared_type(p, m, st))) {
     const char *id_end = st->c;
     if (check_op(st, "{")) {
       Expression *construct = Program_new_Expression(p, ConstructE);
       construct->construct->p = Program_parse_parameter_list(p, m, st);
       if (!check_op(st, "}"))
         FATAL(st, "unfinished constructor call, missing '}'");
-      Type *t = Module_find_type(p, m, old.c, id_end);
-      if (!t)
-        FATAL(st, "Unknow type for construction '%.*s'", (int)(id_end - old.c), old.c);
-      construct->construct->type = t;
+      construct->construct->type = type;
       return construct;
     }
   }
