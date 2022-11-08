@@ -2359,6 +2359,10 @@ int main(int argc, char *argv[]) {
 
   if (remove(JNQ_BIN) != 0)
     FATALX("could not remove temp file '" JNQ_BIN " '");
+#ifdef _WIN32
+  remove("jnq_bin.ilk");
+  remove("jnq_bin.pdb");
+#endif
 
   return 0;
 }
