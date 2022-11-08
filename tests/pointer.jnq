@@ -1,0 +1,40 @@
+
+fn simple() {
+  b int = 5
+  a *int = &b
+  ASSERT(b == *a); 
+
+  b = 42
+  ASSERT(b == *a); 
+  ASSERT(42 == *a); 
+}
+
+
+type Gee struct {
+  b int
+}
+
+fn with_struct() {
+  g *Gee = &Gee{52}
+  ASSERT(52 == g.b)
+
+  gg Gee = *g
+  gp *Gee = g
+  ASSERT(52 == gg.b)
+  ASSERT(52 == gp.b)
+
+  g.b = 32
+  ASSERT(32 == g.b)
+  ASSERT(52 == gg.b)
+  ASSERT(32 == gp.b)
+}
+
+
+fn main() int {
+  printf("pointer\n")
+
+  simple()
+  with_struct()
+
+  printf(" ...ok\n")
+}

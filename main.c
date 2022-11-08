@@ -2150,10 +2150,22 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
     c_Expression_make_variables_typed(s, p, m, e->cast->o);
     // check if cast is valid!
     return e->cast->type;
-  case UnaryPrefixE:
-    return c_Expression_make_variables_typed(s, p, m, e->unpre->o);
+  case UnaryPrefixE: {
+    Type *st = c_Expression_make_variables_typed(s, p, m, e->unpost->o);
+    if (strcmp(e->unpre->op, "&") == 0) {
+      Type *td = Program_alloc(p, sizeof(Type));
+      td->kind = PointerT;
+      td->child = st;
+      return td;
+    } else if (strcmp(e->unpre->op, "*") == 0) {
+      if (st->kind != PointerT)
+        FATALX("dereferenceing pointer type!");
+      return st->child;
+    }
+    return st;
+  }
   case UnaryPostfixE:
-    return c_Expression_make_variables_typed(s, p, m, e->unpost->o);
+    return c_Expression_make_variables_typed(s, p, m, e->unpre->o);
   case BinaryOperationE: {
     Type *t1 = c_Expression_make_variables_typed(s, p, m, e->binop->o1);
     Type *t2 = c_Expression_make_variables_typed(s, p, m, e->binop->o2);
