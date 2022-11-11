@@ -1,0 +1,19 @@
+
+
+fn pointer() {
+  printf(" -pointer\n")
+
+  a int = 5
+  ap *int = &a
+  ASSERT(*ap == a)
+  ASSERT(ap == &a)
+
+  b int = *ap
+  ASSERT(b == a)
+}
+
+fn main() int {
+  printf("unary operators\n")
+  pointer()
+  printf(" ...ok\n")
+}
