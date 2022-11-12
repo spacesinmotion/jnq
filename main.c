@@ -1089,28 +1089,7 @@ Expression *Program_parse_expression_suffix(Program *p, Module *m, State *st, Ex
   return e;
 }
 
-Expression *Program_parse_binary_operation(Program *p, Module *m, State *st, Expression *e) {
-  if (check_whitespace_for_nl(st))
-    return e;
-
-  const char *bin_ops[] = {">>=", "<<=", "==", "!=", ">=", "<=", "+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=",
-                           "&&",  "||",  ">>", "<<", "+",  "-",  "*",  "/",  "%",  "&",  "|",  "=",  "<",  ">"};
-  for (int i = 0; i < sizeof(bin_ops) / sizeof(const char *); ++i) {
-    if (check_op(st, bin_ops[i])) {
-      Expression *bin = Program_new_Expression(p, BinaryOperationE);
-      bin->binop->o1 = e;
-      bin->binop->op = bin_ops[i];
-      bin->binop->o2 = Program_parse_expression(p, m, st);
-      if (!bin->binop->o2)
-        FATAL(st, "Missing second operand for '%s' operator", bin_ops[i]);
-      return bin;
-    }
-  }
-  return e;
-}
-
-Expression *Program_parse_expression(Program *p, Module *m, State *st) {
-
+Expression *Program_parse_unary_operand(Program *p, Module *m, State *st) {
   Expression *prefix = NULL;
   const char *un_pre_ops[] = {"++", "--", "*", "~", "!", "-", "+", "&"};
   for (int i = 0; i < sizeof(un_pre_ops) / sizeof(const char *); ++i) {
@@ -1147,10 +1126,31 @@ Expression *Program_parse_expression(Program *p, Module *m, State *st) {
   e = Program_parse_expression_suffix(p, m, st, e);
   if (prefix) {
     prefix->unpre->o = e;
-    e = prefix;
+    return prefix;
+  }
+  return e;
+}
+
+Expression *Program_parse_expression(Program *p, Module *m, State *st) {
+  Expression *e = Program_parse_unary_operand(p, m, st);
+
+  if (e && !check_whitespace_for_nl(st)) {
+    const char *bin_ops[] = {">>=", "<<=", "==", "!=", ">=", "<=", "+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=",
+                             "&&",  "||",  ">>", "<<", "+",  "-",  "*",  "/",  "%",  "&",  "|",  "=",  "<",  ">"};
+    for (int i = 0; i < sizeof(bin_ops) / sizeof(const char *); ++i) {
+      if (check_op(st, bin_ops[i])) {
+        Expression *bin = Program_new_Expression(p, BinaryOperationE);
+        bin->binop->o1 = e;
+        bin->binop->op = bin_ops[i];
+        bin->binop->o2 = Program_parse_expression(p, m, st);
+        if (!bin->binop->o2)
+          FATAL(st, "Missing second operand for '%s' operator", bin_ops[i]);
+        return bin;
+      }
+    }
   }
 
-  return Program_parse_binary_operation(p, m, st, e);
+  return e;
 }
 
 Statement *Program_parse_statement(Program *p, Module *m, State *st, Statement *next);
