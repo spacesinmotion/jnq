@@ -1089,13 +1089,7 @@ Expression *Program_parse_expression_suffix(Program *p, Module *m, State *st, Ex
   return e;
 }
 
-Expression *Program_parse_binary_operation(Program *p, Module *m, State *st, Expression *e, Expression *prefix) {
-
-  e = Program_parse_expression_suffix(p, m, st, e);
-  if (prefix) {
-    prefix->unpre->o = e;
-    e = prefix;
-  }
+Expression *Program_parse_binary_operation(Program *p, Module *m, State *st, Expression *e) {
   if (check_whitespace_for_nl(st))
     return e;
 
@@ -1150,9 +1144,13 @@ Expression *Program_parse_expression(Program *p, Module *m, State *st) {
   if (!e)
     return NULL;
 
-  e = Program_parse_binary_operation(p, m, st, e, prefix);
+  e = Program_parse_expression_suffix(p, m, st, e);
+  if (prefix) {
+    prefix->unpre->o = e;
+    e = prefix;
+  }
 
-  return e;
+  return Program_parse_binary_operation(p, m, st, e);
 }
 
 Statement *Program_parse_statement(Program *p, Module *m, State *st, Statement *next);
