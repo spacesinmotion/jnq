@@ -994,13 +994,13 @@ Expression *Program_parse_atom(Program *p, State *st) {
   return NULL;
 }
 
-Expression *Program_parse_expression(Program *p, Module *m, State *st, bool ignoreSuffix);
+Expression *Program_parse_expression(Program *p, Module *m, State *st);
 
 Parameter *Program_parse_parameter_list(Program *p, Module *m, State *st) {
   Parameter *param = NULL;
   Expression *e = NULL;
 
-  while ((e = Program_parse_expression(p, m, st, false))) {
+  while ((e = Program_parse_expression(p, m, st))) {
     Parameter *pp = Program_alloc(p, sizeof(Parameter));
     pp->next = param;
     pp->p = e;
@@ -1061,7 +1061,7 @@ Expression *Program_parse_expression_suffix(Program *p, Module *m, State *st, Ex
   if (check_op(st, "[")) {
     Expression *acc = Program_new_Expression(p, AccessE);
     acc->access->o = e;
-    acc->access->p = Program_parse_expression(p, m, st, false);
+    acc->access->p = Program_parse_expression(p, m, st);
     if (!acc->access->o)
       FATAL(st, "missing '[]' content");
     if (!check_op(st, "]"))
@@ -1106,7 +1106,7 @@ Expression *Program_parse_binary_operation(Program *p, Module *m, State *st, Exp
       Expression *bin = Program_new_Expression(p, BinaryOperationE);
       bin->binop->o1 = e;
       bin->binop->op = bin_ops[i];
-      bin->binop->o2 = Program_parse_expression(p, m, st, false);
+      bin->binop->o2 = Program_parse_expression(p, m, st);
       if (!bin->binop->o2)
         FATAL(st, "Missing second operand for '%s' operator", bin_ops[i]);
       return bin;
@@ -1115,7 +1115,7 @@ Expression *Program_parse_binary_operation(Program *p, Module *m, State *st, Exp
   return e;
 }
 
-Expression *Program_parse_expression(Program *p, Module *m, State *st, bool ignoreSuffix) {
+Expression *Program_parse_expression(Program *p, Module *m, State *st) {
 
   Expression *prefix = NULL;
   const char *un_pre_ops[] = {"++", "--", "*", "~", "!", "-", "+", "&"};
@@ -1131,7 +1131,7 @@ Expression *Program_parse_expression(Program *p, Module *m, State *st, bool igno
   Variable *temp_v = NULL;
   if (check_op(st, "(")) {
     e = Program_new_Expression(p, BraceE);
-    e->brace->o = Program_parse_expression(p, m, st, false);
+    e->brace->o = Program_parse_expression(p, m, st);
     if (!e->brace->o)
       FATAL(st, "missing '(' content");
     if (!check_op(st, ")"))
@@ -1150,8 +1150,7 @@ Expression *Program_parse_expression(Program *p, Module *m, State *st, bool igno
   if (!e)
     return NULL;
 
-  if (!ignoreSuffix)
-    e = Program_parse_binary_operation(p, m, st, e, prefix);
+  e = Program_parse_binary_operation(p, m, st, e, prefix);
 
   return e;
 }
@@ -1186,10 +1185,10 @@ Statement *Program_parse_statement(Program *p, Module *m, State *st, Statement *
     statement->scope->body = Program_parse_scope(p, m, st);
   } else if (check_word(st, "return")) {
     statement = Program_new_Statement(p, Return, next);
-    statement->express->e = Program_parse_expression(p, m, st, false);
+    statement->express->e = Program_parse_expression(p, m, st);
   } else if (check_word(st, "case")) {
     statement = Program_new_Statement(p, Case, next);
-    if (!(statement->caseS->caseE = Program_parse_expression(p, m, st, false)))
+    if (!(statement->caseS->caseE = Program_parse_expression(p, m, st)))
       FATAL(st, "Missing case expression");
     if (check_op(st, ":"))
       statement->caseS->body = Program_parse_case_body(p, m, st);
@@ -1207,7 +1206,7 @@ Statement *Program_parse_statement(Program *p, Module *m, State *st, Statement *
     statement = Program_new_Statement(p, Continue, next);
   else if (check_word(st, "if")) {
     statement = Program_new_Statement(p, If, next);
-    if ((temp_e = Program_parse_expression(p, m, st, false)))
+    if ((temp_e = Program_parse_expression(p, m, st)))
       statement->ifS->condition = temp_e;
     else
       FATAL(st, "Missing if conditon");
@@ -1223,13 +1222,13 @@ Statement *Program_parse_statement(Program *p, Module *m, State *st, Statement *
     statement = Program_new_Statement(p, For, next);
     if (!check_op(st, "("))
       FATAL(st, "Missing for loop description");
-    statement->forS->init = Program_parse_expression(p, m, st, false);
+    statement->forS->init = Program_parse_expression(p, m, st);
     if (!check_op(st, ";"))
       FATAL(st, "Missing for init");
-    statement->forS->condition = Program_parse_expression(p, m, st, false);
+    statement->forS->condition = Program_parse_expression(p, m, st);
     if (!check_op(st, ";"))
       FATAL(st, "Missing for condition");
-    statement->forS->incr = Program_parse_expression(p, m, st, false);
+    statement->forS->incr = Program_parse_expression(p, m, st);
     if (!check_op(st, ")"))
       FATAL(st, "Missing closing ')' of for condition");
     statement->forS->body = Program_parse_scope_block(p, m, st);
@@ -1237,7 +1236,7 @@ Statement *Program_parse_statement(Program *p, Module *m, State *st, Statement *
       FATAL(st, "Missing for block");
   } else if (check_word(st, "while")) {
     statement = Program_new_Statement(p, While, next);
-    if ((temp_e = Program_parse_expression(p, m, st, false)))
+    if ((temp_e = Program_parse_expression(p, m, st)))
       statement->whileS->condition = temp_e;
     else
       FATAL(st, "Missing while conditon");
@@ -1249,18 +1248,18 @@ Statement *Program_parse_statement(Program *p, Module *m, State *st, Statement *
     statement->doWhileS->body = Program_parse_scope_block(p, m, st);
     if (!check_word(st, "while"))
       FATAL(st, "Missing 'while' for do block");
-    if ((temp_e = Program_parse_expression(p, m, st, false)))
+    if ((temp_e = Program_parse_expression(p, m, st)))
       statement->doWhileS->condition = temp_e;
     else
       FATAL(st, "Missing do while conditon");
   } else if (check_word(st, "switch")) {
     statement = Program_new_Statement(p, Switch, next);
-    if ((temp_e = Program_parse_expression(p, m, st, false)))
+    if ((temp_e = Program_parse_expression(p, m, st)))
       statement->switchS->condition = temp_e;
     else
       FATAL(st, "Missing switch expression");
     statement->switchS->body = Program_parse_scope_block(p, m, st);
-  } else if ((temp_e = Program_parse_expression(p, m, st, false))) {
+  } else if ((temp_e = Program_parse_expression(p, m, st))) {
     statement = Program_new_Statement(p, ExpressionS, next);
     statement->express->e = temp_e;
   }
