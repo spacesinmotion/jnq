@@ -55,4 +55,13 @@ fn main() int
 
   ASSERT(42 == util.add(31, 11))
   printf("sub call %d\n", util.add(31, 11))
+
+  t bool = true
+  f bool = false
+  ASSERT(t != f)
+
+  a int = 5
+  ap *int = null
+  if (ap == null)
+    printf("yes")
 }

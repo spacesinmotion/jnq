@@ -1,6 +1,6 @@
 
 fn simple() {
-  printf("simple\n")
+  printf(" .simple\n")
 
   a [3]int
 
@@ -14,7 +14,7 @@ fn simple() {
 }
 
 fn multidimension() {
-  printf("multidimension\n")
+  printf(" .multidimension\n")
 
   a [2][3][4]int
 

@@ -1,7 +1,7 @@
 
 
 fn pointer() {
-  printf(" -pointer\n")
+  printf(" .pointer\n")
 
   a int = 5
   ap *int = &a
@@ -12,8 +12,29 @@ fn pointer() {
   ASSERT(b == a)
 }
 
+fn booleans() {
+  printf(" .booleans\n")
+
+  t bool = true
+  ASSERT(t)
+  f bool = false
+  ASSERT(!f)
+}
+
+fn pointer_cast_to_bool() {
+  printf(" .pointer_cast_to_bool\n")
+
+  a int = 5
+  ap *int = &a
+  ASSERT(ap)
+
+  b bool = ap != null
+}
+
 fn main() int {
   printf("unary operators\n")
   pointer()
+  booleans()
+  pointer_cast_to_bool()
   printf(" ...ok\n")
 }

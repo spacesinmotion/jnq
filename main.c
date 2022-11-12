@@ -105,6 +105,7 @@ typedef struct Type Type;
 typedef struct Module Module;
 
 typedef enum ExpressionType {
+  NullA,
   BoolA,
   CharA,
   IntA,
@@ -352,16 +353,6 @@ typedef struct Type {
   Type *child;
 } Type;
 
-bool TypeDeclare_equal(Type *t1, Type *t2) {
-  if (t1 == t2)
-    return true;
-  if ((!t1 && t2) || (t1 && !t2))
-    return false;
-  if (t1->kind != t2->kind)
-    return false;
-  return TypeDeclare_equal(t1->child, t2->child);
-}
-
 typedef struct TypeList TypeList;
 typedef struct TypeList {
   Type *type;
@@ -438,6 +429,7 @@ Module *Program_reset_module_finished(Program *p) {
 }
 
 Module global = (Module){"", "", NULL, NULL, true, NULL};
+Type Null = (Type){"null_t", NULL, Klass, &global, NULL};
 Type Bool = (Type){"bool", NULL, Klass, &global, NULL};
 Type Char = (Type){"char", NULL, Klass, &global, NULL};
 Type Int = (Type){"int", NULL, Klass, &global, NULL};
@@ -455,7 +447,7 @@ Type *Module_find_type(Program *p, Module *m, const char *b, const char *e) {
   if (3 == e - b && strncmp(Int.name, b, 3) == 0)
     return &Int;
   if (4 == e - b && strncmp(Char.name, b, 4) == 0)
-    return &Bool;
+    return &Char;
   if (5 == e - b && strncmp(Float.name, b, 5) == 0)
     return &Float;
   if (6 == e - b && strncmp(String.name, b, 6) == 0)
@@ -469,6 +461,20 @@ Type *Module_find_type(Program *p, Module *m, const char *b, const char *e) {
     if (strlen(tl->type->name) == e - b && strncmp(tl->type->name, b, e - b) == 0)
       return tl->type;
   return NULL;
+}
+
+bool TypeDeclare_equal(Type *t1, Type *t2) {
+  if (t1 == &Null)
+    return t2 == &Null || t2->kind == PointerT;
+  if (t2 == &Null)
+    return t1 == &Null || t1->kind == PointerT;
+  if (t1 == t2)
+    return true;
+  if ((!t1 && t2) || (t1 && !t2))
+    return false;
+  if (t1->kind != t2->kind)
+    return false;
+  return TypeDeclare_equal(t1->child, t2->child);
 }
 
 Module *Program_add_module(Program *p, const char *pathc) {
@@ -601,6 +607,7 @@ Expression *Program_new_Expression(Program *p, ExpressionType t) {
   Expression *e = Program_alloc(p, sizeof(Expression));
   e->type = t;
   switch (t) {
+  case NullA:
   case BoolA:
   case CharA:
   case IntA:
@@ -926,9 +933,21 @@ Expression *Program_parse_atom(Program *p, State *st) {
   skip_whitespace(st);
   State old = *st;
   if (check_identifier(st)) {
-    Expression *e = Program_new_Expression(p, IdentifierA);
     char *id = Program_alloc(p, st->c - old.c + 1);
     strncpy(id, old.c, st->c - old.c);
+
+    bool isTrue = strcmp(id, "true") == 0;
+    if (isTrue || strcmp(id, "false") == 0) {
+      Expression *b = Program_new_Expression(p, BoolA);
+      b->b = isTrue;
+      return b;
+    }
+
+    if (strcmp(id, "null") == 0) {
+      return Program_new_Expression(p, NullA);
+    }
+
+    Expression *e = Program_new_Expression(p, IdentifierA);
     e->id->name = id;
     e->id->type = NULL;
     return e;
@@ -1537,9 +1556,10 @@ void lisp_expression(FILE *f, Expression *e) {
     return;
 
   switch (e->type) {
+  case NullA:
+    fprintf(f, "%s", "null");
   case BoolA:
     fprintf(f, "%s", e->b ? "true" : "false");
-    break;
   case CharA:
     fprintf(f, "'%c'", e->c);
     break;
@@ -1671,6 +1691,9 @@ void c_expression(FILE *f, Expression *e) {
     return;
 
   switch (e->type) {
+  case NullA:
+    fprintf(f, "%s", "NULL");
+    break;
   case BoolA:
     fprintf(f, "%s", e->b ? "true" : "false");
     break;
@@ -2092,6 +2115,8 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
     return NULL;
 
   switch (e->type) {
+  case NullA:
+    return &Null;
   case BoolA:
     return &Bool;
   case CharA:
@@ -2104,6 +2129,8 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
     return &String;
 
   case IdentifierA: {
+    if (e->id->type)
+      return e->id->type;
     if ((e->id->type = VariableStack_find(s, e->id->name)))
       return e->id->type;
     if ((e->id->type = Module_find_type(p, m, e->id->name, e->id->name + strlen(e->id->name))))
@@ -2170,7 +2197,7 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
     Type *t1 = c_Expression_make_variables_typed(s, p, m, e->binop->o1);
     Type *t2 = c_Expression_make_variables_typed(s, p, m, e->binop->o2);
     if (!TypeDeclare_equal(t1, t2))
-      FATALX("Expect equal types for binary operation '%s'", e->binop->op);
+      FATALX("Expect equal types for binary operation '%s' (%s, %s) ", e->binop->op, t1->name, t2->name);
     return t1;
   }
   }

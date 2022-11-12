@@ -1,7 +1,7 @@
 
 fn for_loops()
 {
-  printf("for loops test\n")
+  printf(" .for loops test\n")
 
   a int = 0
   for (i int = 0; i < 4; ++i)
@@ -18,7 +18,7 @@ fn for_loops()
 
 fn while_loops()
 {
-  printf("while loops test\n")
+  printf(" .while loops test\n")
 
   a int = 3;
   while (a > 0)
@@ -35,7 +35,7 @@ fn while_loops()
 
 fn do_while_loops()
 {
-  printf("do while loops test\n")
+  printf(" .do while loops test\n")
   a int = 3;
   do { 
     --a;
