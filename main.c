@@ -1079,7 +1079,7 @@ Expression *Program_parse_construction(Program *p, Module *m, State *st) {
   return NULL;
 }
 
-Expression *Program_parse_expression_suffix(Program *p, Module *m, State *st, Expression *e) {
+Expression *Program_parse_suffix_expression(Program *p, Module *m, State *st, Expression *e) {
 
   bool pointer = check_op(st, "->");
   if (pointer || check_op(st, ".")) {
@@ -1092,7 +1092,7 @@ Expression *Program_parse_expression_suffix(Program *p, Module *m, State *st, Ex
     ma->member->member->name = member;
     ma->member->member->type = NULL;
     ma->member->pointer = pointer;
-    ma = Program_parse_expression_suffix(p, m, st, ma);
+    ma = Program_parse_suffix_expression(p, m, st, ma);
     return ma;
   }
 
@@ -1101,7 +1101,7 @@ Expression *Program_parse_expression_suffix(Program *p, Module *m, State *st, Ex
     Expression *post = Program_new_Expression(p, UnaryPostfixE);
     post->unpost->o = e;
     post->unpost->op = decrement ? "--" : "++";
-    post = Program_parse_expression_suffix(p, m, st, post);
+    post = Program_parse_suffix_expression(p, m, st, post);
     return post;
   }
 
@@ -1113,7 +1113,7 @@ Expression *Program_parse_expression_suffix(Program *p, Module *m, State *st, Ex
       FATAL(st, "missing '[]' content");
     if (!check_op(st, "]"))
       FATAL(st, "missing closing ']'");
-    acc = Program_parse_expression_suffix(p, m, st, acc);
+    acc = Program_parse_suffix_expression(p, m, st, acc);
     return acc;
   }
 
@@ -1123,7 +1123,7 @@ Expression *Program_parse_expression_suffix(Program *p, Module *m, State *st, Ex
     call->call->p = Program_parse_parameter_list(p, m, st);
     if (!check_op(st, ")"))
       FATAL(st, "unfinished function call, missing ')'");
-    call = Program_parse_expression_suffix(p, m, st, call);
+    call = Program_parse_suffix_expression(p, m, st, call);
     return call;
   }
 
@@ -1170,7 +1170,7 @@ Expression *Program_parse_unary_operand(Program *p, Module *m, State *st) {
   if (!e)
     return NULL;
 
-  e = Program_parse_expression_suffix(p, m, st, e);
+  e = Program_parse_suffix_expression(p, m, st, e);
   if (prefix) {
     prefix->unpre->o = e;
     return prefix;
@@ -1192,17 +1192,44 @@ Expression *Program_parse_bin_operator(Program *p, Module *m, State *st) {
   return NULL;
 }
 
-Expression *Program_parse_expression_shunt(Program *p, Module *m, State *st) {
+typedef struct ShuntYard {
   Expression *op_stack[128];
-  int op_stack_size = 0;
+  int op_stack_size;
   Expression *val_stack[128];
-  int val_stack_size = 0;
+  int val_stack_size;
+} ShuntYard;
 
+ShuntYard ShuntYard_create() { return (ShuntYard){.op_stack_size = 0, .val_stack_size = 0}; }
+
+void ShuntYard_push_val(ShuntYard *y, Expression *e) {
+  y->val_stack[y->val_stack_size] = e;
+  y->val_stack_size++;
+}
+
+void ShuntYard_push_op(ShuntYard *y, Expression *e) {
+  y->op_stack[y->op_stack_size] = e;
+  y->op_stack_size++;
+}
+
+void ShuntYard_shunt(ShuntYard *y) {
+  Expression *pop = y->op_stack[y->op_stack_size - 1];
+  y->op_stack_size--;
+
+  if (y->val_stack_size < 2)
+    FATALX("not enough parameter for binary operation '%s'", pop->binop->op->op);
+
+  pop->binop->o2 = y->val_stack[y->val_stack_size - 1];
+  y->val_stack_size--;
+  pop->binop->o1 = y->val_stack[y->val_stack_size - 1];
+  y->val_stack[y->val_stack_size - 1] = pop;
+}
+
+Expression *Program_parse_expression(Program *p, Module *m, State *st) {
   Expression *ev = Program_parse_unary_operand(p, m, st);
   if (!ev)
     return NULL;
-  val_stack[0] = ev;
-  val_stack_size++;
+  ShuntYard yard = ShuntYard_create();
+  ShuntYard_push_val(&yard, ev);
 
   Expression *eop;
   for (;;) {
@@ -1218,87 +1245,22 @@ Expression *Program_parse_expression_shunt(Program *p, Module *m, State *st) {
       break;
     }
     if (eop->binop->op->assoc == ASSOC_RIGHT) {
-      while (op_stack_size > 0 && eop->binop->op->prec < op_stack[op_stack_size - 1]->binop->op->prec) {
-        Expression *pop = op_stack[op_stack_size - 1];
-        op_stack_size--;
-
-        if (val_stack_size < 2)
-          FATALX("not enough parameter for binary operation '%s'", pop->binop->op->op);
-
-        pop->binop->o2 = val_stack[val_stack_size - 1];
-        val_stack_size--;
-        pop->binop->o1 = val_stack[val_stack_size - 1];
-        val_stack_size--;
-
-        val_stack[val_stack_size] = pop;
-        val_stack_size++;
-      }
+      while (yard.op_stack_size > 0 && eop->binop->op->prec < yard.op_stack[yard.op_stack_size - 1]->binop->op->prec)
+        ShuntYard_shunt(&yard);
     } else {
-      while (op_stack_size > 0 && eop->binop->op->prec <= op_stack[op_stack_size - 1]->binop->op->prec) {
-        Expression *pop = op_stack[op_stack_size - 1];
-        op_stack_size--;
-
-        if (val_stack_size < 2)
-          FATALX("not enough parameter for binary operation '%s'", pop->binop->op->op);
-
-        pop->binop->o2 = val_stack[val_stack_size - 1];
-        val_stack_size--;
-        pop->binop->o1 = val_stack[val_stack_size - 1];
-        val_stack_size--;
-
-        val_stack[val_stack_size] = pop;
-        val_stack_size++;
-      }
+      while (yard.op_stack_size > 0 && eop->binop->op->prec <= yard.op_stack[yard.op_stack_size - 1]->binop->op->prec)
+        ShuntYard_shunt(&yard);
     }
-    op_stack[op_stack_size] = eop;
-    op_stack_size++;
-    val_stack[val_stack_size] = ev;
-    val_stack_size++;
+    ShuntYard_push_op(&yard, eop);
+    ShuntYard_push_val(&yard, ev);
   }
 
-  while (op_stack_size > 0) {
-    Expression *pop = op_stack[op_stack_size - 1];
-    op_stack_size--;
-
-    if (val_stack_size < 2)
-      FATALX("not enough parameter for binary operation '%s'", pop->binop->op->op);
-
-    pop->binop->o2 = val_stack[val_stack_size - 1];
-    val_stack_size--;
-    pop->binop->o1 = val_stack[val_stack_size - 1];
-    val_stack_size--;
-
-    val_stack[val_stack_size] = pop;
-    val_stack_size++;
+  while (yard.op_stack_size > 0) {
+    ShuntYard_shunt(&yard);
   }
-  if (val_stack_size != 1)
-    FATALX("Expression parsing failed with too many values (%d)", val_stack_size);
-  return val_stack[0];
-}
-
-Expression *Program_parse_expression(Program *p, Module *m, State *st) {
-
-  return Program_parse_expression_shunt(p, m, st);
-
-  // Expression *e = Program_parse_unary_operand(p, m, st);
-
-  // if (e && !check_whitespace_for_nl(st)) {
-  //   // const char *bin_ops[] = {">>=", "<<=", "==", "!=", ">=", "<=", "+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=",
-  //   //                          "&&",  "||",  ">>", "<<", "+",  "-",  "*",  "/",  "%",  "&",  "|",  "=",  "<",  ">"};
-  //   for (int i = 0; i < sizeof(ops) / sizeof(BinOp); ++i) {
-  //     if (check_op(st, ops[i].op)) {
-  //       Expression *bin = Program_new_Expression(p, BinaryOperationE);
-  //       bin->binop->o1 = e;
-  //       bin->binop->op = &ops[i];
-  //       bin->binop->o2 = Program_parse_expression(p, m, st);
-  //       if (!bin->binop->o2)
-  //         FATAL(st, "Missing second operand for '%s' operator", ops[i].op);
-  //       return bin;
-  //     }
-  //   }
-  // }
-
-  // return e;
+  if (yard.val_stack_size != 1)
+    FATALX("Expression parsing failed with too many values (%d)", yard.val_stack_size);
+  return yard.val_stack[0];
 }
 
 Statement *Program_parse_statement(Program *p, Module *m, State *st, Statement *next);
@@ -2499,30 +2461,7 @@ void c_Program(FILE *f, Program *p, Module *m) {
   c_Module_fn(f, m);
 }
 
-typedef struct XXX {
-  int a;
-  float b;
-} XXX;
-
-void lisp(const char *code) {
-  traceStack.size = 0;
-
-  char buffer[1024 * 64];
-  Program p = Program_new(buffer, 1024 * 64);
-
-  Module *mm = Program_add_module(&p, "dummy");
-  State st = State_new(code, "tempPath");
-  fprintf(stdout, "from '%s'\n -> '", code);
-  lisp_expression(stdout, Program_parse_expression_shunt(&p, mm, &st));
-  fprintf(stdout, "'\n");
-}
-
 int main(int argc, char *argv[]) {
-  // lisp("ap != null");
-  // lisp("b bool = ap != null");
-
-  // return 0;
-
   if (argc <= 1)
     FATALX("missing input file\n");
 
