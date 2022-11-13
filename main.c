@@ -2314,8 +2314,13 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
         if (!TypeDeclare_equal(pt, vt))
           FATALX("Type missmatch for member '%s' of '%s'!", pa->v->name, e->construct->type->name);
         pa->v->type = pt;
-      } else if (e->construct->type->kind != Klass)
+      } else if (e->construct->type->kind == Klass) {
         ; // ToDo check type in order
+      } else if (e->construct->type->kind == ArrayT) {
+        ; // ToDo check each type and size
+      } else {
+        FATALX("construction not possible (or not implemented)");
+      }
     }
     return e->construct->type;
   }
