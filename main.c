@@ -244,10 +244,57 @@ typedef struct UnaryPostfix {
   const char *op;
 } UnaryPostfix;
 
+enum { ASSOC_NONE = 0, ASSOC_LEFT, ASSOC_RIGHT };
+typedef struct BinOp {
+  const char *op;
+  int prec;
+  int assoc;
+  bool returns_bool;
+} BinOp;
+BinOp ops[] = {
+    {">>=", 100 - 14, ASSOC_RIGHT, false}, //
+    {"<<=", 100 - 14, ASSOC_RIGHT, false}, //
+                                           //
+    {"==", 100 - 7, ASSOC_LEFT, true},     //
+    {"!=", 100 - 7, ASSOC_LEFT, true},     //
+    {"<=", 100 - 6, ASSOC_LEFT, true},     //
+    {">=", 100 - 6, ASSOC_LEFT, true},     //
+    {"+=", 100 - 14, ASSOC_RIGHT, false},  //
+    {"-=", 100 - 14, ASSOC_RIGHT, false},  //
+    {"*=", 100 - 14, ASSOC_RIGHT, false},  //
+    {"/=", 100 - 14, ASSOC_RIGHT, false},  //
+    {"%=", 100 - 14, ASSOC_RIGHT, false},  //
+    {"&=", 100 - 14, ASSOC_RIGHT, false},  //
+    {"^=", 100 - 14, ASSOC_RIGHT, false},  //
+    {"|=", 100 - 14, ASSOC_RIGHT, false},  //
+    {"&&", 100 - 11, ASSOC_LEFT, true},    //
+    {"||", 100 - 12, ASSOC_LEFT, true},    //
+    {"<<", 100 - 5, ASSOC_LEFT, false},    //
+    {">>", 100 - 5, ASSOC_LEFT, false},    //
+                                           //
+    {"*", 100 - 3, ASSOC_LEFT, false},     //
+    {"/", 100 - 3, ASSOC_LEFT, false},     //
+    {"%", 100 - 3, ASSOC_LEFT, false},     //
+    {"+", 100 - 4, ASSOC_LEFT, false},     //
+    {"-", 100 - 4, ASSOC_LEFT, false},     //
+    {"<", 100 - 6, ASSOC_LEFT, false},     //
+    {">", 100 - 6, ASSOC_LEFT, false},     //
+    {"&", 100 - 8, ASSOC_LEFT, false},     //
+    {"^", 100 - 9, ASSOC_LEFT, false},     //
+    {"|", 100 - 10, ASSOC_LEFT, false},    //
+    {"=", 100 - 14, ASSOC_RIGHT, false},   //
+};
+BinOp *getop(const char *ch) {
+  for (int i = 0; i < sizeof ops / sizeof ops[0]; ++i)
+    if (strcmp(ops[i].op, ch) == 0)
+      return ops + i;
+  return NULL;
+}
+
 typedef struct BinaryOperation {
   Expression *o1;
   Expression *o2;
-  const char *op;
+  BinOp *op;
 } BinaryOperation;
 
 typedef struct ExpressionStatement {
@@ -667,7 +714,7 @@ bool check_whitespace_for_nl(State *st) {
     for (int i = 1; i <= st->column; ++i)
       if (!isspace(st->c[-i]))
         return false;
-  return true;
+  return st->line > 1;
 }
 
 bool check_word(State *st, const char *word) {
@@ -1131,26 +1178,127 @@ Expression *Program_parse_unary_operand(Program *p, Module *m, State *st) {
   return e;
 }
 
-Expression *Program_parse_expression(Program *p, Module *m, State *st) {
-  Expression *e = Program_parse_unary_operand(p, m, st);
+Expression *Program_parse_bin_operator(Program *p, Module *m, State *st) {
+  if (check_whitespace_for_nl(st))
+    return NULL;
 
-  if (e && !check_whitespace_for_nl(st)) {
-    const char *bin_ops[] = {">>=", "<<=", "==", "!=", ">=", "<=", "+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=",
-                             "&&",  "||",  ">>", "<<", "+",  "-",  "*",  "/",  "%",  "&",  "|",  "=",  "<",  ">"};
-    for (int i = 0; i < sizeof(bin_ops) / sizeof(const char *); ++i) {
-      if (check_op(st, bin_ops[i])) {
-        Expression *bin = Program_new_Expression(p, BinaryOperationE);
-        bin->binop->o1 = e;
-        bin->binop->op = bin_ops[i];
-        bin->binop->o2 = Program_parse_expression(p, m, st);
-        if (!bin->binop->o2)
-          FATAL(st, "Missing second operand for '%s' operator", bin_ops[i]);
-        return bin;
-      }
+  for (int i = 0; i < sizeof(ops) / sizeof(BinOp); ++i) {
+    if (check_op(st, ops[i].op)) {
+      Expression *bin = Program_new_Expression(p, BinaryOperationE);
+      bin->binop->op = &ops[i];
+      return bin;
     }
   }
+  return NULL;
+}
 
-  return e;
+Expression *Program_parse_expression_shunt(Program *p, Module *m, State *st) {
+  Expression *op_stack[128];
+  int op_stack_size = 0;
+  Expression *val_stack[128];
+  int val_stack_size = 0;
+
+  Expression *ev = Program_parse_unary_operand(p, m, st);
+  if (!ev)
+    return NULL;
+  val_stack[0] = ev;
+  val_stack_size++;
+
+  Expression *eop;
+  for (;;) {
+    if (check_whitespace_for_nl(st))
+      break;
+    State old = *st;
+    eop = Program_parse_bin_operator(p, m, st);
+    if (!eop)
+      break;
+    ev = Program_parse_unary_operand(p, m, st);
+    if (!ev) {
+      *st = old;
+      break;
+    }
+    if (eop->binop->op->assoc == ASSOC_RIGHT) {
+      while (op_stack_size > 0 && eop->binop->op->prec < op_stack[op_stack_size - 1]->binop->op->prec) {
+        Expression *pop = op_stack[op_stack_size - 1];
+        op_stack_size--;
+
+        if (val_stack_size < 2)
+          FATALX("not enough parameter for binary operation '%s'", pop->binop->op->op);
+
+        pop->binop->o2 = val_stack[val_stack_size - 1];
+        val_stack_size--;
+        pop->binop->o1 = val_stack[val_stack_size - 1];
+        val_stack_size--;
+
+        val_stack[val_stack_size] = pop;
+        val_stack_size++;
+      }
+    } else {
+      while (op_stack_size > 0 && eop->binop->op->prec <= op_stack[op_stack_size - 1]->binop->op->prec) {
+        Expression *pop = op_stack[op_stack_size - 1];
+        op_stack_size--;
+
+        if (val_stack_size < 2)
+          FATALX("not enough parameter for binary operation '%s'", pop->binop->op->op);
+
+        pop->binop->o2 = val_stack[val_stack_size - 1];
+        val_stack_size--;
+        pop->binop->o1 = val_stack[val_stack_size - 1];
+        val_stack_size--;
+
+        val_stack[val_stack_size] = pop;
+        val_stack_size++;
+      }
+    }
+    op_stack[op_stack_size] = eop;
+    op_stack_size++;
+    val_stack[val_stack_size] = ev;
+    val_stack_size++;
+  }
+
+  while (op_stack_size > 0) {
+    Expression *pop = op_stack[op_stack_size - 1];
+    op_stack_size--;
+
+    if (val_stack_size < 2)
+      FATALX("not enough parameter for binary operation '%s'", pop->binop->op->op);
+
+    pop->binop->o2 = val_stack[val_stack_size - 1];
+    val_stack_size--;
+    pop->binop->o1 = val_stack[val_stack_size - 1];
+    val_stack_size--;
+
+    val_stack[val_stack_size] = pop;
+    val_stack_size++;
+  }
+  if (val_stack_size != 1)
+    FATALX("Expression parsing failed with too many values (%d)", val_stack_size);
+  return val_stack[0];
+}
+
+Expression *Program_parse_expression(Program *p, Module *m, State *st) {
+
+  return Program_parse_expression_shunt(p, m, st);
+
+  // Expression *e = Program_parse_unary_operand(p, m, st);
+
+  // if (e && !check_whitespace_for_nl(st)) {
+  //   // const char *bin_ops[] = {">>=", "<<=", "==", "!=", ">=", "<=", "+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=",
+  //   //                          "&&",  "||",  ">>", "<<", "+",  "-",  "*",  "/",  "%",  "&",  "|",  "=",  "<",  ">"};
+  //   for (int i = 0; i < sizeof(ops) / sizeof(BinOp); ++i) {
+  //     if (check_op(st, ops[i].op)) {
+  //       Expression *bin = Program_new_Expression(p, BinaryOperationE);
+  //       bin->binop->o1 = e;
+  //       bin->binop->op = &ops[i];
+  //       bin->binop->o2 = Program_parse_expression(p, m, st);
+  //       if (!bin->binop->o2)
+  //         FATAL(st, "Missing second operand for '%s' operator", ops[i].op);
+  //       return bin;
+  //     }
+  //   }
+  // }
+
+  // return e;
 }
 
 Statement *Program_parse_statement(Program *p, Module *m, State *st, Statement *next);
@@ -1555,6 +1703,7 @@ void lisp_expression(FILE *f, Expression *e) {
   switch (e->type) {
   case NullA:
     fprintf(f, "%s", "null");
+    break;
   case BoolA:
     fprintf(f, "%s", e->b ? "true" : "false");
   case CharA:
@@ -1662,7 +1811,7 @@ void lisp_expression(FILE *f, Expression *e) {
     fprintf(f, ")");
     break;
   case BinaryOperationE:
-    fprintf(f, "(%s ", e->binop->op);
+    fprintf(f, "(%s ", e->binop->op->op);
     lisp_expression(f, e->binop->o1);
     fprintf(f, " ");
     lisp_expression(f, e->binop->o2);
@@ -1790,7 +1939,7 @@ void c_expression(FILE *f, Expression *e) {
     break;
   case BinaryOperationE:
     c_expression(f, e->binop->o1);
-    fprintf(f, " %s ", e->binop->op);
+    fprintf(f, " %s ", e->binop->op->op);
     c_expression(f, e->binop->o2);
     break;
   }
@@ -2193,8 +2342,18 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
   case BinaryOperationE: {
     Type *t1 = c_Expression_make_variables_typed(s, p, m, e->binop->o1);
     Type *t2 = c_Expression_make_variables_typed(s, p, m, e->binop->o2);
-    if (!TypeDeclare_equal(t1, t2))
-      FATALX("Expect equal types for binary operation '%s' (%s, %s) ", e->binop->op, t1->name, t2->name);
+    if (!TypeDeclare_equal(t1, t2)) {
+      lisp_expression(stderr, e);
+      fprintf(stderr, "\n");
+      lisp_expression(stderr, e->binop->o1);
+      fprintf(stderr, "\n");
+      lisp_expression(stderr, e->binop->o2);
+      fprintf(stderr, "\n");
+      FATALX("Expect equal types for binary operation '%s' (%s, %s) (%d, %d)", e->binop->op->op, t1->name, t2->name,
+             t1->kind, t2->kind);
+    }
+    if (e->binop->op->returns_bool)
+      return &Bool;
     return t1;
   }
   }
@@ -2345,7 +2504,25 @@ typedef struct XXX {
   float b;
 } XXX;
 
+void lisp(const char *code) {
+  traceStack.size = 0;
+
+  char buffer[1024 * 64];
+  Program p = Program_new(buffer, 1024 * 64);
+
+  Module *mm = Program_add_module(&p, "dummy");
+  State st = State_new(code, "tempPath");
+  fprintf(stdout, "from '%s'\n -> '", code);
+  lisp_expression(stdout, Program_parse_expression_shunt(&p, mm, &st));
+  fprintf(stdout, "'\n");
+}
+
 int main(int argc, char *argv[]) {
+  // lisp("ap != null");
+  // lisp("b bool = ap != null");
+
+  // return 0;
+
   if (argc <= 1)
     FATALX("missing input file\n");
 
@@ -2362,6 +2539,7 @@ int main(int argc, char *argv[]) {
 
   char buffer[1024 * 64];
   Program p = Program_new(buffer, 1024 * 64);
+
   Module *m = Program_parse_file(&p, main_mod, &(State){.file = argv[1], .line = 0, .column = 0});
 
   char main_c[256] = {0};

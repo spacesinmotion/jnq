@@ -28,6 +28,9 @@ fn pointer_cast_to_bool() {
   ap *int = &a
   ASSERT(ap)
   ASSERT(ap != null)
+
+  b bool = ap != null
+  ASSERT(b)
 }
 
 fn main() int {

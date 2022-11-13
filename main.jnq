@@ -63,5 +63,11 @@ fn main() int
   a int = 5
   ap *int = null
   if (ap == null)
-    printf("yes")
+    printf("yes\n")
+
+  b bool = ap != null
+
+  ASSERT(4 + 5 * 2 == 14)
+  ASSERT(4 * 5 + 2 == 22)
+  ASSERT(4 * (5 + 2) == 28)
 }
