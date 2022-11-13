@@ -285,7 +285,9 @@ BinOp ops[] = {
     {"&", 100 - 8, ASSOC_LEFT, false},     //
     {"^", 100 - 9, ASSOC_LEFT, false},     //
     {"|", 100 - 10, ASSOC_LEFT, false},    //
+                                           //
     {"=", 100 - 14, ASSOC_RIGHT, false},   //
+    {":", 100 - 14, ASSOC_RIGHT, false},   //
 };
 BinOp *getop(const char *ch) {
   for (int i = 0; i < sizeof ops / sizeof ops[0]; ++i)
@@ -1299,7 +1301,7 @@ Statement *Program_parse_statement(Program *p, Module *m, State *st, Statement *
     statement->express->e = Program_parse_expression(p, m, st);
   } else if (check_word(st, "case")) {
     statement = Program_new_Statement(p, Case, next);
-    if (!(statement->caseS->caseE = Program_parse_expression(p, m, st)))
+    if (!(statement->caseS->caseE = Program_parse_atom(p, st)))
       FATAL(st, "Missing case expression");
     if (check_op(st, ":"))
       statement->caseS->body = Program_parse_case_body(p, m, st);
@@ -1846,7 +1848,7 @@ void c_expression(FILE *f, Expression *e) {
     break;
   case ConstructE:
     if (e->construct->type->kind != Klass && e->construct->type->kind != Union)
-      FATALX("unexpect type for construction (missing impementation)");
+      FATALX("unexpect type for construction (or missing impementation)");
     fprintf(f, "(%s%s){", e->construct->type->module->c_name, e->construct->type->name);
     c_parameter(f, e->construct->p);
     fprintf(f, "}");
@@ -1903,8 +1905,15 @@ void c_expression(FILE *f, Expression *e) {
     fprintf(f, "%s", e->unpost->op);
     break;
   case BinaryOperationE:
-    c_expression(f, e->binop->o1);
-    fprintf(f, " %s ", e->binop->op->op);
+    if (strcmp(e->binop->op->op, ":") == 0) {
+      if (e->binop->o1->type != IdentifierA)
+        FATALX("Expect identifier in named construction");
+      fprintf(f, ".%s = ", e->binop->o1->id->name);
+
+    } else {
+      c_expression(f, e->binop->o1);
+      fprintf(f, " %s ", e->binop->op->op);
+    }
     c_expression(f, e->binop->o2);
     break;
   }
@@ -2262,10 +2271,29 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
       FATALX("Need a function to be called!");
     return t->fn->returnType;
   }
-  case ConstructE:
-    for (Parameter *pa = e->construct->p; pa; pa = pa->next)
-      c_Expression_make_variables_typed(s, p, m, pa->p);
+  case ConstructE: {
+    int named = 0, all = 0;
+    for (Parameter *pa = e->construct->p; pa; pa = pa->next) {
+      all++;
+      if (pa->p->type == BinaryOperationE && strcmp(pa->p->binop->op->op, ":") == 0)
+        named++;
+    }
+    if (named > 0 && named != all)
+      FATALX("Mixed construction not allowd");
+    if (named > 0)
+      for (Parameter *pa = e->construct->p; pa; pa = pa->next) {
+        if (pa->p->binop->o1->type != IdentifierA)
+          FATALX("Expect identifier in named construction");
+        pa->p->binop->o1->id->type = Module_find_member(p, e->construct->type, pa->p->binop->o1->id);
+        if (!pa->p->binop->o1->id->type)
+          FATALX("unknow member '%s' for type '%s'", pa->p->binop->o1->id->name, e->construct->type->name);
+        c_Expression_make_variables_typed(s, p, m, pa->p->binop->o2);
+      }
+    else
+      for (Parameter *pa = e->construct->p; pa; pa = pa->next)
+        c_Expression_make_variables_typed(s, p, m, pa->p);
     return e->construct->type;
+  }
   case AccessE: {
     Type *t = c_Expression_make_variables_typed(s, p, m, e->access->o);
     if (t->kind != ArrayT && t->kind != PointerT)
@@ -2519,17 +2547,17 @@ int main(int argc, char *argv[]) {
     if (error != 0)
       FATALX("failed to compile c '%s'", main_c);
   }
-
-  remove(main_c);
-
   if (error == 0)
     error = system(JNQ_BIN);
 
+  remove(main_c);
   remove(JNQ_BIN);
 #ifdef _WIN32
   remove("jnq_bin.ilk");
   remove("jnq_bin.pdb");
 #endif
+
+  State s = (State){.c = "hallo", .column = 54, .line = 32, .file = "f"};
 
   return 0;
 }

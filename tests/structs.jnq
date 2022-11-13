@@ -25,6 +25,10 @@ fn construction()  {
   s.a = 42
   ASSERT(s.a == 42)
   ASSERT(s.b == 2)
+
+  s = Stuff{a: 33, b: 22}
+  ASSERT(s.a == 33)
+  ASSERT(s.b == 22)
 }
 
 fn call_member()  {
