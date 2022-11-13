@@ -15,5 +15,10 @@ fn main() int {
   ASSERT(44 == add(a(), 2))
   ASSERT(47 == add(5, a()))
 
+  ASSERT(a() + 4 == 46)
+  ASSERT(4 + a() == 46)
+  ASSERT(2 * a() + 4 == 88)
+  ASSERT(4 + a() * 2 == 88)
+
   printf(" ...ok\n")
 }
