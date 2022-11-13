@@ -2303,8 +2303,20 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
     return t->fn->returnType;
   }
   case ConstructE: {
-    for (Parameter *pa = e->construct->p; pa; pa = pa->next)
-      c_Expression_make_variables_typed(s, p, m, pa->p);
+    for (Parameter *pa = e->construct->p; pa; pa = pa->next) {
+      Type *pt = c_Expression_make_variables_typed(s, p, m, pa->p);
+      if (pa->v) {
+        if (e->construct->type->kind != Klass)
+          FATALX("Named construction '%s' for none struct type!", pa->v->name);
+        Type *vt = Module_find_member(p, e->construct->type, pa->v);
+        if (!vt)
+          FATALX("Type '%s' has no member '%s'!", e->construct->type->name, pa->v->name);
+        if (!TypeDeclare_equal(pt, vt))
+          FATALX("Type missmatch for member '%s' of '%s'!", pa->v->name, e->construct->type->name);
+        pa->v->type = pt;
+      } else if (e->construct->type->kind != Klass)
+        ; // ToDo check type in order
+    }
     return e->construct->type;
   }
   case AccessE: {
