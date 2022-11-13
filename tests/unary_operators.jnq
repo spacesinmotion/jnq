@@ -34,6 +34,8 @@ fn pointer_cast_to_bool() {
 
   np *int = null
   ASSERT(!np)
+
+  ASSERT(np || ap)
 }
 
 fn main() int {
