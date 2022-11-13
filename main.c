@@ -7,6 +7,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <setjmp.h>
+
 #ifndef _WIN32
 #include <unistd.h>
 #define JNQ_BIN "./jnq_bin"
@@ -29,6 +31,7 @@ State State_new(const char *c, const char *file) { return (State){.file = file, 
 struct {
   State states[128];
   int size;
+  jmp_buf back;
 } traceStack;
 
 void FATALX(const char *format, ...);
@@ -54,7 +57,7 @@ void FATAL(State *st, const char *format, ...) {
     fprintf(stderr, " - %s:%zu:%zu\n", sst->file, sst->line, sst->column);
   }
 
-  exit(1);
+  longjmp(traceStack.back, 1);
 }
 void FATALX(const char *format, ...) {
   va_list args;
@@ -69,7 +72,7 @@ void FATALX(const char *format, ...) {
     fprintf(stderr, " - %s:%zu:%zu\n", sst->file, sst->line, sst->column);
   }
 
-  exit(1);
+  longjmp(traceStack.back, 1);
 }
 
 typedef struct Identifier Identifier;
@@ -2496,27 +2499,33 @@ int main(int argc, char *argv[]) {
   FILE *c_tmp_file = fopen(main_c, "w");
   if (!c_tmp_file)
     FATALX("could not create temp file '%s'", main_c);
-  c_Program(c_tmp_file, &p, m);
+
+  int error = setjmp(traceStack.back);
+  if (error == 0)
+    c_Program(c_tmp_file, &p, m);
   fclose(c_tmp_file);
 
-  char clang_call[256] = {0};
-  // strcat(clang_call, "cat ");
-  // strcat(clang_call, main_c);
-  // system(clang_call);
-  // clang_call[0] = 0;
-  strcat(clang_call, "clang -o " JNQ_BIN " -Werror -g ");
-  strcat(clang_call, main_c);
-  int compile = system(clang_call);
+  if (error == 0)
+    error = setjmp(traceStack.back);
+  if (error == 0) {
+    char clang_call[256] = {0};
+    // strcat(clang_call, "cat ");
+    // strcat(clang_call, main_c);
+    // system(clang_call);
+    // clang_call[0] = 0;
+    strcat(clang_call, "clang -o " JNQ_BIN " -Werror -g ");
+    strcat(clang_call, main_c);
+    error = system(clang_call);
+    if (error != 0)
+      FATALX("failed to compile c '%s'", main_c);
+  }
 
-  if (remove(main_c) != 0)
-    FATALX("could not remove temp file '%s'", main_c);
-  if (compile != 0)
-    FATALX("failed to compile c '%s'", main_c);
+  remove(main_c);
 
-  int e = system(JNQ_BIN);
+  if (error == 0)
+    error = system(JNQ_BIN);
 
-  if (remove(JNQ_BIN) != 0)
-    FATALX("could not remove temp file '" JNQ_BIN " '");
+  remove(JNQ_BIN);
 #ifdef _WIN32
   remove("jnq_bin.ilk");
   remove("jnq_bin.pdb");

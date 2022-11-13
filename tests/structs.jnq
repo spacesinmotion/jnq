@@ -11,9 +11,8 @@ fn swap_a_b(s Stuff) Stuff {
   return s
 }
 
-fn main() int {
-  printf("structs\n")
-
+fn construction()  {
+  printf(" .construction\n")
   s Stuff = Stuff{}
   ASSERT(s.a == 0)
   ASSERT(s.b == 0)
@@ -26,14 +25,26 @@ fn main() int {
   s.a = 42
   ASSERT(s.a == 42)
   ASSERT(s.b == 2)
+}
 
+fn call_member()  {
+  printf(" .call_member\n")
+
+  s Stuff = Stuff{3, 2}
   ss Stuff = s.swap_a_b()
   ASSERT(ss.a == 2)
-  ASSERT(ss.b == 42)
+  ASSERT(ss.b == 3)
 
   sss Stuff = swap_a_b(s)
   ASSERT(sss.a == 2)
-  ASSERT(sss.b == 42)
+  ASSERT(sss.b == 3)
+}
+
+fn main() int {
+  printf("structs\n")
+
+  construction();
+  call_member();
 
   printf(" ...ok\n")
 }
