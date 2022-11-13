@@ -204,6 +204,7 @@ typedef struct Variable {
 typedef struct Parameter Parameter;
 typedef struct Parameter {
   Expression *p;
+  Identifier *v;
   Parameter *next;
 } Parameter;
 
@@ -287,7 +288,6 @@ BinOp ops[] = {
     {"|", 100 - 10, ASSOC_LEFT, false},    //
                                            //
     {"=", 100 - 14, ASSOC_RIGHT, false},   //
-    {":", 100 - 14, ASSOC_RIGHT, false},   //
 };
 BinOp *getop(const char *ch) {
   for (int i = 0; i < sizeof ops / sizeof ops[0]; ++i)
@@ -1056,6 +1056,40 @@ Parameter *Program_parse_parameter_list(Program *p, Module *m, State *st) {
     Parameter *pp = Program_alloc(p, sizeof(Parameter));
     pp->next = param;
     pp->p = e;
+    pp->v = NULL;
+    param = pp;
+    if (!check_op(st, ","))
+      break;
+  }
+  return param;
+}
+
+Parameter *Program_parse_named_parameter_list(Program *p, Module *m, State *st) {
+  Parameter *param = NULL;
+
+  for (;;) {
+    skip_whitespace(st);
+    State old = *st;
+    if (!check_identifier(st))
+      break;
+    const char *id_end = st->c;
+    if (!check_op(st, ":")) {
+      *st = old;
+      break;
+    }
+    Expression *e = Program_parse_expression(p, m, st);
+    if (!e) {
+      *st = old;
+      break;
+    }
+    char *id = Program_alloc(p, id_end - old.c + 1);
+    strncpy(id, old.c, id_end - old.c);
+    Parameter *pp = Program_alloc(p, sizeof(Parameter));
+    pp->next = param;
+    pp->p = e;
+    pp->v = Program_alloc(p, sizeof(Identifier));
+    pp->v->name = id;
+    pp->v->type = NULL;
     param = pp;
     if (!check_op(st, ","))
       break;
@@ -1072,7 +1106,9 @@ Expression *Program_parse_construction(Program *p, Module *m, State *st) {
     const char *id_end = st->c;
     if (check_op(st, "{")) {
       Expression *construct = Program_new_Expression(p, ConstructE);
-      construct->construct->p = Program_parse_parameter_list(p, m, st);
+      construct->construct->p = Program_parse_named_parameter_list(p, m, st);
+      if (!construct->construct->p)
+        construct->construct->p = Program_parse_parameter_list(p, m, st);
       if (!check_op(st, "}"))
         FATAL(st, "unfinished constructor call, missing '}'");
       construct->construct->type = type;
@@ -1796,6 +1832,8 @@ void c_parameter(FILE *f, Parameter *param) {
   c_parameter(f, param->next);
   if (param->next)
     fprintf(f, ", ");
+  if (param->v)
+    fprintf(f, ".%s = ", param->v->name);
   c_expression(f, param->p);
 }
 
@@ -1905,15 +1943,8 @@ void c_expression(FILE *f, Expression *e) {
     fprintf(f, "%s", e->unpost->op);
     break;
   case BinaryOperationE:
-    if (strcmp(e->binop->op->op, ":") == 0) {
-      if (e->binop->o1->type != IdentifierA)
-        FATALX("Expect identifier in named construction");
-      fprintf(f, ".%s = ", e->binop->o1->id->name);
-
-    } else {
-      c_expression(f, e->binop->o1);
-      fprintf(f, " %s ", e->binop->op->op);
-    }
+    c_expression(f, e->binop->o1);
+    fprintf(f, " %s ", e->binop->op->op);
     c_expression(f, e->binop->o2);
     break;
   }
@@ -2272,26 +2303,8 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
     return t->fn->returnType;
   }
   case ConstructE: {
-    int named = 0, all = 0;
-    for (Parameter *pa = e->construct->p; pa; pa = pa->next) {
-      all++;
-      if (pa->p->type == BinaryOperationE && strcmp(pa->p->binop->op->op, ":") == 0)
-        named++;
-    }
-    if (named > 0 && named != all)
-      FATALX("Mixed construction not allowd");
-    if (named > 0)
-      for (Parameter *pa = e->construct->p; pa; pa = pa->next) {
-        if (pa->p->binop->o1->type != IdentifierA)
-          FATALX("Expect identifier in named construction");
-        pa->p->binop->o1->id->type = Module_find_member(p, e->construct->type, pa->p->binop->o1->id);
-        if (!pa->p->binop->o1->id->type)
-          FATALX("unknow member '%s' for type '%s'", pa->p->binop->o1->id->name, e->construct->type->name);
-        c_Expression_make_variables_typed(s, p, m, pa->p->binop->o2);
-      }
-    else
-      for (Parameter *pa = e->construct->p; pa; pa = pa->next)
-        c_Expression_make_variables_typed(s, p, m, pa->p);
+    for (Parameter *pa = e->construct->p; pa; pa = pa->next)
+      c_Expression_make_variables_typed(s, p, m, pa->p);
     return e->construct->type;
   }
   case AccessE: {

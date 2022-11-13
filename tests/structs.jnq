@@ -26,7 +26,7 @@ fn construction()  {
   ASSERT(s.a == 42)
   ASSERT(s.b == 2)
 
-  s = Stuff{a: 33, b: 22}
+  s = Stuff{b: 22, a: 33}
   ASSERT(s.a == 33)
   ASSERT(s.b == 22)
 }
