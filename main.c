@@ -1530,7 +1530,10 @@ bool c_type_declare(FILE *f, Type *t, const char *var) {
   case ArrayT:
     fprintf(f, " %s", var);
     while (t && t->kind == ArrayT) {
-      fprintf(f, "[%d]", t->count);
+      if (t->count > 0)
+        fprintf(f, "[%d]", t->count);
+      else
+        fprintf(f, "[]");
       t = t->child;
     }
     return true;
@@ -1885,9 +1888,12 @@ void c_expression(FILE *f, Expression *e) {
     fprintf(f, ")");
     break;
   case ConstructE:
-    if (e->construct->type->kind != Klass && e->construct->type->kind != Union)
+    if (e->construct->type->kind == Klass || e->construct->type->kind == Union)
+      fprintf(f, "(%s%s){", e->construct->type->module->c_name, e->construct->type->name);
+    else if (e->construct->type->kind == ArrayT)
+      fprintf(f, "{");
+    else
       FATALX("unexpect type for construction (or missing impementation)");
-    fprintf(f, "(%s%s){", e->construct->type->module->c_name, e->construct->type->name);
     c_parameter(f, e->construct->p);
     fprintf(f, "}");
     break;
@@ -2317,7 +2323,9 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
       } else if (e->construct->type->kind == Klass) {
         ; // ToDo check type in order
       } else if (e->construct->type->kind == ArrayT) {
-        ; // ToDo check each type and size
+        Type *et = e->construct->type->child;
+        if (!TypeDeclare_equal(pt, et))
+          FATALX("Type missmatch for array element of '%s'!", e->construct->type->child->name);
       } else {
         FATALX("construction not possible (or not implemented)");
       }

@@ -52,5 +52,11 @@ fn main() int
   ASSERT(v.x == 4)
   ASSERT(v.y == 5)
 
+  iv []int = []int{1, 2, 3}
+  ASSERT(iv[0] == 1)
+  ASSERT(iv[1] == 2)
+  ASSERT(iv[2] == 3)
+
+
   printf("ok\n")
 }

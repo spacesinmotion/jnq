@@ -25,10 +25,27 @@ fn multidimension() {
   ASSERT(a[1][2][3] == 2)
 }
 
+
+fn construct_assign() {
+  printf(" .construct_assign\n")
+
+  a [3]int = [3]int{6, 2, 153}
+  ASSERT(a[0] == 6)
+  ASSERT(a[1] == 2)
+  ASSERT(a[2] == 153)
+
+  b []int = []int{8, 6, 4, 2}
+  ASSERT(b[0] == 8)
+  ASSERT(b[1] == 6)
+  ASSERT(b[2] == 4)
+  ASSERT(b[3] == 2)
+}
+
 fn main() int {
   printf("array test\n")
   
   simple()
+  construct_assign()
   multidimension()
   
   printf(" ...ok\n")
