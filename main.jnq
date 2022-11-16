@@ -54,8 +54,10 @@ fn main() int
     x: 4,
   }
 
+  vv Vec2 = *v
+
   v = v.neg_ptr()
   ASSERT(v.x == -4)
-
+  
   printf("ok\n")
 }
