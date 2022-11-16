@@ -1919,8 +1919,14 @@ void c_expression(FILE *f, Expression *e) {
       break;
 
     case FnT: {
-      fprintf(f, "%s%s(%s", e->member->member->type->module->c_name, e->member->member->name,
-              (e->member->pointer ? "*" : ""));
+      if (!e->member->member->type->fn->parameter)
+        FATALX("internal error creating member function call!");
+      const char *prefix = "";
+      if (e->member->pointer && e->member->member->type->fn->parameter->type->kind != PointerT)
+        prefix = "*";
+      else if (!e->member->pointer && e->member->member->type->fn->parameter->type->kind == PointerT)
+        prefix = "&";
+      fprintf(f, "%s%s(%s", e->member->member->type->module->c_name, e->member->member->name, prefix);
       if (e->member->o->type != IdentifierA || e->member->o->id->type->kind != Mod)
         c_expression(f, e->member->o);
       break;
@@ -2229,6 +2235,22 @@ Type *VariableStack_find(VariableStack *s, const char *n) {
   return NULL;
 }
 
+bool is_member_fn_for(Type *ot, Type *ft, Identifier *member) {
+  if (ft->kind != FnT)
+    return false;
+  Function *f = ft->fn;
+  if (!f->parameter || strcmp(ft->name, member->name) != 0)
+    return false;
+
+  if (TypeDeclare_equal(f->parameter->type, ot))
+    return true;
+
+  if (f->parameter->type->kind == PointerT && TypeDeclare_equal(f->parameter->type->child, ot))
+    return true;
+
+  return false;
+}
+
 Type *Module_find_member(Program *p, Type *t, Identifier *member) {
   switch (t->kind) {
   case Klass: {
@@ -2257,10 +2279,7 @@ Type *Module_find_member(Program *p, Type *t, Identifier *member) {
     break;
   }
   for (TypeList *tl = t->module->types; tl; tl = tl->next) {
-    if (tl->type->kind != FnT)
-      continue;
-    Function *f = tl->type->fn;
-    if (f->parameter && TypeDeclare_equal(f->parameter->type, t) && strcmp(tl->type->name, member->name) == 0)
+    if (is_member_fn_for(t, tl->type, member))
       return tl->type;
   }
 

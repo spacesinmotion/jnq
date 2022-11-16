@@ -19,6 +19,5 @@ fn main() int {
   ASSERT(p.x == -4)
   ASSERT(p.y == -5)
 
-
   printf(" ...ok\n")
 }

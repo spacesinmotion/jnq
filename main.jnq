@@ -12,6 +12,10 @@ fn neg(v Vec2) Vec2 {
   return Vec2{-v.x, -v.y}
 }
 
+fn neg_ptr(v *Vec2) Vec2 {
+  return Vec2{-v.x, -v.y}
+}
+
 fn add(v1 Vec2, v2 Vec2) Vec2 {
   return Vec2{v1.x + v2.x, v1.y + v2.y}
 }
@@ -49,14 +53,9 @@ fn main() int
     y: 5,
     x: 4,
   }
-  ASSERT(v.x == 4)
-  ASSERT(v.y == 5)
 
-  iv []int = []int{1, 2, 3}
-  ASSERT(iv[0] == 1)
-  ASSERT(iv[1] == 2)
-  ASSERT(iv[2] == 3)
-
+  v = v.neg_ptr()
+  ASSERT(v.x == -4)
 
   printf("ok\n")
 }

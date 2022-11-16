@@ -11,6 +11,10 @@ fn swap_a_b(s Stuff) Stuff {
   return s
 }
 
+fn swap_a_b_ptr(s *Stuff) Stuff {
+  return Stuff{s.b, s.a}
+}
+
 fn construction()  {
   printf(" .construction\n")
   s Stuff = Stuff{}
@@ -44,11 +48,30 @@ fn call_member()  {
   ASSERT(sss.b == 3)
 }
 
+fn call_member_pointer_or_not()  {
+  printf(" .call_member_pointer_or_not\n")
+
+  s Stuff = Stuff{3, 2}
+  sp *Stuff = &s
+  ss Stuff = s.swap_a_b()
+  ASSERT(ss.a == 2)
+  ASSERT(ss.b == 3)
+
+  ss = sp.swap_a_b()
+  ASSERT(ss.a == 2)
+  ASSERT(ss.b == 3)
+
+  ss = sp.swap_a_b_ptr()
+  ASSERT(ss.a == 2)
+  ASSERT(ss.b == 3)
+}
+
 fn main() int {
   printf("structs\n")
 
   construction();
   call_member();
+  call_member_pointer_or_not();
 
   printf(" ...ok\n")
 }
