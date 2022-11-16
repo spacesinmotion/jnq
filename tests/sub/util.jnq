@@ -4,6 +4,10 @@ type Point struct {
   y int
 }
 
+fn neg(p Point) Point {
+  return Point{-p.x, -p.y}
+}
+
 fn add(a int, b int) int {
   return a + b
 }
