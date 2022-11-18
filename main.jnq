@@ -47,17 +47,16 @@ fn a_fn(a *Vec3, b [2]Vec2) float {
   return x
 }
 
+fn test(x int) bool {
+  return x>0
+}
+
 fn main() int
 {
-  v Vec2 = Vec2{
-    y: 5,
-    x: 4,
-  }
-
-  vv Vec2 = *v
-
-  v = v.neg_ptr()
-  ASSERT(v.x == -4)
+  d []int = []int{10,20,30}
+  for (i int = 0; i < 3; ++i) 
+    ASSERT(d[i] = (i+1)*10)
   
+
   printf("ok\n")
 }

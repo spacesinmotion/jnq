@@ -860,15 +860,15 @@ Type *Program_parse_declared_type(Program *p, Module *m, State *st) {
   if (check_op(st, "[")) {
     int count = -1;
     read_int(st, &count);
-    if (!check_op(st, "]"))
-      FATAL(&old, "missing closing ']'!");
-    Type *c = Program_parse_declared_type(p, m, st);
-    if (c) {
-      Type *td = Program_alloc(p, sizeof(Type));
-      td->kind = ArrayT;
-      td->count = count;
-      td->child = c;
-      return td;
+    if (check_op(st, "]")) {
+      Type *c = Program_parse_declared_type(p, m, st);
+      if (c) {
+        Type *td = Program_alloc(p, sizeof(Type));
+        td->kind = ArrayT;
+        td->count = count;
+        td->child = c;
+        return td;
+      }
     }
     *st = old;
   }
@@ -1166,10 +1166,10 @@ Expression *Program_parse_suffix_expression(Program *p, Module *m, State *st, Ex
     Expression *acc = Program_new_Expression(p, AccessE, old);
     acc->access->o = e;
     acc->access->p = Program_parse_expression(p, m, st);
-    if (!acc->access->o)
+    if (!acc->access->p)
       FATAL(st, "missing '[]' content");
     if (!check_op(st, "]"))
-      FATAL(st, "missing closing ']'");
+      FATAL(st, "missing closing ']' for subscription '%s'", st->c);
     acc = Program_parse_suffix_expression(p, m, st, acc);
     return acc;
   }
@@ -2248,6 +2248,7 @@ void VariableStack_push(VariableStack *s, const char *n, Type *t) {
   s->stack[s->stackSize] = (StackVar){n, t};
   s->stackSize++;
 }
+
 Type *VariableStack_find(VariableStack *s, const char *n) {
   for (int i = s->stackSize - 1; i >= 0; i--)
     if (strcmp(s->stack[i].name, n) == 0)
@@ -2372,6 +2373,9 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
     return e->construct->type;
   }
   case AccessE: {
+    Type *subt = c_Expression_make_variables_typed(s, p, m, e->access->p);
+    if (subt != &Int)
+      FATAL(&e->access->p->localtion, "Expect integral type for array subscription");
     Type *t = c_Expression_make_variables_typed(s, p, m, e->access->o);
     if (t->kind != ArrayT && t->kind != PointerT)
       FATAL(&e->localtion, "Expect array/pointer type for access");

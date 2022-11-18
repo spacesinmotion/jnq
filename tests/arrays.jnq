@@ -25,7 +25,6 @@ fn multidimension() {
   ASSERT(a[1][2][3] == 2)
 }
 
-
 fn construct_assign() {
   printf(" .construct_assign\n")
 
@@ -41,12 +40,29 @@ fn construct_assign() {
   ASSERT(b[3] == 2)
 }
 
+fn matrix_test() {
+  printf(" .matrix_test\n")
+
+  m [4][4]int
+  for (i int = 0; i<4; ++i)
+    for (j int = 0; j<4; ++j)
+      m[i][j] = i*4+j
+  ASSERT(m[0][0] == 0)
+  ASSERT(m[1][0] == 4)
+  ASSERT(m[2][0] == 8)
+  ASSERT(m[3][0] == 12)
+  ASSERT(m[0][1] == 1)
+  ASSERT(m[0][2] == 2)
+  ASSERT(m[0][3] == 3)
+}
+
 fn main() int {
   printf("array test\n")
   
   simple()
   construct_assign()
   multidimension()
+  matrix_test()
   
   printf(" ...ok\n")
 }
