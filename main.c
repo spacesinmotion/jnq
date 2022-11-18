@@ -46,7 +46,7 @@ void traceStack_pop() { traceStack.size--; }
 
 void FATAL(State *st, const char *format, ...) {
   va_list args;
-  fprintf(stderr, "%s:%zu:%zu error: ", st->file, st->line, st->column);
+  fprintf(stderr, "%s:%zu:%zu: error: ", st->file, st->line, st->column);
   va_start(args, format);
   vfprintf(stderr, format, args);
   va_end(args);
@@ -1519,7 +1519,9 @@ Module *Program_parse_file(Program *p, const char *path, State *outer_st) {
   if (!code)
     FATAL(outer_st, "missing file! '%s'", tempPath);
 
-  State st = State_new(code, tempPath);
+  char *st_path = Program_alloc(p, strlen(tempPath) + 1);
+  strcpy(st_path, tempPath);
+  State st = State_new(code, st_path);
   Program_parse_module(p, m, &st);
   m->finished = true;
 
