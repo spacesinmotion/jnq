@@ -1080,6 +1080,11 @@ Expression *Program_parse_atom(Program *p, State *st) {
   } else if (is_float) {
     *st = f;
     Expression *e = Program_new_Expression(p, DoubleA, old);
+    if (st->c[0] == 'f') {
+      e->type = FloatA;
+      st->c++;
+      st->column++;
+    }
     e->f = temp_f;
     return e;
   }
