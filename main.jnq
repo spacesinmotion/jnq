@@ -58,7 +58,5 @@ fn main() int
   ASSERT(9.0 == 4.0 + 5.0)
   ASSERT(util.round(-4.23) == -4.0)
 
-  ASSERT(-4 == -4.0 + 0)
-
   printf("ok\n")
 }

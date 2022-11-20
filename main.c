@@ -533,14 +533,16 @@ Type *Module_find_type(Program *p, Module *m, const char *b, const char *e) {
 }
 
 bool TypeDeclare_equal(Type *t1, Type *t2) {
+  if (!t1 && !t2)
+    return false;
   if (t1 == &Null)
     return t2 == &Null || t2->kind == PointerT;
   if (t2 == &Null)
     return t1 == &Null || t1->kind == PointerT;
-  if (t1 == t2)
-    return true;
   if ((!t1 && t2) || (t1 && !t2))
     return false;
+  if (t1 == t2)
+    return true;
   if (t1->kind != t2->kind)
     return false;
   return TypeDeclare_equal(t1->child, t2->child);

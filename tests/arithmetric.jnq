@@ -4,7 +4,7 @@ fn on_float() {
   printf(" .on_float\n")
 
   ASSERT(9.0 == 4.0 + 5.0)
-  ASSERT(4.2 == 6 - 1.8)
+  ASSERT(4.2 == 6.0 - 1.8)
   ASSERT(3.2 == 6.4 / 2.0)
 
   ASSERT(10.8 == 5.4 * 2.0)
