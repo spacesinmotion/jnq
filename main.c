@@ -28,6 +28,11 @@ typedef struct State {
 
 State State_new(const char *c, const char *file) { return (State){.file = file, .c = c, .line = 1, .column = 1}; }
 
+void State_skip(State *s, int c) {
+  s->c += c;
+  s->column += c;
+}
+
 struct {
   State states[128];
   int size;
@@ -749,8 +754,7 @@ bool check_word(State *st, const char *word) {
   skip_whitespace(st);
   State old = *st;
   while (st->c[0] && *word && *word == st->c[0]) {
-    ++st->column;
-    ++st->c;
+    State_skip(st, 1);
     ++word;
   }
   if (*word == 0 && !isalnum(st->c[0]) && st->c[0] != '_')
@@ -763,8 +767,7 @@ bool check_op(State *st, const char *op) {
   skip_whitespace(st);
   State old = *st;
   while (st->c[0] && op[0] && op[0] == st->c[0]) {
-    ++st->column;
-    ++st->c;
+    State_skip(st, 1);
     ++op;
   }
   if (op[0] == 0)
@@ -776,10 +779,8 @@ bool check_op(State *st, const char *op) {
 bool check_identifier(State *st) {
   State old = *st;
   if (st->c[0] && (isalpha(st->c[0]) || st->c[0] == '_')) {
-    while (st->c[0] && (isalnum(st->c[0]) || st->c[0] == '_')) {
-      ++st->column;
-      ++st->c;
-    }
+    while (st->c[0] && (isalnum(st->c[0]) || st->c[0] == '_'))
+      State_skip(st, 1);
   }
   if (old.c < st->c)
     return true;
@@ -790,10 +791,9 @@ bool check_identifier(State *st) {
 bool read_int(State *st, int *i) {
   State old = *st;
   if (isdigit(*st->c)) {
-    while (*st->c && isdigit(*st->c)) {
-      ++st->column;
-      ++st->c;
-    }
+    while (*st->c && isdigit(*st->c))
+      State_skip(st, 1);
+
     char buf[128] = {0};
     if (st->c - old.c > 126)
       FATAL(&old, "Buffer to short for integer conversion!");
@@ -1043,10 +1043,7 @@ Expression *Program_parse_atom(Program *p, State *st) {
     if (!st->c[0] || st->c[1] != '\'')
       FATAL(st, "Wrong char constant");
     e->c = st->c[0];
-    ++st->column;
-    ++st->c;
-    ++st->column;
-    ++st->c;
+    State_skip(st, 2);
     return e;
   }
 
@@ -1055,16 +1052,13 @@ Expression *Program_parse_atom(Program *p, State *st) {
     while (st->c[1] != '"') {
       if (!st->c[0])
         FATAL(&old, "unclosed string constant");
-      ++st->column;
-      ++st->c;
+      State_skip(st, 1);
     }
-    ++st->column;
-    ++st->c;
+    State_skip(st, 1);
     char *str = Program_alloc(p, st->c - old.c);
     strncpy(str, old.c + 1, st->c - old.c - 1);
     e->s = str;
-    ++st->column;
-    ++st->c;
+    State_skip(st, 1);
     return e;
   }
 
@@ -1082,8 +1076,7 @@ Expression *Program_parse_atom(Program *p, State *st) {
     Expression *e = Program_new_Expression(p, DoubleA, old);
     if (st->c[0] == 'f') {
       e->type = FloatA;
-      st->c++;
-      st->column++;
+      State_skip(st, 1);
     }
     e->f = temp_f;
     return e;
