@@ -142,7 +142,7 @@ typedef struct Expression {
     bool b;
     char c;
     int i;
-    float f;
+    double f;
     const char *s;
     Identifier *id;
     Variable *var;
@@ -795,6 +795,16 @@ bool read_int(State *st, int *i) {
   return false;
 }
 
+bool read_float(State *st, double *f) {
+  char *end;
+  *f = strtod(st->c, &end);
+  if (end == st->c)
+    return false;
+  st->column += end - st->c;
+  st->c = end;
+  return true;
+}
+
 const char *read_identifier(Program *p, State *st) {
   State old = *st;
   if (check_identifier(st)) {
@@ -1049,10 +1059,19 @@ Expression *Program_parse_atom(Program *p, State *st) {
     return e;
   }
 
+  double temp_f;
+  State f = *st;
+  bool is_float = read_float(&f, &temp_f);
+
   int temp_i;
-  if (read_int(st, &temp_i)) {
+  if (read_int(st, &temp_i) && (!is_float || st->c >= f.c)) {
     Expression *e = Program_new_Expression(p, IntA, old);
     e->i = temp_i;
+    return e;
+  } else if (is_float) {
+    *st = f;
+    Expression *e = Program_new_Expression(p, FloatA, old);
+    e->f = temp_f;
     return e;
   }
 

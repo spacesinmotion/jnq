@@ -1,7 +1,19 @@
 
 
-fn main() int {
-  printf("arithmetric\n")
+fn on_float() {
+  printf(" .on_float\n")
+
+  ASSERT(9.0 == 4.0 + 5.0)
+  ASSERT(4.2 == 6 - 1.8)
+  ASSERT(3.2 == 6.4 / 2.0)
+
+  ASSERT(10.8 == 5.4 * 2.0)
+  ASSERT(15.0 == 4.2 + 5.4 * 2.0)
+  ASSERT(17.3 != 4.2 + 5.4 * 2.1)
+}
+
+fn on_int() {
+  printf(" .on_int\n")
 
   ASSERT(9 == 4 + 5)
   ASSERT(4 == 6 - 2)
@@ -13,6 +25,13 @@ fn main() int {
   ASSERT(!(14 != 4 + 5 * 2))
   
   ASSERT(18 == (4 + 5) * 2)
+}
 
+fn main() int {
+  printf("arithmetric\n")
+
+  on_int()
+  on_float()
+  
   printf(" ...ok\n")
 }
