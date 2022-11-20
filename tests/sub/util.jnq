@@ -12,4 +12,4 @@ fn add(a int, b int) int {
   return a + b
 }
 
-cfn round(x float) float
+cfn round(x double) double

@@ -123,6 +123,7 @@ typedef enum ExpressionType {
   CharA,
   IntA,
   FloatA,
+  DoubleA,
   StringA,
   IdentifierA,
   VarE,
@@ -499,6 +500,7 @@ Type Bool = (Type){"bool", NULL, Klass, &global, NULL};
 Type Char = (Type){"char", NULL, Klass, &global, NULL};
 Type Int = (Type){"int", NULL, Klass, &global, NULL};
 Type Float = (Type){"float", NULL, Klass, &global, NULL};
+Type Double = (Type){"double", NULL, Klass, &global, NULL};
 Type String = (Type){"string", NULL, Klass, &global, NULL};
 
 Function print = (Function){NULL, NULL, NULL};
@@ -515,6 +517,8 @@ Type *Module_find_type(Program *p, Module *m, const char *b, const char *e) {
     return &Char;
   if (5 == e - b && strncmp(Float.name, b, 5) == 0)
     return &Float;
+  if (6 == e - b && strncmp(Double.name, b, 5) == 0)
+    return &Double;
   if (6 == e - b && strncmp(String.name, b, 6) == 0)
     return &String;
   if (6 == e - b && strncmp(Printf.name, b, 6) == 0)
@@ -680,6 +684,7 @@ Expression *Program_new_Expression(Program *p, ExpressionType t, State l) {
   case CharA:
   case IntA:
   case FloatA:
+  case DoubleA:
   case StringA:
     break;
   case IdentifierA:
@@ -1072,7 +1077,7 @@ Expression *Program_parse_atom(Program *p, State *st) {
     return e;
   } else if (is_float) {
     *st = f;
-    Expression *e = Program_new_Expression(p, FloatA, old);
+    Expression *e = Program_new_Expression(p, DoubleA, old);
     e->f = temp_f;
     return e;
   }
@@ -1767,6 +1772,7 @@ void lisp_expression(FILE *f, Expression *e) {
     fprintf(f, "%d", e->i);
     break;
   case FloatA:
+  case DoubleA:
     fprintf(f, "%g", e->f);
     break;
   case StringA:
@@ -1906,6 +1912,7 @@ void c_expression(FILE *f, Expression *e) {
     fprintf(f, "%d", e->i);
     break;
   case FloatA:
+  case DoubleA:
     fprintf(f, "%g", e->f);
     break;
   case StringA:
@@ -2352,6 +2359,8 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
     return &Int;
   case FloatA:
     return &Float;
+  case DoubleA:
+    return &Double;
   case StringA:
     return &String;
 

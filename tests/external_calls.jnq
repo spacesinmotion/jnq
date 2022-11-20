@@ -1,7 +1,7 @@
 
 use sub.util
 
-cfn sqrt(x float) float
+cfn sqrt(x double) double
 
 fn main() int {
   printf("external_calls\n")
