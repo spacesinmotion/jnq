@@ -1,0 +1,13 @@
+
+use sub.util
+
+cfn sqrt(x float) float
+
+fn main() int {
+  printf("external_calls\n")
+
+  ASSERT(sqrt(4.0) == 2.0)
+  ASSERT(util.round(-4.23) == -4.0)
+
+  printf(" ..ok\n")
+}

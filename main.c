@@ -378,6 +378,7 @@ typedef struct SwitchStatement {
 typedef struct Function {
   Variable *parameter;
   Type *returnType;
+  bool is_extern_c;
   Statement *body;
 } Function;
 
@@ -613,6 +614,7 @@ Function *Program_add_fn(Program *p, Module *m, const char *name) {
   Type *fnt = Program_add_type(p, FnT, name, m);
   fnt->fn = Program_alloc(p, sizeof(Function));
   fnt->fn->body = NULL;
+  fnt->fn->is_extern_c = false;
   return fnt->fn;
 }
 
@@ -1478,7 +1480,7 @@ Statement *Program_parse_scope_block(Program *p, Module *m, State *st) {
     return Program_parse_statement(p, m, st, NULL);
 }
 
-void Program_parse_fn(Program *p, Module *m, State *st) {
+void Program_parse_fn(Program *p, Module *m, State *st, bool extc) {
   skip_whitespace(st);
 
   const char *name = read_identifier(p, st);
@@ -1487,10 +1489,13 @@ void Program_parse_fn(Program *p, Module *m, State *st) {
     if (check_op(st, "(")) {
       fn->parameter = Program_parse_variable_declaration_list(p, m, st, ")");
       fn->returnType = Program_parse_declared_type(p, m, st);
-      if (check_op(st, "{"))
-        fn->body = Program_parse_scope(p, m, st);
-      else
-        FATAL(st, "Missing function body");
+      fn->is_extern_c = extc;
+      if (!extc) {
+        if (check_op(st, "{"))
+          fn->body = Program_parse_scope(p, m, st);
+        else
+          FATAL(st, "Missing function body");
+      }
     } else
       FATAL(st, "Missing parameterlist");
   } else
@@ -1507,7 +1512,9 @@ void Program_parse_module(Program *p, Module *m, State *st) {
       else if (check_word(st, "type"))
         Program_parse_type(p, m, st);
       else if (check_word(st, "fn"))
-        Program_parse_fn(p, m, st);
+        Program_parse_fn(p, m, st, false);
+      else if (check_word(st, "cfn"))
+        Program_parse_fn(p, m, st, true);
       else {
         FATAL(st, "Unknown keyword >>'%s'\n", st->c);
         break;
@@ -1907,7 +1914,7 @@ void c_expression(FILE *f, Expression *e) {
   case IdentifierA:
     if (!e->id->type)
       FATAL(&e->localtion, "unknown type for id '%s'", e->id->name);
-    if (e->id->type->kind == FnT)
+    if (e->id->type->kind == FnT && !e->id->type->fn->is_extern_c)
       fprintf(f, "%s", e->id->type->module->c_name);
     fprintf(f, "%s", e->id->name);
     break;
@@ -1967,7 +1974,9 @@ void c_expression(FILE *f, Expression *e) {
         prefix = "*";
       else if (!e->member->pointer && e->member->member->type->fn->parameter->type->kind == PointerT)
         prefix = "&";
-      fprintf(f, "%s%s(%s", e->member->member->type->module->c_name, e->member->member->name, prefix);
+      if (!e->member->member->type->fn->is_extern_c)
+        fprintf(f, "%s", e->member->member->type->module->c_name);
+      fprintf(f, "%s(%s", e->member->member->name, prefix);
       if (e->member->o->type != IdentifierA || e->member->o->id->type->kind != Mod)
         c_expression(f, e->member->o);
       break;
@@ -2113,7 +2122,7 @@ void c_fn(FILE *f, const char *module_name, TypeList *tl) {
     return;
 
   c_fn(f, module_name, tl->next);
-  if (tl->type->kind != FnT)
+  if (tl->type->kind != FnT || tl->type->fn->is_extern_c)
     return;
 
   Function *fn = tl->type->fn;
@@ -2218,7 +2227,7 @@ void c_fn_forward(FILE *f, const char *module_name, TypeList *tl) {
     return;
 
   c_fn_forward(f, module_name, tl->next);
-  if (tl->type->kind != FnT)
+  if (tl->type->kind != FnT || tl->type->fn->is_extern_c)
     return;
 
   Function *fn = tl->type->fn;
@@ -2568,6 +2577,7 @@ void c_Program(FILE *f, Program *p, Module *m) {
   fputs("#include <stdio.h>\n", f);
   fputs("#include <stdlib.h>\n", f);
   fputs("#include <string.h>\n", f);
+  fputs("#include <math.h>\n", f);
   fputs("\n", f);
 
   fputs("#define ASSERT(EXP)                          \\\n", f);
@@ -2643,7 +2653,7 @@ int main(int argc, char *argv[]) {
     // strcat(clang_call, main_c);
     // system(clang_call);
     // clang_call[0] = 0;
-    strcat(clang_call, "clang -o " JNQ_BIN " -Werror -g ");
+    strcat(clang_call, "clang -o " JNQ_BIN " -Werror -g -lm ");
     strcat(clang_call, main_c);
     error = system(clang_call);
     if (error != 0)

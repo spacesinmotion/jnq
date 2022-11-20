@@ -47,9 +47,7 @@ fn a_fn(a *Vec3, b [2]Vec2) float {
   return x
 }
 
-fn test(x int) bool {
-  return x>0
-}
+
 
 fn main() int
 {
@@ -58,6 +56,8 @@ fn main() int
     ASSERT(d[i] = (i+1)*10)
 
   ASSERT(9.0 == 4.0 + 5.0)
+  ASSERT(util.round(-4.23) == -4.0)
+
 
   printf("ok\n")
 }
