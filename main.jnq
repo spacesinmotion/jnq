@@ -47,8 +47,6 @@ fn a_fn(a *Vec3, b [2]Vec2) float {
   return x
 }
 
-
-
 fn main() int
 {
   d []int = []int{10,20,30}

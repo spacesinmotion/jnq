@@ -1,0 +1,21 @@
+
+type Vec2 struct {
+  x float, 
+  y float,
+}
+
+type Vec3 struct {
+  x float 
+  y float
+  z float 
+}
+
+type VecU union { Vec3, Vec2 }
+
+fn main() int {
+  printf("unions\n")
+
+  x VecU = VecU{Vec2{0.1f, 0.3f}}
+
+  printf(" ...ok\n")
+}
