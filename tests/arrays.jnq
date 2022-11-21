@@ -11,6 +11,10 @@ fn simple() {
   ASSERT(a[0] == 1)
   ASSERT(a[1] == 2)
   ASSERT(a[2] == 4)
+
+  d []int = []int{10,20,30}
+  for (i int = 0; i < 3; ++i) 
+    ASSERT(d[i] = (i+1)*10)
 }
 
 fn multidimension() {

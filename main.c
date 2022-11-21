@@ -2737,5 +2737,5 @@ int main(int argc, char *argv[]) {
   remove("jnq_bin.pdb");
 #endif
 
-  return 0;
+  return error;
 }
