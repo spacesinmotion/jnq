@@ -16,6 +16,7 @@ fn main() int {
   printf("unions\n")
 
   x VecU = VecU{Vec2{0.1f, 0.3f}}
+  y VecU = VecU{Vec3{0.1f, 0.3f}}
 
   printf(" ...ok\n")
 }

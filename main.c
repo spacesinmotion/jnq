@@ -512,7 +512,7 @@ Type String = (Type){"string", NULL, Klass, &global, NULL};
 
 Type Ellipsis = (Type){"...", NULL, Klass, &global, NULL};
 
-Function print = (Function){&(Variable){"format", &String, &(Variable){"...", &Ellipsis, NULL}}, NULL, NULL};
+Function print = (Function){&(Variable){"...", &Ellipsis, &(Variable){"format", &String, NULL}}, NULL, NULL};
 Type Printf = (Type){"printf", .fn = &print, FnT, &global, NULL};
 Function assert = (Function){&(Variable){"cond", &Bool, NULL}, NULL, NULL};
 Type Assert = (Type){"ASSERT", .fn = &assert, FnT, &global, NULL};
@@ -1979,7 +1979,7 @@ void c_expression(FILE *f, Expression *e) {
     break;
   case MemberAccessE: {
     if (!e->member->member->type)
-      FATAL(&e->localtion, "unknown type for id '%s'", e->member->member->name);
+      FATAL(&e->localtion, "unknown type for member '%s'", e->member->member->name);
     switch (e->member->member->type->kind) {
     case Enum:
       fprintf(f, "%s%s", e->member->member->type->module->c_name, e->member->member->name);
@@ -2402,10 +2402,12 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
     Type *t = c_Expression_make_variables_typed(s, p, m, e->call->o);
     if (!t || t->kind != FnT)
       FATAL(&e->localtion, "Need a function to be called!");
+    for (Parameter *pa = e->call->p; pa; pa = pa->next)
+      c_Expression_make_variables_typed(s, p, m, pa->p);
+
     Parameter *pa = e->call->p;
     Variable *va = t->fn->parameter;
     while (pa && va) {
-      c_Expression_make_variables_typed(s, p, m, pa->p);
       pa = pa->next;
       va = va->next;
     }
@@ -2415,9 +2417,9 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
       va = va->next;
       // compare pa->type with e->call->o->member->o_type
     }
-    if (pa)
+    if (pa && t->fn->parameter->type != &Ellipsis)
       FATAL(&e->localtion, "To much parameter for function call");
-    if (va && va->type != &Ellipsis)
+    if (va && t->fn->parameter->type != &Ellipsis)
       FATAL(&e->localtion, "Missing parameter for function call");
     return t->fn->returnType;
   }
