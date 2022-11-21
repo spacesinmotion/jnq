@@ -1,0 +1,16 @@
+
+type Days enum {
+  Mon, Tue, Wed, Thu = 4, Fri, Sat = -4, Sun
+}
+
+fn main() int {
+  printf("enums\n")
+
+  e Days = Days.Tue
+  f Days = Days.Sun
+  ASSERT(e == Days.Tue)
+  ASSERT(e != f)
+  ASSERT(-3 == f as int)
+
+  printf(" ..ok\n")
+}
