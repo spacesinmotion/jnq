@@ -2662,7 +2662,11 @@ int main(int argc, char *argv[]) {
     // strcat(clang_call, main_c);
     // system(clang_call);
     // clang_call[0] = 0;
-    strcat(clang_call, "clang -o " JNQ_BIN " -Werror -g -lm ");
+    strcat(clang_call, "clang -o " JNQ_BIN " -Werror -g "
+#ifndef _WIN32
+                       "-lm "
+#endif
+    );
     strcat(clang_call, main_c);
     error = system(clang_call);
     if (error != 0)
