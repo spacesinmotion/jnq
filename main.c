@@ -247,6 +247,7 @@ typedef struct Access {
 
 typedef struct MemberAccess {
   Expression *o;
+  Type *o_type;
   Identifier *member;
   bool pointer;
 } MemberAccess;
@@ -508,9 +509,11 @@ Type Float = (Type){"float", NULL, Klass, &global, NULL};
 Type Double = (Type){"double", NULL, Klass, &global, NULL};
 Type String = (Type){"string", NULL, Klass, &global, NULL};
 
-Function print = (Function){NULL, NULL, NULL};
+Type Ellipsis = (Type){"...", NULL, Klass, &global, NULL};
+
+Function print = (Function){&(Variable){"format", &String, &(Variable){"...", &Ellipsis, NULL}}, NULL, NULL};
 Type Printf = (Type){"printf", .fn = &print, FnT, &global, NULL};
-Function assert = (Function){NULL, NULL, NULL};
+Function assert = (Function){&(Variable){"cond", &Bool, NULL}, NULL, NULL};
 Type Assert = (Type){"ASSERT", .fn = &assert, FnT, &global, NULL};
 
 Type *Module_find_type(Program *p, Module *m, const char *b, const char *e) {
@@ -1171,6 +1174,7 @@ Expression *Program_parse_suffix_expression(Program *p, Module *m, State *st, Ex
       FATAL(st, "missing id for member access");
     Expression *ma = Program_new_Expression(p, MemberAccessE, old);
     ma->member->o = e;
+    ma->member->o_type = NULL;
     ma->member->member = Program_alloc(p, sizeof(Identifier));
     ma->member->member->name = member;
     ma->member->member->type = NULL;
@@ -2380,11 +2384,26 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
   case BraceE:
     return c_Expression_make_variables_typed(s, p, m, e->brace->o);
   case CallE: {
-    for (Parameter *pa = e->call->p; pa; pa = pa->next)
-      c_Expression_make_variables_typed(s, p, m, pa->p);
     Type *t = c_Expression_make_variables_typed(s, p, m, e->call->o);
     if (!t || t->kind != FnT)
       FATAL(&e->localtion, "Need a function to be called!");
+    Parameter *pa = e->call->p;
+    Variable *va = t->fn->parameter;
+    while (pa && va) {
+      c_Expression_make_variables_typed(s, p, m, pa->p);
+      pa = pa->next;
+      va = va->next;
+    }
+    if (va && !pa && e->call->o->type == MemberAccessE) {
+      if (!e->call->o->member->o_type)
+        FATAL(&e->call->o->localtion, "Missing type on member access");
+      va = va->next;
+      // compare pa->type with e->call->o->member->o_type
+    }
+    if (pa)
+      FATAL(&e->localtion, "To much parameter for function call");
+    if (va && va->type != &Ellipsis)
+      FATAL(&e->localtion, "Missing parameter for function call");
     return t->fn->returnType;
   }
   case ConstructE: {
@@ -2430,6 +2449,7 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
       FATAL(&e->localtion, "Expect non pointer type for member access");
     if (!(e->member->member->type = Module_find_member(p, t, e->member->member)))
       FATAL(&e->localtion, "unknow member '%s' for '%s'", e->member->member->name, t->name);
+    e->member->o_type = t;
     return e->member->member->type;
   }
   case AsCast:
