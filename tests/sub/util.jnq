@@ -12,4 +12,8 @@ fn add(a int, b int) int {
   return a + b
 }
 
+type Nix enum {
+  Nice, Nicer, Nicest
+}
+
 cfn round(x double) double

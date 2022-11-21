@@ -1,4 +1,6 @@
 
+use sub.util
+
 type Days enum {
   Mon, Tue, Wed, Thu = 4, Fri, Sat = -4, Sun
 }
@@ -11,6 +13,10 @@ fn main() int {
   ASSERT(e == Days.Tue)
   ASSERT(e != f)
   ASSERT(-3 == f as int)
+
+  n util.Nix = util.Nix.Nicer
+  ASSERT(n != util.Nix.Nice)
+  ASSERT(n == util.Nix.Nicer)
 
   printf(" ..ok\n")
 }
