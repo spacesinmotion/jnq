@@ -468,6 +468,12 @@ void *Program_alloc(Program *p, size_t size) {
   return d;
 }
 
+const char *Program_copy_string(Program *p, const char *s, size_t l) {
+  char *id = Program_alloc(p, l + 1);
+  strncpy(id, s, l);
+  return id;
+}
+
 char *readFile(const char *filename) {
   char *buffer = 0;
   long length;
@@ -820,11 +826,8 @@ bool read_float(State *st, double *f) {
 
 const char *read_identifier(Program *p, State *st) {
   State old = *st;
-  if (check_identifier(st)) {
-    char *id = Program_alloc(p, st->c - old.c + 1);
-    strncpy(id, old.c, st->c - old.c);
-    return id;
-  }
+  if (check_identifier(st))
+    return Program_copy_string(p, old.c, st->c - old.c);
   return NULL;
 }
 
@@ -1027,8 +1030,7 @@ Expression *Program_parse_atom(Program *p, State *st) {
   skip_whitespace(st);
   State old = *st;
   if (check_identifier(st)) {
-    char *id = Program_alloc(p, st->c - old.c + 1);
-    strncpy(id, old.c, st->c - old.c);
+    const char *id = Program_copy_string(p, old.c, st->c - old.c);
 
     bool isTrue = strcmp(id, "true") == 0;
     if (isTrue || strcmp(id, "false") == 0) {
@@ -1064,9 +1066,8 @@ Expression *Program_parse_atom(Program *p, State *st) {
       State_skip(st, 1);
     }
     State_skip(st, 1);
-    char *str = Program_alloc(p, st->c - old.c);
-    strncpy(str, old.c + 1, st->c - old.c - 1);
-    e->s = str;
+
+    e->s = Program_copy_string(p, old.c + 1, st->c - old.c - 1);
     State_skip(st, 1);
     return e;
   }
@@ -1131,13 +1132,11 @@ Parameter *Program_parse_named_parameter_list(Program *p, Module *m, State *st) 
       *st = old;
       break;
     }
-    char *id = Program_alloc(p, id_end - old.c + 1);
-    strncpy(id, old.c, id_end - old.c);
     Parameter *pp = Program_alloc(p, sizeof(Parameter));
     pp->next = param;
     pp->p = e;
     pp->v = Program_alloc(p, sizeof(Identifier));
-    pp->v->name = id;
+    pp->v->name = Program_copy_string(p, old.c, id_end - old.c);
     pp->v->type = NULL;
     param = pp;
     if (!check_op(st, ","))
