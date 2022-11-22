@@ -12,10 +12,10 @@ type Vec3 struct {
   z float 
 }
 
-type VecU union { Vec3, Vec2, util.Point, util.Nix }
+type VecU uniontype { Vec3, Vec2, util.Point, util.Nix }
 
 fn main() int {
-  printf("unions\n")
+  printf("uniontypes\n")
 
   x VecU = VecU{Vec2{0.1f, 0.3f}}
   y VecU = VecU{Vec3{0.1f, 0.3f}}

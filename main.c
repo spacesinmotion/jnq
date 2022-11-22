@@ -395,12 +395,12 @@ typedef struct EnumEntry {
   EnumEntry *next;
 } EnumEntry;
 
-typedef struct UnionEntry UnionEntry;
-typedef struct UnionEntry {
+typedef struct UnionTypeEntry UnionTypeEntry;
+typedef struct UnionTypeEntry {
   Type *type;
   int index;
-  UnionEntry *next;
-} UnionEntry;
+  UnionTypeEntry *next;
+} UnionTypeEntry;
 
 typedef struct Function {
   Variable *parameter;
@@ -409,14 +409,14 @@ typedef struct Function {
   Statement *body;
 } Function;
 
-typedef enum TypeKind { Mod, Klass, Enum, Union, ArrayT, PointerT, FnT } TypeKind;
+typedef enum TypeKind { Mod, Klass, Enum, UnionType, ArrayT, PointerT, FnT } TypeKind;
 
 typedef struct Type {
   const char *name;
   union {
     Variable *member;
     EnumEntry *entries;
-    UnionEntry *union_member;
+    UnionTypeEntry *union_type_member;
     Function *fn;
     Module *mod;
     int count;
@@ -599,8 +599,8 @@ Type *Program_add_type(Program *p, TypeKind k, const char *name, Module *m) {
   case Enum:
     tt->entries = NULL;
     break;
-  case Union:
-    tt->union_member = NULL;
+  case UnionType:
+    tt->union_type_member = NULL;
     break;
   case FnT:
     tt->fn = NULL;
@@ -978,20 +978,20 @@ EnumEntry *Program_parse_enum_entry_list(Program *p, State *st) {
   return NULL;
 }
 
-UnionEntry *Program_parse_union_entry_list(Program *p, Module *m, State *st) {
+UnionTypeEntry *Program_parse_union_entry_list(Program *p, Module *m, State *st) {
   skip_whitespace(st);
   State old = *st;
-  UnionEntry *top = NULL;
+  UnionTypeEntry *top = NULL;
   int size = 0;
   while (*st->c) {
     if (check_op(st, "}")) {
-      for (UnionEntry *ua = top; ua; ua = ua->next)
+      for (UnionTypeEntry *ua = top; ua; ua = ua->next)
         ua->index = size--;
       return top;
     }
 
     size++;
-    UnionEntry *e = Program_alloc(p, sizeof(UnionEntry));
+    UnionTypeEntry *e = Program_alloc(p, sizeof(UnionTypeEntry));
     e->type = Program_parse_declared_type(p, m, st);
     check_op(st, ",");
     e->next = top;
@@ -1011,9 +1011,9 @@ void Program_parse_type(Program *p, Module *m, State *st) {
     } else if (check_word(st, "enum") && check_op(st, "{")) {
       Type *e = Program_add_type(p, Enum, name, m);
       e->entries = Program_parse_enum_entry_list(p, st);
-    } else if (check_word(st, "union") && check_op(st, "{")) {
-      Type *u = Program_add_type(p, Union, name, m);
-      u->union_member = Program_parse_union_entry_list(p, m, st);
+    } else if (check_word(st, "uniontype") && check_op(st, "{")) {
+      Type *u = Program_add_type(p, UnionType, name, m);
+      u->union_type_member = Program_parse_union_entry_list(p, m, st);
     } else
       FATAL(st, "Missing type declaration");
   } else
@@ -1599,7 +1599,7 @@ bool c_type_declare(FILE *f, Type *t, const char *var) {
   case Mod:
   case Klass:
   case Enum:
-  case Union:
+  case UnionType:
     fprintf(f, "%s%s", t->module->c_name, t->name);
     break;
   case FnT:
@@ -1662,7 +1662,7 @@ void c_struct(FILE *f, const char *module_name, const char *name, Variable *memb
   fprintf(f, ";\n} %s%s;\n\n", module_name, name);
 }
 
-void c_union_enum_entry(FILE *f, const char *module_name, const char *name, UnionEntry *entry) {
+void c_union_enum_entry(FILE *f, const char *module_name, const char *name, UnionTypeEntry *entry) {
   if (!entry)
     return;
 
@@ -1673,11 +1673,11 @@ void c_union_enum_entry(FILE *f, const char *module_name, const char *name, Unio
   fprintf(f, "%s_%s_u%d_t", module_name, name, entry->index);
 }
 
-void c_union_entry(FILE *f, UnionEntry *entry) {
+void c_uniontype_entry(FILE *f, UnionTypeEntry *entry) {
   if (!entry)
     return;
 
-  c_union_entry(f, entry->next);
+  c_uniontype_entry(f, entry->next);
 
   if (entry->next)
     fprintf(f, ";\n    ");
@@ -1686,7 +1686,7 @@ void c_union_entry(FILE *f, UnionEntry *entry) {
   fprintf(f, " _u%d", entry->index);
 }
 
-void c_union_forward(FILE *f, const char *module_name, const char *name, UnionEntry *member) {
+void c_union_forward(FILE *f, const char *module_name, const char *name, UnionTypeEntry *member) {
   if (member) {
     fprintf(f, "typedef enum %s%sType", module_name, name);
     if (!member) {
@@ -1703,7 +1703,7 @@ void c_union_forward(FILE *f, const char *module_name, const char *name, UnionEn
   fprintf(f, "typedef struct %s%s %s%s;\n", module_name, name, module_name, name);
 }
 
-void c_union(FILE *f, const char *module_name, const char *name, UnionEntry *member) {
+void c_uniontype(FILE *f, const char *module_name, const char *name, UnionTypeEntry *member) {
   fprintf(f, "typedef struct %s%s", module_name, name);
   if (!member) {
     fprintf(f, " {} %s%s;\n\n", module_name, name);
@@ -1711,7 +1711,7 @@ void c_union(FILE *f, const char *module_name, const char *name, UnionEntry *mem
   }
 
   fprintf(f, " {\n  union {\n    ");
-  c_union_entry(f, member);
+  c_uniontype_entry(f, member);
   fprintf(f, ";\n  };\n");
   fprintf(f, "  %s%sType type;", module_name, name);
   fprintf(f, "\n} %s%s;\n\n", module_name, name);
@@ -1731,8 +1731,8 @@ void c_type(FILE *f, const char *module_name, TypeList *t) {
     break;
   case Enum:
     break;
-  case Union:
-    c_union(f, module_name, t->type->name, t->type->union_member);
+  case UnionType:
+    c_uniontype(f, module_name, t->type->name, t->type->union_type_member);
     break;
   case FnT:
     // todo!??
@@ -1795,7 +1795,7 @@ void lisp_expression(FILE *f, Expression *e) {
       case Mod:
       case Klass:
       case Enum:
-      case Union:
+      case UnionType:
         fprintf(f, "%s", t->name);
         break;
       case FnT:
@@ -1831,7 +1831,7 @@ void lisp_expression(FILE *f, Expression *e) {
       case Mod:
       case Klass:
       case Enum:
-      case Union:
+      case UnionType:
         fprintf(f, "%s", t->name);
         break;
       case FnT:
@@ -1944,11 +1944,11 @@ void c_expression(FILE *f, Expression *e) {
     fprintf(f, ")");
     break;
   case ConstructE: {
-    if (e->construct->type->kind == Union) {
+    if (e->construct->type->kind == UnionType) {
       fprintf(f, "(%s%s){", e->construct->type->module->c_name, e->construct->type->name);
       if (!e->construct->p->v)
         FATAL(&e->localtion, "internal error: no union entry selected");
-      UnionEntry *ua = (UnionEntry *)e->construct->p->v;
+      UnionTypeEntry *ua = (UnionTypeEntry *)e->construct->p->v;
       fprintf(f, "._u%d = ", ua->index);
       c_expression(f, e->construct->p->p);
       fprintf(f, ", .type = %s_%s_u%d_t}", e->construct->type->module->c_name, e->construct->type->name, ua->index);
@@ -1979,7 +1979,7 @@ void c_expression(FILE *f, Expression *e) {
       break;
     case Mod:
     case Klass:
-    case Union:
+    case UnionType:
     case PointerT:
       c_expression(f, e->member->o);
       fprintf(f, "%s%s", (e->member->pointer ? "->" : "."), e->member->member->name);
@@ -2210,8 +2210,8 @@ void c_type_forward(FILE *f, const char *module_name, TypeList *t) {
   case Enum:
     c_enum(f, module_name, t->type->name, t->type->entries);
     break;
-  case Union:
-    c_union_forward(f, module_name, t->type->name, t->type->union_member);
+  case UnionType:
+    c_union_forward(f, module_name, t->type->name, t->type->union_type_member);
     break;
   case Mod:
     break;
@@ -2336,7 +2336,7 @@ Type *Module_find_member(Program *p, Type *t, Identifier *member) {
         return t;
     break;
   }
-  case Union:
+  case UnionType:
     // union?? -> some build in ()
     break;
   case Mod:
@@ -2424,13 +2424,13 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
         if (!TypeDeclare_equal(pt, et))
           FATAL(&e->localtion, "Type missmatch for array element of '%s'!", e->construct->type->child->name);
       }
-    } else if (e->construct->type->kind == Union) {
+    } else if (e->construct->type->kind == UnionType) {
       if (e->construct->p->next)
         FATAL(&e->localtion, "A union type could be only of one kind");
       if (e->construct->p->v)
         FATAL(&e->localtion, "Named initialisation of a union das not work");
       Type *pt = c_Expression_make_variables_typed(s, p, m, e->construct->p->p);
-      UnionEntry *ua = e->construct->type->union_member;
+      UnionTypeEntry *ua = e->construct->type->union_type_member;
       for (; ua; ua = ua->next)
         if (TypeDeclare_equal(pt, ua->type))
           break;
@@ -2473,7 +2473,7 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
       t = t->child;
       e->member->pointer = true;
     }
-    if (t->kind != Klass && t->kind != Enum && t->kind != Union && t->kind != Mod)
+    if (t->kind != Klass && t->kind != Enum && t->kind != UnionType && t->kind != Mod)
       FATAL(&e->localtion, "Expect non pointer type for member access");
     if (!(e->member->member->type = Module_find_member(p, t, e->member->member)))
       FATAL(&e->localtion, "unknow member '%s' for '%s'", e->member->member->name, t->name);
