@@ -4,6 +4,11 @@ type Stuff struct {
   b int
 }
 
+type Swoll union {
+  a double
+  b double
+}
+
 fn swap_a_b(s Stuff) Stuff {
   x int = s.b
   s.b = s.a
@@ -66,12 +71,26 @@ fn call_member_pointer_or_not()  {
   ASSERT(ss.b == 3)
 }
 
+fn union_check()  {
+  printf(" .union_check\n")
+
+  s Swoll = Swoll{0.4}
+  ASSERT(s.a == 0.4)
+  ASSERT(s.b == 0.4)
+
+  s.b = 0.6
+
+  ASSERT(s.a == 0.6)
+  ASSERT(s.b == 0.6)
+}
+
 fn main() int {
   printf("structs\n")
 
-  construction();
-  call_member();
-  call_member_pointer_or_not();
+  construction()
+  call_member()
+  call_member_pointer_or_not()
+  union_check()
 
   printf(" ...ok\n")
 }

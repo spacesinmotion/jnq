@@ -409,7 +409,7 @@ typedef struct Function {
   Statement *body;
 } Function;
 
-typedef enum TypeKind { Mod, Klass, Enum, UnionType, ArrayT, PointerT, FnT } TypeKind;
+typedef enum TypeKind { Mod, Struct, Union, Enum, UnionType, ArrayT, PointerT, FnT } TypeKind;
 
 typedef struct Type {
   const char *name;
@@ -508,15 +508,15 @@ Module *Program_reset_module_finished(Program *p) {
 }
 
 Module global = (Module){"", "", NULL, NULL, true, NULL};
-Type Null = (Type){"null_t", NULL, Klass, &global, NULL};
-Type Bool = (Type){"bool", NULL, Klass, &global, NULL};
-Type Char = (Type){"char", NULL, Klass, &global, NULL};
-Type Int = (Type){"int", NULL, Klass, &global, NULL};
-Type Float = (Type){"float", NULL, Klass, &global, NULL};
-Type Double = (Type){"double", NULL, Klass, &global, NULL};
-Type String = (Type){"string", NULL, Klass, &global, NULL};
+Type Null = (Type){"null_t", NULL, Struct, &global, NULL};
+Type Bool = (Type){"bool", NULL, Struct, &global, NULL};
+Type Char = (Type){"char", NULL, Struct, &global, NULL};
+Type Int = (Type){"int", NULL, Struct, &global, NULL};
+Type Float = (Type){"float", NULL, Struct, &global, NULL};
+Type Double = (Type){"double", NULL, Struct, &global, NULL};
+Type String = (Type){"string", NULL, Struct, &global, NULL};
 
-Type Ellipsis = (Type){"...", NULL, Klass, &global, NULL};
+Type Ellipsis = (Type){"...", NULL, Struct, &global, NULL};
 
 Function print = (Function){&(Variable){"...", &Ellipsis, &(Variable){"format", &String, NULL}}, NULL, NULL};
 Type Printf = (Type){"printf", .fn = &print, FnT, &global, NULL};
@@ -593,7 +593,8 @@ Type *Program_add_type(Program *p, TypeKind k, const char *name, Module *m) {
   case Mod:
     tt->mod = NULL;
     break;
-  case Klass:
+  case Struct:
+  case Union:
     tt->member = NULL;
     break;
   case Enum:
@@ -1005,8 +1006,9 @@ void Program_parse_type(Program *p, Module *m, State *st) {
 
   const char *name = NULL;
   if ((name = read_identifier(p, st))) {
-    if (check_word(st, "struct") && check_op(st, "{")) {
-      Type *c = Program_add_type(p, Klass, name, m);
+    bool is_union = check_word(st, "union");
+    if ((is_union || check_word(st, "struct")) && check_op(st, "{")) {
+      Type *c = Program_add_type(p, is_union ? Union : Struct, name, m);
       c->member = Program_parse_variable_declaration_list(p, m, st, "}");
     } else if (check_word(st, "enum") && check_op(st, "{")) {
       Type *e = Program_add_type(p, Enum, name, m);
@@ -1597,7 +1599,8 @@ bool c_type_declare(FILE *f, Type *t, const char *var) {
     fprintf(f, "*");
     break;
   case Mod:
-  case Klass:
+  case Struct:
+  case Union:
   case Enum:
   case UnionType:
     fprintf(f, "%s%s", t->module->c_name, t->name);
@@ -1649,8 +1652,8 @@ void c_var_list(FILE *f, Variable *v, const char *br) {
     fprintf(f, " %s", v->name);
 }
 
-void c_struct(FILE *f, const char *module_name, const char *name, Variable *member) {
-  fprintf(f, "typedef struct %s%s", module_name, name);
+void c_struct(FILE *f, const char *module_name, const char *name, bool is_union, Variable *member) {
+  fprintf(f, "typedef %s %s%s", (is_union ? "union" : "struct"), module_name, name);
   if (!member) {
     fprintf(f, " {} %s%s;\n\n", module_name, name);
     return;
@@ -1726,8 +1729,9 @@ void c_type(FILE *f, const char *module_name, TypeList *t) {
   switch (t->type->kind) {
   case Mod:
     break;
-  case Klass:
-    c_struct(f, module_name, t->type->name, t->type->member);
+  case Union:
+  case Struct:
+    c_struct(f, module_name, t->type->name, t->type->kind == Union, t->type->member);
     break;
   case Enum:
     break;
@@ -1793,7 +1797,8 @@ void lisp_expression(FILE *f, Expression *e) {
         fprintf(f, "*");
         break;
       case Mod:
-      case Klass:
+      case Struct:
+      case Union:
       case Enum:
       case UnionType:
         fprintf(f, "%s", t->name);
@@ -1829,7 +1834,8 @@ void lisp_expression(FILE *f, Expression *e) {
         fprintf(f, "*");
         break;
       case Mod:
-      case Klass:
+      case Struct:
+      case Union:
       case Enum:
       case UnionType:
         fprintf(f, "%s", t->name);
@@ -1953,7 +1959,7 @@ void c_expression(FILE *f, Expression *e) {
       c_expression(f, e->construct->p->p);
       fprintf(f, ", .type = %s_%s_u%d_t}", e->construct->type->module->c_name, e->construct->type->name, ua->index);
     } else {
-      if (e->construct->type->kind == Klass)
+      if (e->construct->type->kind == Struct || e->construct->type->kind == Union)
         fprintf(f, "(%s%s){", e->construct->type->module->c_name, e->construct->type->name);
       else if (e->construct->type->kind == ArrayT)
         fprintf(f, "{");
@@ -1978,7 +1984,8 @@ void c_expression(FILE *f, Expression *e) {
       fprintf(f, "%s%s", e->member->member->type->module->c_name, e->member->member->name);
       break;
     case Mod:
-    case Klass:
+    case Struct:
+    case Union:
     case UnionType:
     case PointerT:
       c_expression(f, e->member->o);
@@ -2204,8 +2211,11 @@ void c_type_forward(FILE *f, const char *module_name, TypeList *t) {
   c_type_forward(f, module_name, t->next);
 
   switch (t->type->kind) {
-  case Klass:
+  case Struct:
     fprintf(f, "typedef struct %s%s %s%s;\n", module_name, t->type->name, module_name, t->type->name);
+    break;
+  case Union:
+    fprintf(f, "typedef union %s%s %s%s;\n", module_name, t->type->name, module_name, t->type->name);
     break;
   case Enum:
     c_enum(f, module_name, t->type->name, t->type->entries);
@@ -2323,7 +2333,8 @@ bool is_member_fn_for(Type *ot, Type *ft, Identifier *member) {
 
 Type *Module_find_member(Program *p, Type *t, Identifier *member) {
   switch (t->kind) {
-  case Klass: {
+  case Union:
+  case Struct: {
     for (Variable *v = t->member; v; v = v->next)
       if (strcmp(v->name, member->name) == 0) {
         return v->type;
@@ -2437,11 +2448,11 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
       if (!ua)
         FATAL(&e->localtion, "type '%s' not supported by '%s'", pt->name, e->construct->type->name);
       e->construct->p->v = (Identifier *)ua; // unsafe
-    } else if (e->construct->type->kind == Klass) {
+    } else if (e->construct->type->kind == Struct || e->construct->type->kind == Union) {
       for (Parameter *pa = e->construct->p; pa; pa = pa->next) {
         Type *pt = c_Expression_make_variables_typed(s, p, m, pa->p);
         if (pa->v) {
-          if (e->construct->type->kind != Klass)
+          if (e->construct->type->kind != Struct)
             FATAL(&pa->p->localtion, "Named construction '%s' for none struct type!", pa->v->name);
           Type *vt = Module_find_member(p, e->construct->type, pa->v);
           if (!vt)
@@ -2473,7 +2484,7 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
       t = t->child;
       e->member->pointer = true;
     }
-    if (t->kind != Klass && t->kind != Enum && t->kind != UnionType && t->kind != Mod)
+    if (t->kind != Struct && t->kind != Union && t->kind != Enum && t->kind != UnionType && t->kind != Mod)
       FATAL(&e->localtion, "Expect non pointer type for member access");
     if (!(e->member->member->type = Module_find_member(p, t, e->member->member)))
       FATAL(&e->localtion, "unknow member '%s' for '%s'", e->member->member->name, t->name);
