@@ -799,19 +799,13 @@ bool check_identifier(State *st) {
 }
 
 bool read_int(State *st, int *i) {
-  State old = *st;
-  if (isdigit(*st->c)) {
-    while (*st->c && isdigit(*st->c))
-      State_skip(st, 1);
-
-    char buf[128] = {0};
-    if (st->c - old.c > 126)
-      FATAL(&old, "Buffer to short for integer conversion!");
-    strncpy(buf, old.c, st->c - old.c);
-    *i = atoi(buf);
-    return true;
-  }
-  return false;
+  char *end;
+  *i = strtol(st->c, &end, 10);
+  if (end == st->c)
+    return false;
+  st->column += end - st->c;
+  st->c = end;
+  return true;
 }
 
 bool read_float(State *st, double *f) {
