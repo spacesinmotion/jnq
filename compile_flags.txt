@@ -1,1 +1,2 @@
 -std=c11
+-D_CRT_SECURE_NO_WARNINGS

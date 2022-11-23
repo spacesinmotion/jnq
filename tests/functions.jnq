@@ -7,6 +7,10 @@ fn add(x int, y int) int {
   return x + y
 }
 
+fn add_2(x int, y double) double {
+  return x as double + y
+}
+
 fn main() int {
   printf("functions\n")
 
@@ -19,6 +23,9 @@ fn main() int {
   ASSERT(4 + a() == 46)
   ASSERT(2 * a() + 4 == 88)
   ASSERT(4 + a() * 2 == 88)
+
+  ASSERT(32.1 == add_2(28, 4.1))
+  ASSERT(46.32 == add_2(a(), 4.32))
 
   printf(" ...ok\n")
 }
