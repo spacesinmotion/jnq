@@ -9,6 +9,11 @@ type Swoll union {
   b double
 }
 
+type Spold struct {
+  x Stuff
+  y Swoll
+}
+
 fn swap_a_b(s Stuff) Stuff {
   x int = s.b
   s.b = s.a
@@ -84,6 +89,22 @@ fn union_check()  {
   ASSERT(s.b == 0.6)
 }
 
+fn compined_check()  {
+  printf(" .compined_check\n")
+
+  s Spold = Spold{
+    x: Stuff{
+      a: 3,
+      b: 12
+    },
+    y: Swoll{b: 4.2}
+  }
+  ASSERT(s.x.a == 3)
+  ASSERT(s.x.b == 12)
+  ASSERT(s.y.b == 4.2)
+  ASSERT(s.y.a == 4.2)
+}
+
 fn main() int {
   printf("structs\n")
 
@@ -91,6 +112,7 @@ fn main() int {
   call_member()
   call_member_pointer_or_not()
   union_check()
+  compined_check()
 
   printf(" ...ok\n")
 }

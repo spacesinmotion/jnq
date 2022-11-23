@@ -2452,7 +2452,7 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
       for (Parameter *pa = e->construct->p; pa; pa = pa->next) {
         Type *pt = c_Expression_make_variables_typed(s, p, m, pa->p);
         if (pa->v) {
-          if (e->construct->type->kind != Struct)
+          if (e->construct->type->kind != Struct && e->construct->type->kind != Union)
             FATAL(&pa->p->localtion, "Named construction '%s' for none struct type!", pa->v->name);
           Type *vt = Module_find_member(p, e->construct->type, pa->v);
           if (!vt)
