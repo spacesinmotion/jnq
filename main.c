@@ -1026,21 +1026,21 @@ Expression *Program_parse_atom(Program *p, State *st) {
   skip_whitespace(st);
   State old = *st;
   if (check_identifier(st)) {
-    const char *id = Program_copy_string(p, old.c, st->c - old.c);
+    size_t l = st->c - old.c;
 
-    bool isTrue = strcmp(id, "true") == 0;
-    if (isTrue || strcmp(id, "false") == 0) {
+    bool isTrue = l == 4 && strncmp(old.c, "true", 4) == 0;
+    if (isTrue || (l == 5 && strncmp(old.c, "false", 5) == 0)) {
       Expression *b = Program_new_Expression(p, BoolA, old);
       b->b = isTrue;
       return b;
     }
 
-    if (strcmp(id, "null") == 0) {
+    if (l == 4 && strncmp(old.c, "null", 4) == 0) {
       return Program_new_Expression(p, NullA, old);
     }
 
     Expression *e = Program_new_Expression(p, IdentifierA, old);
-    e->id->name = id;
+    e->id->name = Program_copy_string(p, old.c, st->c - old.c);
     e->id->type = NULL;
     return e;
   }
