@@ -146,7 +146,7 @@ typedef enum ExpressionType {
 typedef struct Expression {
   union {
     bool b;
-    char c;
+    char c[3];
     int i;
     double f;
     const char *s;
@@ -1072,10 +1072,21 @@ Expression *Program_parse_atom(Program *p, State *st) {
 
   if (check_op(st, "'")) {
     Expression *e = Program_new_Expression(p, CharA, old);
-    if (!st->c[0] || st->c[1] != '\'')
-      FATAL(st, "Wrong char constant");
-    e->c = st->c[0];
-    State_skip(st, 2);
+    if (!st->c[0])
+      FATAL(st, "unclosed char constant");
+    if (st->c[0] == '\\') {
+      e->c[0] = st->c[0];
+      e->c[1] = st->c[1];
+      e->c[2] = '\0';
+      State_skip(st, 2);
+    } else {
+      e->c[0] = st->c[0];
+      e->c[1] = '\0';
+      State_skip(st, 1);
+    }
+    if (st->c[0] != '\'')
+      FATAL(st, "Wrong char constant '%s' '%c'", e->c, st->c[0]);
+    State_skip(st, 1);
     return e;
   }
 
@@ -1796,7 +1807,7 @@ void lisp_expression(FILE *f, Expression *e) {
   case BoolA:
     fprintf(f, "%s", e->b ? "true" : "false");
   case CharA:
-    fprintf(f, "'%c'", e->c);
+    fprintf(f, "'%s'", e->c);
     break;
   case IntA:
     fprintf(f, "%d", e->i);
@@ -1938,7 +1949,7 @@ void c_expression(FILE *f, Expression *e) {
     fprintf(f, "%s", e->b ? "true" : "false");
     break;
   case CharA:
-    fprintf(f, "'%c'", e->c);
+    fprintf(f, "'%s'", e->c);
     break;
   case IntA:
     fprintf(f, "%d", e->i);
@@ -2574,6 +2585,7 @@ void c_Statement_make_variables_typed(VariableStack *s, Program *p, Module *m, S
     break;
   case Break:
   case Continue:
+    break;
   case Case: {
     int size = s->stackSize;
     c_Expression_make_variables_typed(s, p, m, st->caseS->caseE);

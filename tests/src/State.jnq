@@ -20,3 +20,36 @@ fn skip(s *State, c int) {
   s.c = &s.c[c]
   s.column += c
 }
+
+cfn isspace(c char) bool
+
+fn skip_whitespace_space(st *State) bool {
+  old State = *st;
+  while (*st->c != '\0' && isspace(*st->c)) {
+    if (*st->c == '\n') {
+      st->line++;
+      st->column = 1;
+    } else
+      ++st->column;
+    ++st->c;
+  }
+  return old.c > st->c;
+}
+
+fn skip_line_comment(st *State) bool {
+  if (st->c[0] != '\0' && st->c[0] == '/' && st->c[1] == '/') {
+    while (*st->c) {
+      if (*st->c == '\n') {
+        st->line++;
+        st->column = 1;
+        ++st->c;
+        break;
+      } else {
+        ++st->column;
+        ++st->c;
+      }
+    }
+    return true;
+  }
+  return false;
+}
