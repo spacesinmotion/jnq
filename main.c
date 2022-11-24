@@ -742,7 +742,8 @@ Expression *Program_new_Expression(Program *p, ExpressionType t, State l) {
   return e;
 }
 
-void skip_whitespace(State *st) {
+bool skip_whitespace_space(State *st) {
+  State old = *st;
   while (*st->c && isspace(*st->c)) {
     if (*st->c == '\n') {
       st->line++;
@@ -751,6 +752,30 @@ void skip_whitespace(State *st) {
       ++st->column;
     ++st->c;
   }
+  return old.c > st->c;
+}
+
+bool skip_line_comment(State *st) {
+  if (st->c[0] && st->c[0] == '/' && st->c[1] == '/') {
+    while (*st->c) {
+      if (*st->c == '\n') {
+        st->line++;
+        st->column = 1;
+        ++st->c;
+        break;
+      } else {
+        ++st->column;
+        ++st->c;
+      }
+    }
+    return true;
+  }
+  return false;
+}
+
+void skip_whitespace(State *st) {
+  while (skip_whitespace_space(st) || skip_line_comment(st))
+    ;
 }
 
 bool check_whitespace_for_nl(State *st) {

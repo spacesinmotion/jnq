@@ -1,5 +1,5 @@
 
-
+// store the location in a file and run through
 type State struct {
   file *char
   c *char
