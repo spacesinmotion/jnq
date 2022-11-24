@@ -1,4 +1,8 @@
 
+cfn isspace(c char) bool
+cfn isalnum(c char) bool
+
+
 // store the location in a file and run through
 type State struct {
   file *char
@@ -21,7 +25,6 @@ fn skip(s *State, c int) {
   s.column += c
 }
 
-cfn isspace(c char) bool
 
 fn skip_whitespace_space(st *State) bool {
   old State = *st;
@@ -51,5 +54,31 @@ fn skip_line_comment(st *State) bool {
     }
     return true;
   }
+  return false;
+}
+
+fn skip_whitespace(st *State) {
+  while (st.skip_whitespace_space() || st.skip_line_comment()) {
+  }
+}
+
+fn check_whitespace_for_nl(st *State) bool {
+  if (st->line > 1)
+    for (i int = 1; i <= st->column; ++i)
+      if (!isspace(st->c[-i]))
+        return false;
+  return st->line > 1;
+}
+
+fn check_word(st *State , word *char) bool {
+  st.skip_whitespace();
+  old State = *st;
+  while (st->c[0] && *word && *word == st->c[0]) {
+    st.skip(1);
+    ++word;
+  }
+  if (*word == '\0' && !isalnum(st->c[0]) && st->c[0] != '_')
+    return true;
+  *st = old;
   return false;
 }

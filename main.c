@@ -2031,10 +2031,13 @@ void c_expression(FILE *f, Expression *e) {
     case FnT: {
       if (!e->member->member->type->fn->parameter)
         FATAL(&e->localtion, "internal error creating member function call!");
+      Variable *first = e->member->member->type->fn->parameter;
+      while (first->next)
+        first = first->next;
       const char *prefix = "";
-      if (e->member->pointer && e->member->member->type->fn->parameter->type->kind != PointerT)
+      if (e->member->pointer && first->type->kind != PointerT)
         prefix = "*";
-      else if (!e->member->pointer && e->member->member->type->fn->parameter->type->kind == PointerT)
+      else if (!e->member->pointer && first->type->kind == PointerT)
         prefix = "&";
       if (!e->member->member->type->fn->is_extern_c)
         fprintf(f, "%s", e->member->member->type->module->c_name);
@@ -2358,10 +2361,14 @@ bool is_member_fn_for(Type *ot, Type *ft, Identifier *member) {
   if (!f->parameter || strcmp(ft->name, member->name) != 0)
     return false;
 
-  if (TypeDeclare_equal(f->parameter->type, ot))
+  Variable *first = f->parameter;
+  while (first->next)
+    first = first->next;
+
+  if (TypeDeclare_equal(first->type, ot))
     return true;
 
-  if (f->parameter->type->kind == PointerT && TypeDeclare_equal(f->parameter->type->child, ot))
+  if (first->type->kind == PointerT && TypeDeclare_equal(first->type->child, ot))
     return true;
 
   return false;
@@ -2523,7 +2530,7 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
     if (t->kind != Struct && t->kind != Union && t->kind != Enum && t->kind != UnionType && t->kind != Mod)
       FATAL(&e->localtion, "Expect non pointer type for member access");
     if (!(e->member->member->type = Module_find_member(p, t, e->member->member)))
-      FATAL(&e->localtion, "unknow member '%s' for '%s'", e->member->member->name, t->name);
+      FATAL(&e->localtion, "unknown member '%s' for '%s'", e->member->member->name, t->name);
     e->member->o_type = t;
     return e->member->member->type;
   }
