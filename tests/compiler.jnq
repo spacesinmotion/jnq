@@ -1,0 +1,9 @@
+
+use src.State
+
+fn main() int {
+  printf("compiler...\n")
+
+  printf(" ...ok\n")
+  return 0
+}
