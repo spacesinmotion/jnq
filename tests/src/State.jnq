@@ -82,3 +82,16 @@ fn check_word(st *State , word *char) bool {
   *st = old;
   return false;
 }
+
+fn check_op(st *State, op *char) bool {
+  st.skip_whitespace()
+  old State = *st;
+  while (st->c[0] != '\0' && op[0] != '\0' && op[0] == st->c[0]) {
+    st.skip(1);
+    ++op
+  }
+  if (op[0] == '\0')
+    return true
+  *st = old
+  return false
+}
