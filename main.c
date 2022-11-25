@@ -942,14 +942,14 @@ Type *Program_parse_declared_type(Program *p, Module *m, State *st) {
 
 Variable *Program_parse_variable_declaration(Program *p, Module *m, State *st, Variable *next) {
   State old = *st;
-  const char *name = NULL;
   Type *type = NULL;
-  if ((name = read_identifier(p, st))) {
+  if (check_identifier(st)) {
+    const char *name_end = st->c;
     skip_whitespace(st);
     if (!check_whitespace_for_nl(st))
       if ((type = Program_parse_declared_type(p, m, st))) {
         Variable *top = Program_new_variable(p, next);
-        top->name = name;
+        top->name = Program_copy_string(p, old.c, name_end - old.c);
         top->type = type;
         return top;
       }
