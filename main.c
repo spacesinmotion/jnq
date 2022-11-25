@@ -988,11 +988,8 @@ EnumEntry *Program_parse_enum_entry_list(Program *p, State *st) {
       e->valueSet = false;
       if (check_op(st, "=")) {
         e->valueSet = true;
-        const bool neg = check_op(st, "-");
         if (!read_int(st, &e->value))
           FATAL(st, "missing enum entry value ");
-        if (neg)
-          e->value *= -1;
       }
     } else
       FATAL(st, "missing enum entry name");
