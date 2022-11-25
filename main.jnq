@@ -12,5 +12,10 @@ fn main() int
 
   // ASSERT(util.round(-4.23) as float == -4.0f)
 
+  a int = 3
+  b int = 3
+  a = 10 + a
+  ++b
+
   printf("ok\n")
 }

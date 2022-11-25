@@ -1,0 +1,16 @@
+
+fn main() int {
+  printf("bugs...\n")
+
+  a int = 1
+  b int = 1
+
+  a = 10 + a
+  ++b
+
+  ASSERT(a == 11)
+  ASSERT(b == 2)
+
+  printf(" ...ok\n")
+  return 0
+}

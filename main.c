@@ -1203,6 +1203,8 @@ Expression *Program_parse_construction(Program *p, Module *m, State *st) {
 Expression *Program_parse_suffix_expression(Program *p, Module *m, State *st, Expression *e) {
   skip_whitespace(st);
   State old = *st;
+  if (check_whitespace_for_nl(st))
+    return e;
 
   bool pointer = check_op(st, "->");
   if (pointer || check_op(st, ".")) {
