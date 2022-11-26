@@ -93,6 +93,35 @@ fn union_check()  {
   ASSERT(s.b == 0.6)
 }
 
+
+type X struct {
+  i int
+  x *X
+  y *Y
+}
+
+type Y struct {
+  f float
+}
+
+fn use_structs_defined_later()  {
+  printf(" .use_structs_defined_later\n")
+
+  a_y Y = Y{1.0f}
+  a_x X = X{0, null, &a_y}
+  b_x X = X{1, &a_x, &a_y}
+
+  ASSERT(a_x.y.f == 1.0f)
+  ASSERT(b_x.y.f == 1.0f)
+  ASSERT(b_x.x.y.f == 1.0f)
+
+  b_x.x.y.f = 4.0f
+
+  ASSERT(a_x.y.f == 4.0f)
+  ASSERT(b_x.y.f == 4.0f)
+  ASSERT(b_x.x.y.f == 4.0f)
+}
+
 fn compined_check()  {
   printf(" .compined_check\n")
 
@@ -132,6 +161,7 @@ fn main() int {
   union_check()
   compined_check()
   member_call_with_args()
+  use_structs_defined_later()
 
   printf(" ...ok\n")
 }

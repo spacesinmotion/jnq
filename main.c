@@ -419,7 +419,7 @@ typedef struct Function {
   Module *module;
 } Function;
 
-typedef enum TypeKind { ModuleT, StructT, UnionT, EnumT, UnionTypeT, ArrayT, PointerT, FnT } TypeKind;
+typedef enum TypeKind { ModuleT, StructT, UnionT, EnumT, UnionTypeT, ArrayT, PointerT, FnT, PlaceHolder } TypeKind;
 
 typedef struct Type {
   const char *name;
@@ -449,6 +449,7 @@ Module *Type_defined_module(Type *t) {
   case ModuleT:
   case ArrayT:
   case PointerT:
+  case PlaceHolder:
     FATALX("invalid type for getting defined module.");
     break;
   }
@@ -576,6 +577,16 @@ Type *Module_find_type(Program *p, Module *m, const char *b, const char *e) {
   return NULL;
 }
 
+Type *Program_add_type(Program *p, TypeKind k, const char *name, Module *m);
+
+Type *Module_temp_type(Program *p, Module *m, const char *b, const char *e) {
+  Type *t = Module_find_type(p, m, b, e);
+  if (t)
+    return t;
+  const char *n = Program_copy_string(p, b, e - b);
+  return Program_add_type(p, PlaceHolder, n, m);
+}
+
 bool TypeDeclare_equal(Type *t1, Type *t2) {
   if (!t1 && !t2)
     return false;
@@ -612,7 +623,13 @@ Module *Program_add_module(Program *p, const char *pathc) {
 }
 
 Type *Program_add_type(Program *p, TypeKind k, const char *name, Module *m) {
-  Type *tt = (Type *)Program_alloc(p, sizeof(Type));
+  Type *tt = Module_find_type(p, m, name, name + strlen(name));
+  if (tt && tt->kind != PlaceHolder)
+    FATALX("Type '%s' allready defined!", name);
+  bool was_placeholder = tt && tt->kind == PlaceHolder;
+  if (!tt)
+    tt = (Type *)Program_alloc(p, sizeof(Type));
+
   tt->name = name;
   tt->kind = k;
   switch (k) {
@@ -641,6 +658,8 @@ Type *Program_add_type(Program *p, TypeKind k, const char *name, Module *m) {
     tt->fnT->is_extern_c = false;
     tt->fnT->module = m;
     break;
+  case PlaceHolder:
+    break;
   case ArrayT:
     tt->array_count = 0;
     // fallthrough
@@ -648,6 +667,8 @@ Type *Program_add_type(Program *p, TypeKind k, const char *name, Module *m) {
     FATALX("Only base types are implemented to add types");
     break;
   }
+  if (was_placeholder)
+    return tt;
 
   TypeList *tl = (TypeList *)Program_alloc(p, sizeof(TypeList));
   tl->type = tt;
@@ -834,8 +855,9 @@ bool check_identifier(State *st) {
     while (st->c[0] && (isalnum(st->c[0]) || st->c[0] == '_'))
       State_skip(st, 1);
   }
-  if (old.c < st->c)
-    return true;
+  if (st->c - old.c != 2 || strncmp(old.c, "as", 2) != 0)
+    if (old.c < st->c)
+      return true;
   *st = old;
   return false;
 }
@@ -971,7 +993,7 @@ Type *Program_parse_declared_type(Program *p, Module *m, State *st) {
   }
 
   if (check_identifier(st)) {
-    Type *t = Module_find_type(p, m, old.c, st->c);
+    Type *t = Module_temp_type(p, m, old.c, st->c);
     if (t) {
       old = *st;
       if (t->kind == ModuleT && check_op(st, ".")) {
@@ -1701,6 +1723,9 @@ bool c_type_declare(FILE *f, Type *t, const char *var) {
       FATALX("I don't know right now how to handle array function pointer stuff!");
     fprintf(f, "(*())");
     break;
+  case PlaceHolder:
+    FATALX("Unkown type '%s'!", t->name);
+    break;
   }
   return hasVarWritten;
 }
@@ -1834,6 +1859,7 @@ void c_type(FILE *f, const char *module_name, TypeList *t) {
     break;
   case ArrayT:
   case PointerT:
+  case PlaceHolder:
     FATALX("Type declaration not implemented for that kind");
     break;
   }
@@ -1897,6 +1923,9 @@ void lisp_expression(FILE *f, Expression *e) {
       case FnT:
         fprintf(f, "(*())");
         break;
+      case PlaceHolder:
+        fprintf(f, "**%s**", t->name);
+        break;
       }
     }
     fprintf(f, ")");
@@ -1918,6 +1947,9 @@ void lisp_expression(FILE *f, Expression *e) {
     fprintf(f, "(## ");
     for (Type *t = e->construct->type; t; t = t->child) {
       switch (t->kind) {
+      case PlaceHolder:
+        fprintf(f, "**%s**", t->name);
+        break;
       case ArrayT:
         fprintf(f, "[%d]", t->array_count);
         break;
@@ -2073,6 +2105,9 @@ void c_expression(FILE *f, Expression *e) {
     if (!e->member->member->type)
       FATAL(&e->localtion, "unknown type for member '%s'", e->member->member->name);
     switch (e->member->member->type->kind) {
+    case PlaceHolder:
+      FATAL(&e->localtion, "Use of unknow type '%s'", e->member->member->type->name);
+      break;
     case EnumT:
       fprintf(f, "%s%s", Type_defined_module(e->member->member->type)->c_name, e->member->member->name);
       break;
@@ -2322,6 +2357,7 @@ void c_type_forward(FILE *f, const char *module_name, TypeList *t) {
     break;
   case ArrayT:
   case PointerT:
+  case PlaceHolder:
     FATALX("unexpect type in forward declaration!");
     break;
   }
@@ -2447,6 +2483,7 @@ Type *Module_find_member(Program *p, Type *t, Identifier *member) {
   case ArrayT:
   case PointerT:
   case FnT:
+  case PlaceHolder:
     FATALX("internal error, call of Module_find_member with wrong type");
     break;
   }

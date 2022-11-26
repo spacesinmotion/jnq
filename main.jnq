@@ -12,7 +12,7 @@ fn main() int
 
   // ASSERT(util.round(-4.23) as float == -4.0f)
 
-  n util.Nix
+  n util.Nix = util.Nix.Nicest 
 
   printf("ok\n")
 }
