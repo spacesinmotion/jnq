@@ -384,6 +384,7 @@ typedef struct SwitchStatement {
 
 typedef struct Struct {
   Variable *member;
+  Module *module;
 } Struct;
 
 typedef struct EnumEntry {
@@ -395,6 +396,7 @@ typedef struct EnumEntry {
 
 typedef struct Enum {
   EnumEntry *entries;
+  Module *module;
 } Enum;
 
 typedef struct UnionTypeEntry UnionTypeEntry;
@@ -406,6 +408,7 @@ typedef struct UnionTypeEntry {
 
 typedef struct Union {
   UnionTypeEntry *member;
+  Module *module;
 } Union;
 
 typedef struct Function {
@@ -413,6 +416,7 @@ typedef struct Function {
   Type *returnType;
   bool is_extern_c;
   Statement *body;
+  Module *module;
 } Function;
 
 typedef enum TypeKind { ModuleT, StructT, UnionT, EnumT, UnionTypeT, ArrayT, PointerT, FnT } TypeKind;
@@ -428,9 +432,28 @@ typedef struct Type {
     int array_count;
   };
   TypeKind kind;
-  Module *module;
   Type *child;
 } Type;
+
+Module *Type_defined_module(Type *t) {
+  switch (t->kind) {
+  case StructT:
+  case UnionT:
+    return t->structT->module;
+  case EnumT:
+    return t->enumT->module;
+  case UnionTypeT:
+    return t->unionT->module;
+  case FnT:
+    return t->fnT->module;
+  case ModuleT:
+  case ArrayT:
+  case PointerT:
+    FATALX("invalid type for getting defined module.");
+    break;
+  }
+  return NULL;
+}
 
 typedef struct TypeList TypeList;
 typedef struct TypeList {
@@ -513,20 +536,21 @@ Module *Program_reset_module_finished(Program *p) {
 }
 
 Module global = (Module){"", "", NULL, true, NULL};
-Type Null = (Type){"null_t", NULL, StructT, &global, NULL};
-Type Bool = (Type){"bool", NULL, StructT, &global, NULL};
-Type Char = (Type){"char", NULL, StructT, &global, NULL};
-Type Int = (Type){"int", NULL, StructT, &global, NULL};
-Type Float = (Type){"float", NULL, StructT, &global, NULL};
-Type Double = (Type){"double", NULL, StructT, &global, NULL};
-Type String = (Type){"string", NULL, StructT, &global, NULL};
+Type Null = (Type){"null_t", .structT = &(Struct){NULL, &global}, StructT, NULL};
+Type Bool = (Type){"bool", .structT = &(Struct){NULL, &global}, StructT, NULL};
+Type Char = (Type){"char", .structT = &(Struct){NULL, &global}, StructT, NULL};
+Type Int = (Type){"int", .structT = &(Struct){NULL, &global}, StructT, NULL};
+Type Float = (Type){"float", .structT = &(Struct){NULL, &global}, StructT, NULL};
+Type Double = (Type){"double", .structT = &(Struct){NULL, &global}, StructT, NULL};
+Type String = (Type){"string", .structT = &(Struct){NULL, &global}, StructT, NULL};
 
-Type Ellipsis = (Type){"...", NULL, StructT, &global, NULL};
+Type Ellipsis = (Type){"...", .structT = &(Struct){NULL, &global}, StructT, NULL};
 
-Function print = (Function){&(Variable){"...", &Ellipsis, &(Variable){"format", &String, NULL}}, NULL, NULL};
-Type Printf = (Type){"printf", .fnT = &print, FnT, &global, NULL};
-Function assert = (Function){&(Variable){"cond", &Bool, NULL}, NULL, NULL};
-Type Assert = (Type){"ASSERT", .fnT = &assert, FnT, &global, NULL};
+Function print =
+    (Function){&(Variable){"...", &Ellipsis, &(Variable){"format", &String, NULL}}, NULL, true, NULL, &global};
+Type Printf = (Type){"printf", .fnT = &print, FnT, NULL};
+Function assert = (Function){&(Variable){"cond", &Bool, NULL}, NULL, true, NULL, &global};
+Type Assert = (Type){"ASSERT", .fnT = &assert, FnT, NULL};
 
 Type *Module_find_type(Program *p, Module *m, const char *b, const char *e) {
   if (4 == e - b && strncmp(Bool.name, b, 4) == 0)
@@ -591,7 +615,6 @@ Module *Program_add_module(Program *p, const char *pathc) {
 Type *Program_add_type(Program *p, TypeKind k, const char *name, Module *m) {
   Type *tt = (Type *)Program_alloc(p, sizeof(Type));
   tt->name = name;
-  tt->module = m;
   tt->kind = k;
   switch (k) {
   case ModuleT:
@@ -601,19 +624,23 @@ Type *Program_add_type(Program *p, TypeKind k, const char *name, Module *m) {
   case UnionT:
     tt->structT = (Struct *)Program_alloc(p, sizeof(Struct));
     tt->structT->member = NULL;
+    tt->structT->module = m;
     break;
   case EnumT:
     tt->enumT = (Enum *)Program_alloc(p, sizeof(Enum));
     tt->enumT->entries = NULL;
+    tt->enumT->module = m;
     break;
   case UnionTypeT:
     tt->unionT = (Union *)Program_alloc(p, sizeof(Union));
     tt->unionT->member = NULL;
+    tt->unionT->module = m;
     break;
   case FnT:
     tt->fnT = Program_alloc(p, sizeof(Function));
     tt->fnT->body = NULL;
     tt->fnT->is_extern_c = false;
+    tt->fnT->module = m;
     break;
   case ArrayT:
     tt->array_count = 0;
@@ -1669,11 +1696,13 @@ bool c_type_declare(FILE *f, Type *t, const char *var) {
     fprintf(f, "*");
     break;
   case ModuleT:
+    fprintf(f, "%s", t->name);
+    break;
   case StructT:
   case UnionT:
   case EnumT:
   case UnionTypeT:
-    fprintf(f, "%s%s", t->module->c_name, t->name);
+    fprintf(f, "%s%s", Type_defined_module(t)->c_name, t->name);
     break;
   case FnT:
     if (c_type_declare(f, t->fnT->returnType, ""))
@@ -1999,7 +2028,7 @@ void c_expression(FILE *f, Expression *e) {
     if (!e->id->type)
       FATAL(&e->localtion, "unknown type for id '%s'", e->id->name);
     if (e->id->type->kind == FnT && !e->id->type->fnT->is_extern_c)
-      fprintf(f, "%s", e->id->type->module->c_name);
+      fprintf(f, "%s", Type_defined_module(e->id->type)->c_name);
     fprintf(f, "%s", e->id->name);
     break;
   case VarE:
@@ -2022,16 +2051,17 @@ void c_expression(FILE *f, Expression *e) {
     break;
   case ConstructE: {
     if (e->construct->type->kind == UnionTypeT) {
-      fprintf(f, "(%s%s){", e->construct->type->module->c_name, e->construct->type->name);
+      fprintf(f, "(%s%s){", Type_defined_module(e->construct->type)->c_name, e->construct->type->name);
       if (!e->construct->p->v)
         FATAL(&e->localtion, "internal error: no union entry selected");
       UnionTypeEntry *ua = (UnionTypeEntry *)e->construct->p->v;
       fprintf(f, "._u%d = ", ua->index);
       c_expression(f, e->construct->p->p);
-      fprintf(f, ", .type = %s_%s_u%d_t}", e->construct->type->module->c_name, e->construct->type->name, ua->index);
+      fprintf(f, ", .type = %s_%s_u%d_t}", Type_defined_module(e->construct->type)->c_name, e->construct->type->name,
+              ua->index);
     } else {
       if (e->construct->type->kind == StructT || e->construct->type->kind == UnionT)
-        fprintf(f, "(%s%s){", e->construct->type->module->c_name, e->construct->type->name);
+        fprintf(f, "(%s%s){", Type_defined_module(e->construct->type)->c_name, e->construct->type->name);
       else if (e->construct->type->kind == ArrayT)
         fprintf(f, "{");
       else
@@ -2052,7 +2082,7 @@ void c_expression(FILE *f, Expression *e) {
       FATAL(&e->localtion, "unknown type for member '%s'", e->member->member->name);
     switch (e->member->member->type->kind) {
     case EnumT:
-      fprintf(f, "%s%s", e->member->member->type->module->c_name, e->member->member->name);
+      fprintf(f, "%s%s", Type_defined_module(e->member->member->type)->c_name, e->member->member->name);
       break;
     case ModuleT:
     case StructT:
@@ -2075,7 +2105,7 @@ void c_expression(FILE *f, Expression *e) {
       else if (!e->member->pointer && first->type->kind == PointerT)
         prefix = "&";
       if (!e->member->member->type->fnT->is_extern_c)
-        fprintf(f, "%s", e->member->member->type->module->c_name);
+        fprintf(f, "%s", Type_defined_module(e->member->member->type)->c_name);
       fprintf(f, "%s(%s", e->member->member->name, prefix);
       if (e->member->o->type != IdentifierA || e->member->o->id->type->kind != ModuleT)
         c_expression(f, e->member->o);
@@ -2428,9 +2458,12 @@ Type *Module_find_member(Program *p, Type *t, Identifier *member) {
     FATALX("internal error, call of Module_find_member with wrong type");
     break;
   }
-  for (TypeList *tl = t->module->types; tl; tl = tl->next) {
-    if (is_member_fn_for(t, tl->type, member))
-      return tl->type;
+  Module *m = Type_defined_module(t);
+  if (m) {
+    for (TypeList *tl = m->types; tl; tl = tl->next) {
+      if (is_member_fn_for(t, tl->type, member))
+        return tl->type;
+    }
   }
 
   return NULL;
