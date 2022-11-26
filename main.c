@@ -471,8 +471,8 @@ void *Program_alloc(Program *p, size_t size) {
   return d;
 }
 
-const char *Program_copy_string(Program *p, const char *s, size_t l) {
-  char *id = Program_alloc(p, l + 1);
+char *Program_copy_string(Program *p, const char *s, size_t l) {
+  char *id = (char *)Program_alloc(p, l + 1);
   strncpy(id, s, l);
   return id;
 }
@@ -580,8 +580,7 @@ bool TypeDeclare_equal(Type *t1, Type *t2) {
 Module *Program_add_module(Program *p, const char *pathc) {
   size_t size = strlen(pathc) + 1;
   const char *path = Program_copy_string(p, pathc, size);
-  char *cname = (char *)Program_alloc(p, size + 1);
-  strcpy(cname, pathc);
+  char *cname = Program_copy_string(p, pathc, size + 1);
   for (char *c = cname; *c; ++c)
     if (*c == '.')
       *c = '_';
@@ -893,9 +892,7 @@ bool Program_parse_use_path(Program *p, Module *m, State *st) {
 
   Module *use = Program_parse_file(p, buffer, m, &old);
 
-  char *n = Program_alloc(p, strlen(name) + 1);
-  strcpy(n, name);
-
+  const char *n = Program_copy_string(p, name, strlen(name));
   Program_add_type(p, ModuleT, n, m)->moduleT = use;
   return true;
 }
