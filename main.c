@@ -2548,9 +2548,9 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
       va = va->next;
       // compare pa->type with e->call->o->member->o_type
     }
-    if (pa && t->fnT->parameter->type != &Ellipsis)
+    if (pa && (!t->fnT->parameter || t->fnT->parameter->type != &Ellipsis))
       FATAL(&e->localtion, "To much parameter for function call");
-    if (va && t->fnT->parameter->type != &Ellipsis)
+    if (va && (!t->fnT->parameter || t->fnT->parameter->type != &Ellipsis))
       FATAL(&e->localtion, "Missing parameter for function call");
     return t->fnT->returnType;
   }
