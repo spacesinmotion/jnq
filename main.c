@@ -297,7 +297,6 @@ typedef struct BinaryOperation {
 
 typedef struct ExpressionStatement {
   Expression *e;
-  Statement next;
 } ExpressionStatement;
 
 typedef struct DeclarationStatement {
@@ -862,7 +861,25 @@ const char *read_identifier(Program *p, State *st) {
   return NULL;
 }
 
-Module *Program_parse_file(Program *p, const char *path, Module *parent, State *st);
+Module *Program_parse_file(Program *p, const char *path);
+
+Module *Program_parse_sub_file(Program *p, const char *path, Module *parent) {
+  char tempPath[256];
+  strcpy(tempPath, parent->path);
+  int l = strlen(tempPath) - 1;
+  while (l >= 0) {
+    if (tempPath[l] == '.') {
+      tempPath[l + 1] = '\0';
+      break;
+    }
+    --l;
+  }
+  strcat(tempPath, path);
+  Module *mod = Program_parse_file(p, tempPath);
+  if (!mod)
+    mod = Program_parse_file(p, path);
+  return mod;
+}
 
 bool Program_parse_use_path(Program *p, Module *m, State *st) {
   skip_whitespace(st);
@@ -890,7 +907,11 @@ bool Program_parse_use_path(Program *p, Module *m, State *st) {
   } else
     return false;
 
-  Module *use = Program_parse_file(p, buffer, m, &old);
+  Module *use = Program_parse_sub_file(p, buffer, m);
+  if (!use)
+    FATAL(&old, "import not found '%s'", buffer);
+  if (!use->finished)
+    FATAL(&old, "Circular dependencies!");
 
   const char *n = Program_copy_string(p, name, strlen(name));
   Program_add_type(p, ModuleT, n, m)->moduleT = use;
@@ -1614,50 +1635,26 @@ void Program_parse_module(Program *p, Module *m, State *st) {
   }
 }
 
-Module *Program_parse_file(Program *p, const char *path, Module *parent, State *outer_st) {
+Module *Program_parse_file(Program *p, const char *path) {
   Module *m = Program_find_module(p, path);
-  if (m && !m->finished)
-    FATAL(outer_st, "Circular dependencies!");
   if (m)
     return m;
 
-  m = Program_add_module(p, path);
-  m->finished = false;
+  char tempPath[512] = {0};
+  strcpy(tempPath, path);
+  for (char *t = tempPath; *t; ++t)
+    if (*t == '.')
+      *t = '/';
+  strcat(tempPath, ".jnq");
+  char *code = readFile(tempPath);
 
-  char *code = NULL;
-  char tempPath[512];
-
-  if (parent) {
-    strcpy(tempPath, parent->path);
-    int p = strlen(tempPath) - 1;
-    while (p >= 0) {
-      if (tempPath[p] == '.') {
-        tempPath[p + 1] = '\0';
-        break;
-      }
-      --p;
-    }
-    strcat(tempPath, path);
-    for (char *t = tempPath; *t; ++t)
-      if (*t == '.')
-        *t = '/';
-    strcat(tempPath, ".jnq");
-    code = readFile(tempPath);
-  }
-
-  if (!code) {
-    strcpy(tempPath, path);
-    for (char *t = tempPath; *t; ++t)
-      if (*t == '.')
-        *t = '/';
-    strcat(tempPath, ".jnq");
-    code = readFile(tempPath);
-  }
   if (!code)
-    FATAL(outer_st, "missing file! '%s'", tempPath);
+    return NULL;
 
   const char *st_path = Program_copy_string(p, tempPath, strlen(tempPath));
   State st = State_new(code, st_path);
+  m = Program_add_module(p, path);
+  m->finished = false;
   Program_parse_module(p, m, &st);
   m->finished = true;
 
@@ -2817,7 +2814,9 @@ int main(int argc, char *argv[]) {
   char buffer[1024 * 64];
   Program p = Program_new(buffer, 1024 * 64);
 
-  Module *m = Program_parse_file(&p, main_mod, NULL, &(State){.file = argv[1], .line = 0, .column = 0});
+  Module *m = Program_parse_file(&p, main_mod);
+  if (!m)
+    FATALX("Cant find input file! '%s'", argv[1]);
 
   char main_c[256] = {0};
   strncpy(main_c, argv[1], jnq_len - 4);

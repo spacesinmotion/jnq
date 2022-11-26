@@ -1,0 +1,101 @@
+
+use State
+use Type
+
+type StatementType enum {
+  ExpressionS,
+  Return,
+  Break,
+  Continue,
+  Case,
+  Default,
+  Scope,
+  If,
+  For,
+  While,
+  DoWhile,
+  Switch,
+}
+
+type StatementSelect union {
+  declare *DeclarationStatement
+  express *ExpressionStatement 
+  ret *ReturnStatement
+  brk *BreakStatement
+  cont *ContinueStatement
+  caseS *CaseStatement 
+  defaultS *DefaultStatement
+  scope *ScopeStatement
+  ifS *IfStatement 
+  forS *ForStatement 
+  whileS *WhileStatement
+  doWhileS *DoWhileStatement
+  switchS *SwitchStatement
+}
+
+type Statement struct {
+  select StatementSelect
+  type StatementType 
+  //location State
+  next *Statement
+}
+
+type DeclarationStatement struct {
+  //e *Expression
+  v *Type.Variable 
+}
+
+type ExpressionStatement struct {
+  //e *Expression
+}
+
+type ReturnStatement struct {
+  //e *Expression
+}
+
+type BreakStatement struct {
+}
+
+type ContinueStatement struct {
+}
+
+type CaseStatement struct {
+  // caseE *Expression
+  body *Statement
+}
+
+type DefaultStatement struct {
+  body *Statement
+}
+
+type ScopeStatement struct {
+  body *Statement
+}
+
+type IfStatement struct {
+  // condition *Expression
+  ifbody *Statement
+  elsebody *Statement
+}
+
+type ForStatement struct {
+  // init *Expression
+  // condition *Expression 
+  // incr *Expression
+  body *Statement
+}
+
+type WhileStatement struct {
+  // condition *Expression 
+  body *Statement
+}
+
+type DoWhileStatement struct {
+  body *Statement
+  // condition *Expression 
+}
+
+type SwitchStatement struct {
+  body *Statement
+  // condition *Expression 
+}

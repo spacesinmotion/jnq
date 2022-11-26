@@ -1,5 +1,7 @@
 
 use src.State
+use src.Type
+use src.Statement
 
 fn main() int {
   printf("compiler...\n")
