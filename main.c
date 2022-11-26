@@ -382,12 +382,6 @@ typedef struct SwitchStatement {
   Expression *condition;
 } SwitchStatement;
 
-typedef struct Use Use;
-typedef struct Use {
-  Module *use;
-  Use *next;
-} Use;
-
 typedef struct EnumEntry {
   const char *name;
   int value;
@@ -435,7 +429,6 @@ typedef struct TypeList {
 typedef struct Module {
   const char *path;
   const char *c_name;
-  Use *use;
   TypeList *types;
   bool finished;
   Module *next;
@@ -507,7 +500,7 @@ Module *Program_reset_module_finished(Program *p) {
   return NULL;
 }
 
-Module global = (Module){"", "", NULL, NULL, true, NULL};
+Module global = (Module){"", "", NULL, true, NULL};
 Type Null = (Type){"null_t", NULL, Struct, &global, NULL};
 Type Bool = (Type){"bool", NULL, Struct, &global, NULL};
 Type Char = (Type){"char", NULL, Struct, &global, NULL};
@@ -577,7 +570,6 @@ Module *Program_add_module(Program *p, const char *pathc) {
   Module *m = (Module *)Program_alloc(p, sizeof(Module));
   m->path = path;
   m->c_name = cname;
-  m->use = NULL;
   m->types = NULL;
   m->next = p->modules;
   p->modules = m;
@@ -621,15 +613,9 @@ Type *Program_add_type(Program *p, TypeKind k, const char *name, Module *m) {
   return tt;
 }
 
-Use *Program_add_use(Program *p, Module *m, Module *use, const char *name) {
+void Program_add_use(Program *p, Module *m, Module *use, const char *name) {
   Type *mod = Program_add_type(p, Mod, name, m);
-  Use *u = Program_alloc(p, sizeof(Use));
-  u->use = use;
-  u->next = m->use;
-  m->use = u;
-  mod->mod = u->use;
-  mod->name = name;
-  return u;
+  mod->mod = use;
 }
 
 Function *Program_add_fn(Program *p, Module *m, const char *name) {
@@ -1642,11 +1628,11 @@ void c_Module_types(FILE *f, Module *m);
 
 typedef void (*ModuleFileCB)(FILE *, Module *);
 
-void c_use(FILE *f, Use *u, ModuleFileCB cb) {
-  if (u->next)
-    c_use(f, u->next, cb);
-
-  cb(f, u->use);
+void c_use(FILE *f, TypeList *tl, ModuleFileCB cb) {
+  if (tl->next)
+    c_use(f, tl->next, cb);
+  if (tl->type->kind == Mod)
+    cb(f, tl->type->mod);
 }
 
 bool c_type_declare(FILE *f, Type *t, const char *var) {
@@ -2255,11 +2241,9 @@ void c_Module_types(FILE *f, Module *m) {
     return;
   m->finished = true;
 
-  if (m->use) {
-    fprintf(f, "\n");
-    c_use(f, m->use, c_Module_types);
-  }
   if (m->types) {
+    fprintf(f, "\n");
+    c_use(f, m->types, c_Module_types);
     fprintf(f, "\n");
     c_type(f, m->c_name, m->types);
   }
@@ -2270,11 +2254,9 @@ void c_Module_fn(FILE *f, Module *m) {
     return;
   m->finished = true;
 
-  if (m->use) {
-    fprintf(f, "\n");
-    c_use(f, m->use, c_Module_fn);
-  }
   if (m->types) {
+    fprintf(f, "\n");
+    c_use(f, m->types, c_Module_fn);
     fprintf(f, "\n");
     c_fn(f, m->c_name, m->types);
   }
@@ -2316,12 +2298,9 @@ void c_Module_forward_types(FILE *f, Module *m) {
     return;
   m->finished = true;
 
-  if (m->use) {
-    fprintf(f, "\n");
-    c_use(f, m->use, c_Module_forward_types);
-  }
-
   if (m->types) {
+    fprintf(f, "\n");
+    c_use(f, m->types, c_Module_forward_types);
     fprintf(f, "\n");
     c_type_forward(f, m->c_name, m->types);
   }
@@ -2357,11 +2336,9 @@ void c_Module_forward_fn(FILE *f, Module *m) {
     return;
   m->finished = true;
 
-  if (m->use) {
-    fprintf(f, "\n");
-    c_use(f, m->use, c_Module_forward_fn);
-  }
   if (m->types) {
+    fprintf(f, "\n");
+    c_use(f, m->types, c_Module_forward_fn);
     fprintf(f, "\n");
     c_fn_forward(f, m->c_name, m->types);
   }
@@ -2708,8 +2685,9 @@ void c_Module_make_variables_typed(Program *p, Module *m) {
     return;
   m->finished = true;
 
-  for (Use *u = m->use; u; u = u->next)
-    c_Module_make_variables_typed(p, u->use);
+  for (TypeList *tl = m->types; tl; tl = tl->next)
+    if (tl->type->kind == Mod)
+      c_Module_make_variables_typed(p, tl->type->mod);
 
   VariableStack stack = (VariableStack){};
   for (TypeList *tl = m->types; tl; tl = tl->next)
