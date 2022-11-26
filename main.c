@@ -889,7 +889,7 @@ const char *read_identifier(Program *p, State *st) {
   return NULL;
 }
 
-Module *Program_parse_file(Program *p, const char *path, State *st);
+Module *Program_parse_file(Program *p, const char *path, Module *parent, State *st);
 
 bool Program_parse_use_path(Program *p, Module *m, State *st) {
   skip_whitespace(st);
@@ -917,7 +917,7 @@ bool Program_parse_use_path(Program *p, Module *m, State *st) {
   } else
     return false;
 
-  Module *use = Program_parse_file(p, buffer, &old);
+  Module *use = Program_parse_file(p, buffer, m, &old);
 
   char *n = Program_alloc(p, strlen(name) + 1);
   strcpy(n, name);
@@ -1645,7 +1645,7 @@ void Program_parse_module(Program *p, Module *m, State *st) {
   }
 }
 
-Module *Program_parse_file(Program *p, const char *path, State *outer_st) {
+Module *Program_parse_file(Program *p, const char *path, Module *parent, State *outer_st) {
   Module *m = Program_find_module(p, path);
   if (m && !m->finished)
     FATAL(outer_st, "Circular dependencies!");
@@ -1655,19 +1655,39 @@ Module *Program_parse_file(Program *p, const char *path, State *outer_st) {
   m = Program_add_module(p, path);
   m->finished = false;
 
-  char tempPath[256];
-  strcpy(tempPath, path);
-  for (char *t = tempPath; *t; ++t)
-    if (*t == '.')
-      *t = '/';
-  strcat(tempPath, ".jnq");
+  char *code = NULL;
+  char tempPath[512];
 
-  char *code = readFile(tempPath);
+  if (parent) {
+    strcpy(tempPath, parent->path);
+    int p = strlen(tempPath) - 1;
+    while (p >= 0) {
+      if (tempPath[p] == '.') {
+        tempPath[p + 1] = '\0';
+        break;
+      }
+      --p;
+    }
+    strcat(tempPath, path);
+    for (char *t = tempPath; *t; ++t)
+      if (*t == '.')
+        *t = '/';
+    strcat(tempPath, ".jnq");
+    code = readFile(tempPath);
+  }
+
+  if (!code) {
+    strcpy(tempPath, path);
+    for (char *t = tempPath; *t; ++t)
+      if (*t == '.')
+        *t = '/';
+    strcat(tempPath, ".jnq");
+    code = readFile(tempPath);
+  }
   if (!code)
     FATAL(outer_st, "missing file! '%s'", tempPath);
 
-  char *st_path = Program_alloc(p, strlen(tempPath) + 1);
-  strcpy(st_path, tempPath);
+  const char *st_path = Program_copy_string(p, tempPath, strlen(tempPath));
   State st = State_new(code, st_path);
   Program_parse_module(p, m, &st);
   m->finished = true;
@@ -1710,7 +1730,8 @@ bool c_type_declare(FILE *f, Type *t, const char *var) {
     fprintf(f, "*");
     break;
   case ModuleT:
-    fprintf(f, "%s", t->name);
+    FATALX("Can't use module '%s' as type!", t->name);
+    // fprintf(f, "%s", t->name);
     break;
   case StructT:
   case UnionT:
@@ -2352,12 +2373,12 @@ void c_type_forward(FILE *f, const char *module_name, TypeList *t) {
     break;
   case ModuleT:
     break;
+  case PlaceHolder:
   case FnT:
     // todo?!?
     break;
   case ArrayT:
   case PointerT:
-  case PlaceHolder:
     FATALX("unexpect type in forward declaration!");
     break;
   }
@@ -2823,7 +2844,7 @@ int main(int argc, char *argv[]) {
   char buffer[1024 * 64];
   Program p = Program_new(buffer, 1024 * 64);
 
-  Module *m = Program_parse_file(&p, main_mod, &(State){.file = argv[1], .line = 0, .column = 0});
+  Module *m = Program_parse_file(&p, main_mod, NULL, &(State){.file = argv[1], .line = 0, .column = 0});
 
   char main_c[256] = {0};
   strncpy(main_c, argv[1], jnq_len - 4);

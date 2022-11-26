@@ -1,0 +1,5 @@
+
+type Struct struct {
+//  member *Variable
+//  module *Module
+}

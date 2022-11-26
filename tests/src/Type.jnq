@@ -1,0 +1,16 @@
+
+use Struct
+
+type TypeKind enum { ModuleT, StructT, UnionT, EnumT, UnionTypeT, ArrayT, PointerT, FnT, PlaceHolder }
+
+type TypeSelect union {
+  structT *Struct.Struct
+  array_count int
+}
+
+type Type struct {
+  name *char
+  select TypeSelect
+  kind TypeKind
+  child *Type
+}

@@ -1,5 +1,6 @@
 
 use tests.src.State
+use tests.src.Type
 
 use tests.sub.util
 
