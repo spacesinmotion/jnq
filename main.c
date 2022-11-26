@@ -400,6 +400,10 @@ typedef struct UnionTypeEntry {
   UnionTypeEntry *next;
 } UnionTypeEntry;
 
+typedef struct Union {
+  UnionTypeEntry *member;
+} Union;
+
 typedef struct Function {
   Variable *parameter;
   Type *returnType;
@@ -414,7 +418,7 @@ typedef struct Type {
   union {
     Variable *member;
     Enum *enumT;
-    UnionTypeEntry *union_type_member;
+    Union *unionT;
     Function *fn;
     Module *mod;
     int count;
@@ -598,7 +602,8 @@ Type *Program_add_type(Program *p, TypeKind k, const char *name, Module *m) {
     tt->enumT->entries = NULL;
     break;
   case UnionTypeT:
-    tt->union_type_member = NULL;
+    tt->unionT = (Union *)Program_alloc(p, sizeof(Union));
+    tt->unionT->member = NULL;
     break;
   case FnT:
     tt->fn = Program_alloc(p, sizeof(Function));
@@ -1058,8 +1063,8 @@ void Program_parse_type(Program *p, Module *m, State *st) {
       Enum *e = Program_add_type(p, EnumT, name, m)->enumT;
       e->entries = Program_parse_enum_entry_list(p, st);
     } else if (check_word(st, "uniontype") && check_op(st, "{")) {
-      Type *u = Program_add_type(p, UnionTypeT, name, m);
-      u->union_type_member = Program_parse_union_entry_list(p, m, st);
+      Union *u = Program_add_type(p, UnionTypeT, name, m)->unionT;
+      u->member = Program_parse_union_entry_list(p, m, st);
     } else
       FATAL(st, "Missing type declaration");
   } else
@@ -1796,7 +1801,7 @@ void c_type(FILE *f, const char *module_name, TypeList *t) {
   case EnumT:
     break;
   case UnionTypeT:
-    c_uniontype(f, module_name, t->type->name, t->type->union_type_member);
+    c_uniontype(f, module_name, t->type->name, t->type->unionT->member);
     break;
   case FnT:
     // todo!??
@@ -2281,7 +2286,7 @@ void c_type_forward(FILE *f, const char *module_name, TypeList *t) {
     c_enum(f, module_name, t->type->name, t->type->enumT->entries);
     break;
   case UnionTypeT:
-    c_union_forward(f, module_name, t->type->name, t->type->union_type_member);
+    c_union_forward(f, module_name, t->type->name, t->type->unionT->member);
     break;
   case ModuleT:
     break;
@@ -2500,7 +2505,7 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
       if (e->construct->p->v)
         FATAL(&e->localtion, "Named initialisation of a union das not work");
       Type *pt = c_Expression_make_variables_typed(s, p, m, e->construct->p->p);
-      UnionTypeEntry *ua = e->construct->type->union_type_member;
+      UnionTypeEntry *ua = e->construct->type->unionT->member;
       for (; ua; ua = ua->next)
         if (TypeDeclare_equal(pt, ua->type))
           break;
