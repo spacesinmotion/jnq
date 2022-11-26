@@ -2111,6 +2111,12 @@ void c_expression(FILE *f, Expression *e) {
       break;
 
     case FnT: {
+      if (e->member->o->type == IdentifierA && e->member->o->id->type->kind == ModuleT) {
+        if (!e->member->member->type->fnT->is_extern_c)
+          fprintf(f, "%s", Type_defined_module(e->member->member->type)->c_name);
+        fprintf(f, "%s(", e->member->member->name);
+        break;
+      }
       if (!e->member->member->type->fnT->parameter)
         FATAL(&e->localtion, "internal error creating member function call!");
       Variable *first = e->member->member->type->fnT->parameter;

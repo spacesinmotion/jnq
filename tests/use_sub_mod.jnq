@@ -1,6 +1,8 @@
 
 use sub.util
 
+use sub.util_user
+
 fn main() int {
   printf("use sub module\n")
 
@@ -18,6 +20,8 @@ fn main() int {
   p = p.neg()
   ASSERT(p.x == -4)
   ASSERT(p.y == -5)
+
+  util_user.util_user()
 
   printf(" ...ok\n")
 }
