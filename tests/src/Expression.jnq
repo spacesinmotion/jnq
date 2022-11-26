@@ -1,0 +1,88 @@
+
+use State
+use Type
+
+type ExpressionType enum {
+  NullA, BoolA, CharA, IntA, FloatA, DoubleA, StringA,
+  IdentifierA, VarE, BraceE, CallE, ConstructE, AccessE,
+  MemberAccessE, AsCast, UnaryPrefixE, UnaryPostfixE, BinaryOperationE,
+}
+
+type ExpressionSelect union {
+  b bool
+  c [3]char
+  i int 
+  f double
+  s *char
+  id *Identifier
+  var *Type.Variable
+  brace *Brace 
+  call *Call
+  construct *Construct 
+  access *Access
+  member *MemberAccess
+  cast *Cast 
+  unpre *UnaryPrefix
+  unpost *UnaryPostfix
+  // BinaryOperation *binop;
+}
+
+type Expression struct {
+  select ExpressionSelect
+  _type ExpressionType
+  localtion State.State
+} 
+
+type Identifier struct {
+  name *char
+  _type *Type.Type
+}
+
+type Brace struct {
+  p *Expression
+}
+
+type Call struct {
+  o *Expression
+  p *Parameter
+}
+
+type Construct struct {
+  _type *Type.Type
+  p *Parameter
+}
+
+type Access struct {
+  o *Expression
+  p *Expression
+}
+
+
+type MemberAccess struct {
+  o *Expression
+  o_type *Type.Type
+  member *Identifier
+  pointer bool
+}
+
+type Cast struct {
+  o *Expression
+  _type *Type.Type
+}
+
+
+type UnaryPrefix struct {
+  o *Expression
+  op *char
+}
+
+type UnaryPostfix struct {
+  o *Expression
+  op *char
+}
+
+type Parameter struct {
+  p *Expression
+  v *Identifier
+  next *Parameter
+}
