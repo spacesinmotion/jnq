@@ -419,9 +419,9 @@ typedef struct Type {
     Variable *member;
     Enum *enumT;
     Union *unionT;
-    Function *fn;
-    Module *mod;
-    int count;
+    Function *fnT;
+    Module *moduleT;
+    int array_count;
   };
   TypeKind kind;
   Module *module;
@@ -520,9 +520,9 @@ Type String = (Type){"string", NULL, StructT, &global, NULL};
 Type Ellipsis = (Type){"...", NULL, StructT, &global, NULL};
 
 Function print = (Function){&(Variable){"...", &Ellipsis, &(Variable){"format", &String, NULL}}, NULL, NULL};
-Type Printf = (Type){"printf", .fn = &print, FnT, &global, NULL};
+Type Printf = (Type){"printf", .fnT = &print, FnT, &global, NULL};
 Function assert = (Function){&(Variable){"cond", &Bool, NULL}, NULL, NULL};
-Type Assert = (Type){"ASSERT", .fn = &assert, FnT, &global, NULL};
+Type Assert = (Type){"ASSERT", .fnT = &assert, FnT, &global, NULL};
 
 Type *Module_find_type(Program *p, Module *m, const char *b, const char *e) {
   if (4 == e - b && strncmp(Bool.name, b, 4) == 0)
@@ -591,7 +591,7 @@ Type *Program_add_type(Program *p, TypeKind k, const char *name, Module *m) {
   tt->kind = k;
   switch (k) {
   case ModuleT:
-    tt->mod = NULL;
+    tt->moduleT = NULL;
     break;
   case StructT:
   case UnionT:
@@ -606,12 +606,12 @@ Type *Program_add_type(Program *p, TypeKind k, const char *name, Module *m) {
     tt->unionT->member = NULL;
     break;
   case FnT:
-    tt->fn = Program_alloc(p, sizeof(Function));
-    tt->fn->body = NULL;
-    tt->fn->is_extern_c = false;
+    tt->fnT = Program_alloc(p, sizeof(Function));
+    tt->fnT->body = NULL;
+    tt->fnT->is_extern_c = false;
     break;
   case ArrayT:
-    tt->count = 0;
+    tt->array_count = 0;
     // fallthrough
   case PointerT:
     FATALX("Only base types are implemented to add types");
@@ -627,10 +627,10 @@ Type *Program_add_type(Program *p, TypeKind k, const char *name, Module *m) {
 
 void Program_add_use(Program *p, Module *m, Module *use, const char *name) {
   Type *mod = Program_add_type(p, ModuleT, name, m);
-  mod->mod = use;
+  mod->moduleT = use;
 }
 
-Function *Program_add_fn(Program *p, Module *m, const char *name) { return Program_add_type(p, FnT, name, m)->fn; }
+Function *Program_add_fn(Program *p, Module *m, const char *name) { return Program_add_type(p, FnT, name, m)->fnT; }
 
 Variable *Program_new_variable(Program *p, Variable *next) {
   Variable *v = Program_alloc(p, sizeof(Variable));
@@ -938,7 +938,7 @@ Type *Program_parse_declared_type(Program *p, Module *m, State *st) {
       if (c) {
         Type *td = Program_alloc(p, sizeof(Type));
         td->kind = ArrayT;
-        td->count = count;
+        td->array_count = count;
         td->child = c;
         return td;
       }
@@ -954,7 +954,7 @@ Type *Program_parse_declared_type(Program *p, Module *m, State *st) {
         skip_whitespace(st);
         const char *s = st->c;
         if (check_identifier(st)) {
-          if ((t = Module_find_type(p, t->mod, s, st->c)))
+          if ((t = Module_find_type(p, t->moduleT, s, st->c)))
             return t;
         }
       }
@@ -1638,7 +1638,7 @@ void c_use(FILE *f, TypeList *tl, ModuleFileCB cb) {
   if (tl->next)
     c_use(f, tl->next, cb);
   if (tl->type->kind == ModuleT)
-    cb(f, tl->type->mod);
+    cb(f, tl->type->moduleT);
 }
 
 bool c_type_declare(FILE *f, Type *t, const char *var) {
@@ -1653,8 +1653,8 @@ bool c_type_declare(FILE *f, Type *t, const char *var) {
   case ArrayT:
     fprintf(f, " %s", var);
     while (t && t->kind == ArrayT) {
-      if (t->count > 0)
-        fprintf(f, "[%d]", t->count);
+      if (t->array_count > 0)
+        fprintf(f, "[%d]", t->array_count);
       else
         fprintf(f, "[]");
       t = t->child;
@@ -1671,7 +1671,7 @@ bool c_type_declare(FILE *f, Type *t, const char *var) {
     fprintf(f, "%s%s", t->module->c_name, t->name);
     break;
   case FnT:
-    if (c_type_declare(f, t->fn->returnType, ""))
+    if (c_type_declare(f, t->fnT->returnType, ""))
       FATALX("I don't know right now how to handle array function pointer stuff!");
     fprintf(f, "(*())");
     break;
@@ -1856,7 +1856,7 @@ void lisp_expression(FILE *f, Expression *e) {
     for (Type *t = e->var->type; t; t = t->child) {
       switch (t->kind) {
       case ArrayT:
-        fprintf(f, "[%d]", t->count);
+        fprintf(f, "[%d]", t->array_count);
         break;
       case PointerT:
         fprintf(f, "*");
@@ -1893,7 +1893,7 @@ void lisp_expression(FILE *f, Expression *e) {
     for (Type *t = e->construct->type; t; t = t->child) {
       switch (t->kind) {
       case ArrayT:
-        fprintf(f, "[%d]", t->count);
+        fprintf(f, "[%d]", t->array_count);
         break;
       case PointerT:
         fprintf(f, "*");
@@ -1993,7 +1993,7 @@ void c_expression(FILE *f, Expression *e) {
   case IdentifierA:
     if (!e->id->type)
       FATAL(&e->localtion, "unknown type for id '%s'", e->id->name);
-    if (e->id->type->kind == FnT && !e->id->type->fn->is_extern_c)
+    if (e->id->type->kind == FnT && !e->id->type->fnT->is_extern_c)
       fprintf(f, "%s", e->id->type->module->c_name);
     fprintf(f, "%s", e->id->name);
     break;
@@ -2059,9 +2059,9 @@ void c_expression(FILE *f, Expression *e) {
       break;
 
     case FnT: {
-      if (!e->member->member->type->fn->parameter)
+      if (!e->member->member->type->fnT->parameter)
         FATAL(&e->localtion, "internal error creating member function call!");
-      Variable *first = e->member->member->type->fn->parameter;
+      Variable *first = e->member->member->type->fnT->parameter;
       while (first->next)
         first = first->next;
       const char *prefix = "";
@@ -2069,7 +2069,7 @@ void c_expression(FILE *f, Expression *e) {
         prefix = "*";
       else if (!e->member->pointer && first->type->kind == PointerT)
         prefix = "&";
-      if (!e->member->member->type->fn->is_extern_c)
+      if (!e->member->member->type->fnT->is_extern_c)
         fprintf(f, "%s", e->member->member->type->module->c_name);
       fprintf(f, "%s(%s", e->member->member->name, prefix);
       if (e->member->o->type != IdentifierA || e->member->o->id->type->kind != ModuleT)
@@ -2217,10 +2217,10 @@ void c_fn(FILE *f, const char *module_name, TypeList *tl) {
     return;
 
   c_fn(f, module_name, tl->next);
-  if (tl->type->kind != FnT || tl->type->fn->is_extern_c)
+  if (tl->type->kind != FnT || tl->type->fnT->is_extern_c)
     return;
 
-  Function *fn = tl->type->fn;
+  Function *fn = tl->type->fnT;
   if (fn->returnType) {
     if (c_type_declare(f, fn->returnType, ""))
       FATALX("array return type not supported -> c backend!");
@@ -2318,10 +2318,10 @@ void c_fn_forward(FILE *f, const char *module_name, TypeList *tl) {
     return;
 
   c_fn_forward(f, module_name, tl->next);
-  if (tl->type->kind != FnT || tl->type->fn->is_extern_c)
+  if (tl->type->kind != FnT || tl->type->fnT->is_extern_c)
     return;
 
-  Function *fn = tl->type->fn;
+  Function *fn = tl->type->fnT;
   if (fn->returnType) {
     if (c_type_declare(f, fn->returnType, ""))
       FATALX("array return type not supported -> c backend!");
@@ -2378,7 +2378,7 @@ Type *VariableStack_find(VariableStack *s, const char *n) {
 bool is_member_fn_for(Type *ot, Type *ft, Identifier *member) {
   if (ft->kind != FnT)
     return false;
-  Function *f = ft->fn;
+  Function *f = ft->fnT;
   if (!f->parameter || strcmp(ft->name, member->name) != 0)
     return false;
 
@@ -2415,7 +2415,7 @@ Type *Module_find_member(Program *p, Type *t, Identifier *member) {
     // union?? -> some build in ()
     break;
   case ModuleT:
-    return Module_find_type(p, t->mod, member->name, member->name + strlen(member->name));
+    return Module_find_type(p, t->moduleT, member->name, member->name + strlen(member->name));
 
   case ArrayT:
   case PointerT:
@@ -2474,7 +2474,7 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
       c_Expression_make_variables_typed(s, p, m, pa->p);
 
     Parameter *pa = e->call->p;
-    Variable *va = t->fn->parameter;
+    Variable *va = t->fnT->parameter;
     while (pa && va) {
       pa = pa->next;
       va = va->next;
@@ -2485,11 +2485,11 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
       va = va->next;
       // compare pa->type with e->call->o->member->o_type
     }
-    if (pa && t->fn->parameter->type != &Ellipsis)
+    if (pa && t->fnT->parameter->type != &Ellipsis)
       FATAL(&e->localtion, "To much parameter for function call");
-    if (va && t->fn->parameter->type != &Ellipsis)
+    if (va && t->fnT->parameter->type != &Ellipsis)
       FATAL(&e->localtion, "Missing parameter for function call");
-    return t->fn->returnType;
+    return t->fnT->returnType;
   }
   case ConstructE: {
     if (e->construct->type->kind == ArrayT) {
@@ -2694,12 +2694,12 @@ void c_Module_make_variables_typed(Program *p, Module *m) {
 
   for (TypeList *tl = m->types; tl; tl = tl->next)
     if (tl->type->kind == ModuleT)
-      c_Module_make_variables_typed(p, tl->type->mod);
+      c_Module_make_variables_typed(p, tl->type->moduleT);
 
   VariableStack stack = (VariableStack){};
   for (TypeList *tl = m->types; tl; tl = tl->next)
     if (tl->type->kind == FnT)
-      c_Function_make_variables_typed(&stack, p, m, tl->type->fn);
+      c_Function_make_variables_typed(&stack, p, m, tl->type->fnT);
 }
 
 void c_Program(FILE *f, Program *p, Module *m) {
