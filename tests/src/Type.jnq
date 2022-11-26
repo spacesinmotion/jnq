@@ -1,5 +1,6 @@
 
 use Statement
+use Module
 
 type TypeKind enum { ModuleT, StructT, UnionT, EnumT, UnionTypeT, ArrayT, PointerT, FnT, PlaceHolder }
 
@@ -8,7 +9,7 @@ type TypeSelect union {
   enumT *Enum
   unionT *UnionType
   fnT *Function
-  moduleT *Module 
+  moduleT *Module.Module 
 
   array_count int
 }
@@ -22,12 +23,12 @@ type Type struct {
 
 type Struct struct {
   member *Variable
-  module *Module
+  module *Module.Module
 }
 
 type Enum struct {
   entries *EnumEntry
-  module *Module
+  module *Module.Module
 }
 
 type EnumEntry struct {
@@ -39,7 +40,7 @@ type EnumEntry struct {
 
 type UnionType struct {
   member *UnionTypeEntry
-  module *Module
+  module *Module.Module
 }
 
 type UnionTypeEntry struct {
@@ -53,20 +54,7 @@ type Function struct {
   returnType *Type
   is_extern_c bool 
   body *Statement.Statement
-  module *Module 
-}
-
-type Module struct {
-  path *char
-  c_name *char
-  types *TypeList
-  finished bool
-  next *Module
-}
-
-type TypeList struct {
-  _type *Type
-  next *TypeList
+  module *Module.Module 
 }
 
 type Variable struct {

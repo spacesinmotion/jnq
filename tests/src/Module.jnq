@@ -1,0 +1,15 @@
+
+use Type
+
+type Module struct {
+  path *char
+  c_name *char
+  types *TypeList
+  finished bool
+  next *Module
+}
+
+type TypeList struct {
+  _type *Type.Type
+  next *TypeList
+}
