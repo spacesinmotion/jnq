@@ -526,7 +526,7 @@ Type Printf = (Type){"printf", .fnT = &print, FnT, NULL};
 Function assert = (Function){&(Variable){"cond", &Bool, NULL}, NULL, true, NULL, &global};
 Type Assert = (Type){"ASSERT", .fnT = &assert, FnT, NULL};
 
-Type *Module_find_type(Program *p, Module *m, const char *b, const char *e) {
+Type *Module_find_type(Module *m, const char *b, const char *e) {
   if (4 == e - b && strncmp(Bool.name, b, 4) == 0)
     return &Bool;
   if (3 == e - b && strncmp(Int.name, b, 3) == 0)
@@ -553,7 +553,7 @@ Type *Module_find_type(Program *p, Module *m, const char *b, const char *e) {
 Type *Program_add_type(Program *p, TypeKind k, const char *name, Module *m);
 
 Type *Module_temp_type(Program *p, Module *m, const char *b, const char *e) {
-  Type *t = Module_find_type(p, m, b, e);
+  Type *t = Module_find_type(m, b, e);
   if (t)
     return t;
   const char *n = Program_copy_string(p, b, e - b);
@@ -595,7 +595,7 @@ Module *Program_add_module(Program *p, const char *pathc) {
 }
 
 Type *Program_add_type(Program *p, TypeKind k, const char *name, Module *m) {
-  Type *tt = Module_find_type(p, m, name, name + strlen(name));
+  Type *tt = Module_find_type(m, name, name + strlen(name));
   if (tt && tt->kind != PlaceHolder)
     FATALX("Type '%s' allready defined!", name);
   bool was_placeholder = tt && tt->kind == PlaceHolder;
@@ -1037,7 +1037,6 @@ Variable *Program_parse_variable_declaration(Program *p, Module *m, State *st, V
 
 Variable *Program_parse_variable_declaration_list(Program *p, Module *m, State *st, const char *end) {
   skip_whitespace(st);
-  State old = *st;
   Variable *top = NULL;
   while (*st->c) {
     if (check_op(st, end))
@@ -1054,7 +1053,6 @@ Variable *Program_parse_variable_declaration_list(Program *p, Module *m, State *
 
 EnumEntry *Program_parse_enum_entry_list(Program *p, State *st) {
   skip_whitespace(st);
-  State old = *st;
   EnumEntry *top = NULL;
   while (*st->c) {
     if (check_op(st, "}"))
@@ -1080,7 +1078,6 @@ EnumEntry *Program_parse_enum_entry_list(Program *p, State *st) {
 
 UnionTypeEntry *Program_parse_union_entry_list(Program *p, Module *m, State *st) {
   skip_whitespace(st);
-  State old = *st;
   UnionTypeEntry *top = NULL;
   int size = 0;
   while (*st->c) {
@@ -1259,7 +1256,6 @@ Expression *Program_parse_construction(Program *p, Module *m, State *st) {
     *st = old;
     Type *type = NULL;
     if ((type = Program_parse_declared_type(p, m, st))) {
-      const char *id_end = st->c;
       if (check_op(st, "{")) {
         Expression *construct = Program_new_Expression(p, ConstructE, old);
         construct->construct->p = Program_parse_named_parameter_list(p, m, st);
@@ -1469,7 +1465,6 @@ Expression *Program_parse_expression(Program *p, Module *m, State *st) {
 Statement *Program_parse_statement(Program *p, Module *m, State *st, Statement *next);
 Statement *Program_parse_case_body(Program *p, Module *m, State *st) {
   Statement *body = NULL;
-  Expression *temp_e = NULL;
   while (*st->c) {
     skip_whitespace(st);
     State old = *st;
@@ -1490,7 +1485,6 @@ Statement *Program_parse_scope_block(Program *p, Module *m, State *st);
 Statement *Program_parse_statement(Program *p, Module *m, State *st, Statement *next) {
   Statement *statement = NULL;
   Expression *temp_e = NULL;
-  Variable *temp_v = NULL;
   if (check_op(st, "{")) {
     statement = Program_new_Statement(p, Scope, back(st, 1), next);
     statement->scope->body = Program_parse_scope(p, m, st);
@@ -1584,7 +1578,6 @@ Statement *Program_parse_statement(Program *p, Module *m, State *st, Statement *
 }
 Statement *Program_parse_scope(Program *p, Module *m, State *st) {
   Statement *body = NULL;
-  Expression *temp_e = NULL;
   while (*st->c) {
     skip_whitespace(st);
     if (check_op(st, "}"))
@@ -2481,7 +2474,7 @@ Type *Module_find_member(Program *p, Type *t, Identifier *member) {
     // union?? -> some build in ()
     break;
   case ModuleT:
-    return Module_find_type(p, t->moduleT, member->name, member->name + strlen(member->name));
+    return Module_find_type(t->moduleT, member->name, member->name + strlen(member->name));
 
   case ArrayT:
   case PointerT:
@@ -2526,7 +2519,7 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
       return e->id->type;
     if ((e->id->type = VariableStack_find(s, e->id->name)))
       return e->id->type;
-    if ((e->id->type = Module_find_type(p, m, e->id->name, e->id->name + strlen(e->id->name))))
+    if ((e->id->type = Module_find_type(m, e->id->name, e->id->name + strlen(e->id->name))))
       return e->id->type;
     FATAL(&e->localtion, "unknown type for '%s'", e->id->name);
     return NULL;

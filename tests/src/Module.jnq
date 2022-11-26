@@ -1,6 +1,9 @@
 
 use Type
 
+cfn strlen(s *char) int
+cfn strncmp(a *char, b *char, l int) int
+
 type Module struct {
   path *char
   c_name *char
@@ -12,4 +15,30 @@ type Module struct {
 type TypeList struct {
   _type *Type.Type
   next *TypeList
+}
+
+
+fn find_type(m *Module, b *char, e *char) *Type.Type {
+  // if (4 == e - b && strncmp(Bool.name, b, 4) == 0)
+  //   return &Bool;
+  // if (3 == e - b && strncmp(Int.name, b, 3) == 0)
+  //   return &Int;
+  // if (4 == e - b && strncmp(Char.name, b, 4) == 0)
+  //   return &Char;
+  // if (5 == e - b && strncmp(Float.name, b, 5) == 0)
+  //   return &Float;
+  // if (6 == e - b && strncmp(Double.name, b, 5) == 0)
+  //   return &Double;
+  // if (6 == e - b && strncmp(String.name, b, 6) == 0)
+  //   return &String;
+  // if (6 == e - b && strncmp(Printf.name, b, 6) == 0)
+  //   return &Printf;
+  // if (6 == e - b && strncmp(Assert.name, b, 6) == 0)
+  //   return &Assert;
+
+  bel int = (e - b) as int 
+  for (tl *TypeList = m->types; tl; tl = tl->next)
+    if (strlen(tl->_type->name) == bel && strncmp(tl->_type->name, b, bel) == 0)
+      return tl->_type;
+  return null;
 }
