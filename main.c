@@ -639,8 +639,21 @@ Type *Program_add_type(Program *p, TypeKind k, const char *name, Module *m) {
     FATALX("Only base types are implemented to add types");
     break;
   }
-  if (was_placeholder)
+  if (was_placeholder) {
+    if (m->types->type == tt)
+      return tt;
+    for (TypeList *tl = m->types; tl->next; tl = tl->next) {
+      if (tl->next->type == tt) {
+        TypeList *tlt = tl->next;
+        tl->next = tlt->next;
+        tlt->next = m->types;
+        m->types = tlt;
+        return tt;
+      }
+    }
+    FATALX("did not find place holder type '%s'", tt->name);
     return tt;
+  }
 
   TypeList *tl = (TypeList *)Program_alloc(p, sizeof(TypeList));
   tl->type = tt;
@@ -910,8 +923,6 @@ bool Program_parse_use_path(Program *p, Module *m, State *st) {
   Module *use = Program_parse_sub_file(p, buffer, m);
   if (!use)
     FATAL(&old, "import not found '%s'", buffer);
-  if (!use->finished)
-    FATAL(&old, "Circular dependencies!");
 
   const char *n = Program_copy_string(p, name, strlen(name));
   Program_add_type(p, ModuleT, n, m)->moduleT = use;
@@ -992,7 +1003,7 @@ Type *Program_parse_declared_type(Program *p, Module *m, State *st) {
         skip_whitespace(st);
         const char *s = st->c;
         if (check_identifier(st)) {
-          if ((t = Module_find_type(p, t->moduleT, s, st->c)))
+          if ((t = Module_temp_type(p, t->moduleT, s, st->c)))
             return t;
         }
       }
@@ -1011,13 +1022,14 @@ Variable *Program_parse_variable_declaration(Program *p, Module *m, State *st, V
   if (check_identifier(st)) {
     const char *name_end = st->c;
     skip_whitespace(st);
-    if (!check_whitespace_for_nl(st))
+    if (!check_whitespace_for_nl(st)) {
       if ((type = Program_parse_declared_type(p, m, st))) {
         Variable *top = Program_new_variable(p, next);
         top->name = Program_copy_string(p, old.c, name_end - old.c);
         top->type = type;
         return top;
       }
+    }
     *st = old;
   }
   return NULL;
@@ -1654,9 +1666,7 @@ Module *Program_parse_file(Program *p, const char *path) {
   const char *st_path = Program_copy_string(p, tempPath, strlen(tempPath));
   State st = State_new(code, st_path);
   m = Program_add_module(p, path);
-  m->finished = false;
   Program_parse_module(p, m, &st);
-  m->finished = true;
 
   free(code);
   return m;

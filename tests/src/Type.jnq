@@ -1,4 +1,6 @@
 
+use Statement
+
 type TypeKind enum { ModuleT, StructT, UnionT, EnumT, UnionTypeT, ArrayT, PointerT, FnT, PlaceHolder }
 
 type TypeSelect union {
@@ -50,7 +52,7 @@ type Function struct {
   parameter *Variable
   returnType *Type
   is_extern_c bool 
-  //body *Statement
+  body *Statement.Statement
   module *Module 
 }
 
