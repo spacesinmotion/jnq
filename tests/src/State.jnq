@@ -5,6 +5,10 @@ cfn isalnum(c char) bool
 cfn strtol(s *char, e **char, base int) int
 cfn strtod(s *char, e **char) double
 
+// type Test struct {
+//   s *State
+// }
+
 // store the location in a file and run through
 type State struct {
   file *char

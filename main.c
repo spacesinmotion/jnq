@@ -888,6 +888,41 @@ bool Program_parse_use_path(Program *p, Module *m, State *st) {
   return true;
 }
 
+bool Program_parse_check_declared_type(Program *p, State *st) {
+  skip_whitespace(st);
+  State old = *st;
+
+  if (check_op(st, "*")) {
+    if (Program_parse_check_declared_type(p, st))
+      return true;
+    *st = old;
+  }
+
+  if (check_op(st, "[")) {
+    int count = -1;
+    read_int(st, &count);
+    if (check_op(st, "]")) {
+      if (Program_parse_check_declared_type(p, st))
+        return true;
+    }
+    *st = old;
+  }
+
+  if (check_identifier(st)) {
+    old = *st;
+    if (check_op(st, ".")) {
+      skip_whitespace(st);
+      if (check_identifier(st))
+        return true;
+      *st = old;
+    }
+    return true;
+  }
+
+  *st = old;
+  return false;
+}
+
 Type *Program_parse_declared_type(Program *p, Module *m, State *st) {
   skip_whitespace(st);
   State old = *st;
@@ -1178,18 +1213,21 @@ Expression *Program_parse_construction(Program *p, Module *m, State *st) {
   skip_whitespace(st);
   State old = *st;
 
-  Type *type = NULL;
-  if ((type = Program_parse_declared_type(p, m, st))) {
-    const char *id_end = st->c;
-    if (check_op(st, "{")) {
-      Expression *construct = Program_new_Expression(p, ConstructE, old);
-      construct->construct->p = Program_parse_named_parameter_list(p, m, st);
-      if (!construct->construct->p)
-        construct->construct->p = Program_parse_parameter_list(p, m, st);
-      if (!check_op(st, "}"))
-        FATAL(st, "unfinished constructor call, missing '}'");
-      construct->construct->type = type;
-      return construct;
+  if (Program_parse_check_declared_type(p, st) && check_op(st, "{")) {
+    *st = old;
+    Type *type = NULL;
+    if ((type = Program_parse_declared_type(p, m, st))) {
+      const char *id_end = st->c;
+      if (check_op(st, "{")) {
+        Expression *construct = Program_new_Expression(p, ConstructE, old);
+        construct->construct->p = Program_parse_named_parameter_list(p, m, st);
+        if (!construct->construct->p)
+          construct->construct->p = Program_parse_parameter_list(p, m, st);
+        if (!check_op(st, "}"))
+          FATAL(st, "unfinished constructor call, missing '}'");
+        construct->construct->type = type;
+        return construct;
+      }
     }
   }
 
