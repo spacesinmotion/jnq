@@ -594,9 +594,8 @@ bool TypeDeclare_equal(Type *t1, Type *t2) {
 
 Module *Program_add_module(Program *p, const char *pathc) {
   size_t size = strlen(pathc) + 1;
-  char *path = (char *)Program_alloc(p, size);
+  const char *path = Program_copy_string(p, pathc, size);
   char *cname = (char *)Program_alloc(p, size + 1);
-  strcpy(path, pathc);
   strcpy(cname, pathc);
   for (char *c = cname; *c; ++c)
     if (*c == '.')
@@ -656,13 +655,6 @@ Type *Program_add_type(Program *p, TypeKind k, const char *name, Module *m) {
   m->types = tl;
   return tt;
 }
-
-void Program_add_use(Program *p, Module *m, Module *use, const char *name) {
-  Type *mod = Program_add_type(p, ModuleT, name, m);
-  mod->moduleT = use;
-}
-
-Function *Program_add_fn(Program *p, Module *m, const char *name) { return Program_add_type(p, FnT, name, m)->fnT; }
 
 Variable *Program_new_variable(Program *p, Variable *next) {
   Variable *v = Program_alloc(p, sizeof(Variable));
@@ -908,7 +900,7 @@ bool Program_parse_use_path(Program *p, Module *m, State *st) {
   char *n = Program_alloc(p, strlen(name) + 1);
   strcpy(n, name);
 
-  Program_add_use(p, m, use, n);
+  Program_add_type(p, ModuleT, n, m)->moduleT = use;
   return true;
 }
 
@@ -1592,7 +1584,7 @@ void Program_parse_fn(Program *p, Module *m, State *st, bool extc) {
 
   const char *name = read_identifier(p, st);
   if (name) {
-    Function *fn = Program_add_fn(p, m, name);
+    Function *fn = Program_add_type(p, FnT, name, m)->fnT;
     if (check_op(st, "(")) {
       fn->parameter = Program_parse_variable_declaration_list(p, m, st, ")");
       fn->returnType = Program_parse_declared_type(p, m, st);
