@@ -1,10 +1,13 @@
 
-use Struct
-
 type TypeKind enum { ModuleT, StructT, UnionT, EnumT, UnionTypeT, ArrayT, PointerT, FnT, PlaceHolder }
 
 type TypeSelect union {
-  structT *Struct.Struct
+  structT *Struct
+  enumT *Enum
+  unionT *UnionType
+  fnT *Function
+  moduleT *Module 
+
   array_count int
 }
 
@@ -13,4 +16,53 @@ type Type struct {
   select TypeSelect
   kind TypeKind
   child *Type
+}
+
+type Struct struct {
+//  member *Variable
+  module *Module
+}
+
+type Enum struct {
+  entries *EnumEntry
+  module *Module
+}
+
+type EnumEntry struct {
+  name *char
+  value int
+  valueSet bool
+  next *EnumEntry 
+}
+
+type UnionType struct {
+  member *UnionTypeEntry
+  module *Module
+}
+
+type UnionTypeEntry struct {
+  type *Type
+  index int
+  next *UnionTypeEntry
+}
+
+type Function struct {
+  //parameter *Variable
+  returnType *Type
+  is_extern_c bool 
+  //body *Statement
+  module *Module 
+}
+
+type Module struct {
+  path *char
+  c_name *char
+  types *TypeList
+  finished bool
+  next *Module
+}
+
+type TypeList struct {
+  _type *Type
+  next *TypeList
 }
