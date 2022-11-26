@@ -19,7 +19,7 @@ type Type struct {
 }
 
 type Struct struct {
-//  member *Variable
+  member *Variable
   module *Module
 }
 
@@ -47,7 +47,7 @@ type UnionTypeEntry struct {
 }
 
 type Function struct {
-  //parameter *Variable
+  parameter *Variable
   returnType *Type
   is_extern_c bool 
   //body *Statement
@@ -65,4 +65,10 @@ type Module struct {
 type TypeList struct {
   _type *Type
   next *TypeList
+}
+
+type Variable struct {
+  name *char
+  _type *Type
+  next *Variable
 }
