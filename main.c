@@ -33,21 +33,7 @@ void State_skip(State *s, int c) {
   s->column += c;
 }
 
-struct {
-  State states[128];
-  int size;
-  jmp_buf back;
-} traceStack;
-
-void FATALX(const char *format, ...);
-void traceStack_push(State *s) {
-  if (traceStack.size == 128)
-    FATALX("not enough buffer for stack trace");
-  traceStack.states[traceStack.size] = *s;
-  traceStack.size++;
-}
-
-void traceStack_pop() { traceStack.size--; }
+jmp_buf long_jump_end;
 
 void FATAL(State *st, const char *format, ...) {
   va_list args;
@@ -56,13 +42,7 @@ void FATAL(State *st, const char *format, ...) {
   vfprintf(stderr, format, args);
   va_end(args);
   fputs("\n", stderr);
-
-  for (int i = traceStack.size - 1; i >= 0; --i) {
-    State *sst = &traceStack.states[i];
-    fprintf(stderr, " - %s:%zu:%zu\n", sst->file, sst->line, sst->column);
-  }
-
-  longjmp(traceStack.back, 1);
+  longjmp(long_jump_end, 1);
 }
 void FATALX(const char *format, ...) {
   va_list args;
@@ -71,13 +51,7 @@ void FATALX(const char *format, ...) {
   vfprintf(stderr, format, args);
   va_end(args);
   fputs("\n", stderr);
-
-  for (int i = traceStack.size - 1; i >= 0; --i) {
-    State *sst = &traceStack.states[i];
-    fprintf(stderr, " - %s:%zu:%zu\n", sst->file, sst->line, sst->column);
-  }
-
-  longjmp(traceStack.back, 1);
+  longjmp(long_jump_end, 1);
 }
 
 State back(State *s, int c) {
@@ -1626,7 +1600,6 @@ void Program_parse_fn(Program *p, Module *m, State *st, bool extc) {
 void Program_parse_module(Program *p, Module *m, State *st) {
   while (st->c[0]) {
     skip_whitespace(st);
-    traceStack_push(st);
     if (st->c[0]) {
       if (check_word(st, "use"))
         Program_parse_use_path(p, m, st);
@@ -1641,7 +1614,6 @@ void Program_parse_module(Program *p, Module *m, State *st) {
         break;
       }
     }
-    traceStack_pop();
   }
 }
 
@@ -2839,8 +2811,6 @@ int main(int argc, char *argv[]) {
     FATALX("input path too long '%s' (sorry)\n", argv[1]);
   strncpy(main_mod, argv[1], jnq_len - 4);
 
-  traceStack.size = 0;
-
   char buffer[1024 * 64];
   Program p = Program_new(buffer, 1024 * 64);
 
@@ -2862,13 +2832,13 @@ int main(int argc, char *argv[]) {
   if (!c_tmp_file)
     FATALX("could not create temp file '%s'", main_c);
 
-  int error = setjmp(traceStack.back);
+  int error = setjmp(long_jump_end);
   if (error == 0)
     c_Program(c_tmp_file, &p, m);
   fclose(c_tmp_file);
 
   if (error == 0)
-    error = setjmp(traceStack.back);
+    error = setjmp(long_jump_end);
   if (error == 0) {
     char clang_call[256] = {0};
     // strcat(clang_call, "cat ");
