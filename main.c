@@ -382,6 +382,10 @@ typedef struct SwitchStatement {
   Expression *condition;
 } SwitchStatement;
 
+typedef struct Struct {
+  Variable *member;
+} Struct;
+
 typedef struct EnumEntry {
   const char *name;
   int value;
@@ -416,7 +420,7 @@ typedef enum TypeKind { ModuleT, StructT, UnionT, EnumT, UnionTypeT, ArrayT, Poi
 typedef struct Type {
   const char *name;
   union {
-    Variable *member;
+    Struct *structT;
     Enum *enumT;
     Union *unionT;
     Function *fnT;
@@ -595,7 +599,8 @@ Type *Program_add_type(Program *p, TypeKind k, const char *name, Module *m) {
     break;
   case StructT:
   case UnionT:
-    tt->member = NULL;
+    tt->structT = (Struct *)Program_alloc(p, sizeof(Struct));
+    tt->structT->member = NULL;
     break;
   case EnumT:
     tt->enumT = (Enum *)Program_alloc(p, sizeof(Enum));
@@ -1057,8 +1062,8 @@ void Program_parse_type(Program *p, Module *m, State *st) {
   if ((name = read_identifier(p, st))) {
     bool is_union = check_word(st, "union");
     if ((is_union || check_word(st, "struct")) && check_op(st, "{")) {
-      Type *c = Program_add_type(p, is_union ? UnionT : StructT, name, m);
-      c->member = Program_parse_variable_declaration_list(p, m, st, "}");
+      Struct *s = Program_add_type(p, is_union ? UnionT : StructT, name, m)->structT;
+      s->member = Program_parse_variable_declaration_list(p, m, st, "}");
     } else if (check_word(st, "enum") && check_op(st, "{")) {
       Enum *e = Program_add_type(p, EnumT, name, m)->enumT;
       e->entries = Program_parse_enum_entry_list(p, st);
@@ -1796,7 +1801,7 @@ void c_type(FILE *f, const char *module_name, TypeList *t) {
     break;
   case UnionT:
   case StructT:
-    c_struct(f, module_name, t->type->name, t->type->kind == UnionT, t->type->member);
+    c_struct(f, module_name, t->type->name, t->type->kind == UnionT, t->type->structT->member);
     break;
   case EnumT:
     break;
@@ -2399,7 +2404,7 @@ Type *Module_find_member(Program *p, Type *t, Identifier *member) {
   switch (t->kind) {
   case UnionT:
   case StructT: {
-    for (Variable *v = t->member; v; v = v->next)
+    for (Variable *v = t->structT->member; v; v = v->next)
       if (strcmp(v->name, member->name) == 0) {
         return v->type;
       }
