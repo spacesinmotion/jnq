@@ -136,7 +136,7 @@ typedef struct Expression {
     UnaryPostfix *unpost;
     BinaryOperation *binop;
   };
-  State localtion;
+  State location;
   ExpressionType type;
 } Expression;
 
@@ -717,7 +717,7 @@ Statement *Program_new_Statement(Program *p, StatementType t, State l, Statement
 Expression *Program_new_Expression(Program *p, ExpressionType t, State l) {
   Expression *e = Program_alloc(p, sizeof(Expression));
   e->type = t;
-  e->localtion = l;
+  e->location = l;
   switch (t) {
   case NullA:
   case BoolA:
@@ -2040,7 +2040,7 @@ void c_expression(FILE *f, Expression *e) {
     break;
   case IdentifierA:
     if (!e->id->type)
-      FATAL(&e->localtion, "unknown type for id '%s'", e->id->name);
+      FATAL(&e->location, "unknown type for id '%s'", e->id->name);
     if (e->id->type->kind == FnT && !e->id->type->fnT->is_extern_c)
       fprintf(f, "%s", Type_defined_module(e->id->type)->c_name);
     fprintf(f, "%s", e->id->name);
@@ -2067,7 +2067,7 @@ void c_expression(FILE *f, Expression *e) {
     if (e->construct->type->kind == UnionTypeT) {
       fprintf(f, "(%s%s){", Type_defined_module(e->construct->type)->c_name, e->construct->type->name);
       if (!e->construct->p->v)
-        FATAL(&e->localtion, "internal error: no union entry selected");
+        FATAL(&e->location, "internal error: no union entry selected");
       UnionTypeEntry *ua = (UnionTypeEntry *)e->construct->p->v;
       fprintf(f, "._u%d = ", ua->index);
       c_expression(f, e->construct->p->p);
@@ -2079,7 +2079,7 @@ void c_expression(FILE *f, Expression *e) {
       else if (e->construct->type->kind == ArrayT)
         fprintf(f, "{");
       else
-        FATAL(&e->localtion, "unexpect type for construction (or missing impementation)");
+        FATAL(&e->location, "unexpect type for construction (or missing impementation)");
       c_parameter(f, e->construct->p);
       fprintf(f, "}");
     }
@@ -2093,10 +2093,10 @@ void c_expression(FILE *f, Expression *e) {
     break;
   case MemberAccessE: {
     if (!e->member->member->type)
-      FATAL(&e->localtion, "unknown type for member '%s'", e->member->member->name);
+      FATAL(&e->location, "unknown type for member '%s'", e->member->member->name);
     switch (e->member->member->type->kind) {
     case PlaceHolder:
-      FATAL(&e->localtion, "Use of unknow type '%s'", e->member->member->type->name);
+      FATAL(&e->location, "Use of unknow type '%s'", e->member->member->type->name);
       break;
     case EnumT:
       fprintf(f, "%s%s", Type_defined_module(e->member->member->type)->c_name, e->member->member->name);
@@ -2119,7 +2119,7 @@ void c_expression(FILE *f, Expression *e) {
         break;
       }
       if (!e->member->member->type->fnT->parameter)
-        FATAL(&e->localtion, "internal error creating member function call!");
+        FATAL(&e->location, "internal error creating member function call!");
       Variable *first = e->member->member->type->fnT->parameter;
       while (first->next)
         first = first->next;
@@ -2141,7 +2141,7 @@ void c_expression(FILE *f, Expression *e) {
   case AsCast:
     fprintf(f, "((");
     if (c_type_declare(f, e->cast->type, ""))
-      FATAL(&e->localtion, "I don't know right now how to handle array cast  stuff!");
+      FATAL(&e->location, "I don't know right now how to handle array cast  stuff!");
     fprintf(f, ")(");
     c_expression(f, e->cast->o);
     fprintf(f, "))");
@@ -2518,7 +2518,7 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
       return e->id->type;
     if ((e->id->type = Module_find_type(m, e->id->name, e->id->name + strlen(e->id->name))))
       return e->id->type;
-    FATAL(&e->localtion, "unknown type for '%s'", e->id->name);
+    FATAL(&e->location, "unknown type for '%s'", e->id->name);
     return NULL;
   }
   case VarE:
@@ -2529,7 +2529,7 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
   case CallE: {
     Type *t = c_Expression_make_variables_typed(s, p, m, e->call->o);
     if (!t || t->kind != FnT)
-      FATAL(&e->localtion, "Need a function to be called!");
+      FATAL(&e->location, "Need a function to be called!");
     for (Parameter *pa = e->call->p; pa; pa = pa->next)
       c_Expression_make_variables_typed(s, p, m, pa->p);
 
@@ -2541,14 +2541,14 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
     }
     if (va && !pa && e->call->o->type == MemberAccessE) {
       if (!e->call->o->member->o_type)
-        FATAL(&e->call->o->localtion, "Missing type on member access");
+        FATAL(&e->call->o->location, "Missing type on member access");
       va = va->next;
       // compare pa->type with e->call->o->member->o_type
     }
     if (pa && (!t->fnT->parameter || t->fnT->parameter->type != &Ellipsis))
-      FATAL(&e->localtion, "To much parameter for function call");
+      FATAL(&e->location, "To much parameter for function call");
     if (va && (!t->fnT->parameter || t->fnT->parameter->type != &Ellipsis))
-      FATAL(&e->localtion, "Missing parameter for function call");
+      FATAL(&e->location, "Missing parameter for function call");
     return t->fnT->returnType;
   }
   case ConstructE: {
@@ -2557,49 +2557,49 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
         Type *pt = c_Expression_make_variables_typed(s, p, m, pa->p);
         Type *et = e->construct->type->child;
         if (!TypeDeclare_equal(pt, et))
-          FATAL(&e->localtion, "Type missmatch for array element of '%s'!", e->construct->type->child->name);
+          FATAL(&e->location, "Type missmatch for array element of '%s'!", e->construct->type->child->name);
       }
     } else if (e->construct->type->kind == UnionTypeT) {
       if (e->construct->p->next)
-        FATAL(&e->localtion, "A union type could be only of one kind");
+        FATAL(&e->location, "A union type could be only of one kind");
       if (e->construct->p->v)
-        FATAL(&e->localtion, "Named initialisation of a union das not work");
+        FATAL(&e->location, "Named initialisation of a union das not work");
       Type *pt = c_Expression_make_variables_typed(s, p, m, e->construct->p->p);
       UnionTypeEntry *ua = e->construct->type->unionT->member;
       for (; ua; ua = ua->next)
         if (TypeDeclare_equal(pt, ua->type))
           break;
       if (!ua)
-        FATAL(&e->localtion, "type '%s' not supported by '%s'", pt->name, e->construct->type->name);
+        FATAL(&e->location, "type '%s' not supported by '%s'", pt->name, e->construct->type->name);
       e->construct->p->v = (Identifier *)ua; // unsafe
     } else if (e->construct->type->kind == StructT || e->construct->type->kind == UnionT) {
       for (Parameter *pa = e->construct->p; pa; pa = pa->next) {
         Type *pt = c_Expression_make_variables_typed(s, p, m, pa->p);
         if (pa->v) {
           if (e->construct->type->kind != StructT && e->construct->type->kind != UnionT)
-            FATAL(&pa->p->localtion, "Named construction '%s' for none struct type!", pa->v->name);
+            FATAL(&pa->p->location, "Named construction '%s' for none struct type!", pa->v->name);
           Type *vt = Module_find_member(p, e->construct->type, pa->v);
           if (!vt)
-            FATAL(&pa->p->localtion, "Type '%s' has no member '%s'!", e->construct->type->name, pa->v->name);
+            FATAL(&pa->p->location, "Type '%s' has no member '%s'!", e->construct->type->name, pa->v->name);
           if (!TypeDeclare_equal(pt, vt))
-            FATAL(&pa->p->localtion, "Type missmatch for member '%s' of '%s'!", pa->v->name, e->construct->type->name);
+            FATAL(&pa->p->location, "Type missmatch for member '%s' of '%s'!", pa->v->name, e->construct->type->name);
           pa->v->type = pt;
         } else {
           ; // ToDo check type in order
         }
       }
     } else {
-      FATAL(&e->localtion, "construction not possible (or not implemented)");
+      FATAL(&e->location, "construction not possible (or not implemented)");
     }
     return e->construct->type;
   }
   case AccessE: {
     Type *subt = c_Expression_make_variables_typed(s, p, m, e->access->p);
     if (subt != &Int)
-      FATAL(&e->access->p->localtion, "Expect integral type for array subscription");
+      FATAL(&e->access->p->location, "Expect integral type for array subscription");
     Type *t = c_Expression_make_variables_typed(s, p, m, e->access->o);
     if (t->kind != ArrayT && t->kind != PointerT)
-      FATAL(&e->localtion, "Expect array/pointer type for access");
+      FATAL(&e->location, "Expect array/pointer type for access");
     return t->child;
   }
   case MemberAccessE: {
@@ -2609,9 +2609,9 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
       e->member->pointer = true;
     }
     if (t->kind != StructT && t->kind != UnionT && t->kind != EnumT && t->kind != UnionTypeT && t->kind != ModuleT)
-      FATAL(&e->localtion, "Expect non pointer type for member access");
+      FATAL(&e->location, "Expect non pointer type for member access");
     if (!(e->member->member->type = Module_find_member(p, t, e->member->member)))
-      FATAL(&e->localtion, "unknown member '%s' for '%s'", e->member->member->name, t->name);
+      FATAL(&e->location, "unknown member '%s' for '%s'", e->member->member->name, t->name);
     e->member->o_type = t;
     return e->member->member->type;
   }
@@ -2628,7 +2628,7 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
       return td;
     } else if (strcmp(e->unpre->op, "*") == 0) {
       if (st->kind != PointerT)
-        FATAL(&e->localtion, "dereferenceing none pointer type!");
+        FATAL(&e->location, "dereferenceing none pointer type!");
       return st->child;
     }
     return st;
@@ -2645,7 +2645,7 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
       fprintf(stderr, "\n");
       lisp_expression(stderr, e->binop->o2);
       fprintf(stderr, "\n");
-      FATAL(&e->localtion, "Expect equal types for binary operation '%s' (%s, %s) (%d, %d)", e->binop->op->op, t1->name,
+      FATAL(&e->location, "Expect equal types for binary operation '%s' (%s, %s) (%d, %d)", e->binop->op->op, t1->name,
             t2->name, t1->kind, t2->kind);
     }
     if (e->binop->op->returns_bool)
@@ -2653,7 +2653,7 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
     return t1;
   }
   }
-  FATAL(&e->localtion, "unknown type for expression!");
+  FATAL(&e->location, "unknown type for expression!");
   return NULL;
 }
 
