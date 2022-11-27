@@ -1,6 +1,7 @@
 
 use Module
 use Type
+use State
 
 cfn strncpy(d *char, s *char, l int) *char
 cfn strcmp(a *char, b *char) int
@@ -71,6 +72,13 @@ fn add_module(p *Program, pathc *char) *Module.Module {
   m->next = p->modules;
   p->modules = m;
   return m;
+}
+
+fn new_variable(p *Program, l *State.State, next *Type.Variable) *Type.Variable {
+  v *Type.Variable = p.alloc(sizeof(Type.Variable)) as *Type.Variable
+  v->next = next;
+  v->location = *l;
+  return v;
 }
 
 

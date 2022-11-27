@@ -1,5 +1,6 @@
 
 use Statement
+use State
 use Module
 
 type TypeKind enum { ModuleT, StructT, UnionT, EnumT, UnionTypeT, ArrayT, PointerT, FnT, PlaceHolder }
@@ -60,6 +61,7 @@ type Function struct {
 type Variable struct {
   name *char
   _type *Type
+  location State.State
   next *Variable
 }
 
