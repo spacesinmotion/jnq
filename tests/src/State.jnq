@@ -31,6 +31,15 @@ fn skip(s *State, c int) {
   s.column += c
 }
 
+fn back(s *State, c int) State {
+  b State = *s;
+  if (b.column < c) {
+    b.column = 0;
+    //FATAL(&b, "internal error calculating location");
+  }
+  b.column -= c;
+  return b;
+}
 
 fn skip_whitespace_space(st *State) bool {
   old State = *st;
@@ -134,3 +143,4 @@ fn read_float(st *State, f *double) bool {
   st->c = end;
   return true;
 }
+

@@ -173,7 +173,6 @@ typedef struct Statement {
     SwitchStatement *switchS;
   };
   StatementType type;
-  State location;
   Statement *next;
 } Statement;
 
@@ -668,10 +667,9 @@ Variable *Program_new_variable(Program *p, Variable *next) {
   return v;
 }
 
-Statement *Program_new_Statement(Program *p, StatementType t, State l, Statement *n) {
+Statement *Program_new_Statement(Program *p, StatementType t, Statement *n) {
   Statement *s = Program_alloc(p, sizeof(Statement));
   s->type = t;
-  s->location = l;
   switch (t) {
   case ExpressionS:
     s->express = Program_alloc(p, sizeof(ExpressionStatement));
@@ -1486,13 +1484,13 @@ Statement *Program_parse_statement(Program *p, Module *m, State *st, Statement *
   Statement *statement = NULL;
   Expression *temp_e = NULL;
   if (check_op(st, "{")) {
-    statement = Program_new_Statement(p, Scope, back(st, 1), next);
+    statement = Program_new_Statement(p, Scope, next);
     statement->scope->body = Program_parse_scope(p, m, st);
   } else if (check_word(st, "return")) {
-    statement = Program_new_Statement(p, Return, back(st, 6), next);
+    statement = Program_new_Statement(p, Return, next);
     statement->express->e = Program_parse_expression(p, m, st);
   } else if (check_word(st, "case")) {
-    statement = Program_new_Statement(p, Case, back(st, 4), next);
+    statement = Program_new_Statement(p, Case, next);
     if (!(statement->caseS->caseE = Program_parse_atom(p, st)))
       FATAL(st, "Missing case expression");
     if (check_op(st, ":"))
@@ -1500,17 +1498,17 @@ Statement *Program_parse_statement(Program *p, Module *m, State *st, Statement *
     else
       FATAL(st, "Missing ':' in case statement");
   } else if (check_word(st, "default")) {
-    statement = Program_new_Statement(p, Default, back(st, 7), next);
+    statement = Program_new_Statement(p, Default, next);
     if (check_op(st, ":"))
       statement->defaultS->body = Program_parse_case_body(p, m, st);
     else
       FATAL(st, "Missing ':' for default statement");
   } else if (check_word(st, "break"))
-    statement = Program_new_Statement(p, Break, back(st, 5), next);
+    statement = Program_new_Statement(p, Break, next);
   else if (check_word(st, "continue"))
-    statement = Program_new_Statement(p, Continue, back(st, 8), next);
+    statement = Program_new_Statement(p, Continue, next);
   else if (check_word(st, "if")) {
-    statement = Program_new_Statement(p, If, back(st, 2), next);
+    statement = Program_new_Statement(p, If, next);
     if ((temp_e = Program_parse_expression(p, m, st)))
       statement->ifS->condition = temp_e;
     else
@@ -1524,7 +1522,7 @@ Statement *Program_parse_statement(Program *p, Module *m, State *st, Statement *
         FATAL(st, "Missing else block");
     }
   } else if (check_word(st, "for")) {
-    statement = Program_new_Statement(p, For, back(st, 3), next);
+    statement = Program_new_Statement(p, For, next);
     if (!check_op(st, "("))
       FATAL(st, "Missing for loop description");
     statement->forS->init = Program_parse_expression(p, m, st);
@@ -1540,7 +1538,7 @@ Statement *Program_parse_statement(Program *p, Module *m, State *st, Statement *
     if (!statement->forS->body)
       FATAL(st, "Missing for block");
   } else if (check_word(st, "while")) {
-    statement = Program_new_Statement(p, While, back(st, 5), next);
+    statement = Program_new_Statement(p, While, next);
     if ((temp_e = Program_parse_expression(p, m, st)))
       statement->whileS->condition = temp_e;
     else
@@ -1549,7 +1547,7 @@ Statement *Program_parse_statement(Program *p, Module *m, State *st, Statement *
     if (!statement->whileS->body)
       FATAL(st, "Missing while block");
   } else if (check_word(st, "do")) {
-    statement = Program_new_Statement(p, DoWhile, back(st, 2), next);
+    statement = Program_new_Statement(p, DoWhile, next);
     statement->doWhileS->body = Program_parse_scope_block(p, m, st);
     if (!check_word(st, "while"))
       FATAL(st, "Missing 'while' for do block");
@@ -1558,7 +1556,7 @@ Statement *Program_parse_statement(Program *p, Module *m, State *st, Statement *
     else
       FATAL(st, "Missing do while conditon");
   } else if (check_word(st, "switch")) {
-    statement = Program_new_Statement(p, Switch, back(st, 6), next);
+    statement = Program_new_Statement(p, Switch, next);
     if ((temp_e = Program_parse_expression(p, m, st)))
       statement->switchS->condition = temp_e;
     else
@@ -1566,9 +1564,8 @@ Statement *Program_parse_statement(Program *p, Module *m, State *st, Statement *
     statement->switchS->body = Program_parse_scope_block(p, m, st);
   } else {
     skip_whitespace(st);
-    State old = *st;
     if ((temp_e = Program_parse_expression(p, m, st))) {
-      statement = Program_new_Statement(p, ExpressionS, old, next);
+      statement = Program_new_Statement(p, ExpressionS, next);
       statement->express->e = temp_e;
     }
   }
@@ -1591,7 +1588,7 @@ Statement *Program_parse_scope(Program *p, Module *m, State *st) {
 }
 Statement *Program_parse_scope_block(Program *p, Module *m, State *st) {
   if (check_op(st, "{")) {
-    Statement *s = Program_new_Statement(p, Scope, back(st, 1), NULL);
+    Statement *s = Program_new_Statement(p, Scope, NULL);
     s->scope->body = Program_parse_scope(p, m, st);
     return s;
   } else
