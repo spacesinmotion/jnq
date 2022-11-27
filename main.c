@@ -276,8 +276,8 @@ BinOp ops[] = {
     {"%", 100 - 3, ASSOC_LEFT, false},     //
     {"+", 100 - 4, ASSOC_LEFT, false},     //
     {"-", 100 - 4, ASSOC_LEFT, false},     //
-    {"<", 100 - 6, ASSOC_LEFT, true},     //
-    {">", 100 - 6, ASSOC_LEFT, true},     //
+    {"<", 100 - 6, ASSOC_LEFT, true},      //
+    {">", 100 - 6, ASSOC_LEFT, true},      //
     {"&", 100 - 8, ASSOC_LEFT, false},     //
     {"^", 100 - 9, ASSOC_LEFT, false},     //
     {"|", 100 - 10, ASSOC_LEFT, false},    //
@@ -508,10 +508,9 @@ Module *Program_find_module(Program *p, const char *path) {
   return NULL;
 }
 
-Module *Program_reset_module_finished(Program *p) {
+void Program_reset_module_finished(Program *p) {
   for (Module *m = p->modules; m; m = m->next)
     m->finished = false;
-  return NULL;
 }
 
 Module global = (Module){"", "", NULL, true, NULL};

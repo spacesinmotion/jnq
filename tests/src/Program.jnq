@@ -38,3 +38,18 @@ fn copy_string(p *Program, s *char, l int) *char {
   id[l] = '\0';
   return id;
 }
+
+cfn strcmp(a *char, b *char) int
+
+
+fn find_module(p *Program, path *char) *Module.Module  {
+  for (m *Module.Module = p->modules; m; m = m->next)
+    if (strcmp(m->path, path) == 0)
+      return m;
+  return null;
+}
+
+fn reset_module_finished(p* Program) {
+  for (m *Module.Module = p->modules; m; m = m->next)
+    m->finished = false;
+}
