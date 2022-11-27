@@ -23,5 +23,7 @@ fn main() int {
 
   util_user.util_user()
 
+  ASSERT(5 == util.strlen("hallo"))
+
   printf(" ...ok\n")
 }

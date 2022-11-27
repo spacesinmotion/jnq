@@ -12,6 +12,4 @@ fn util_user() {
   p = p.neg()
   ASSERT(p.x == -95)
   ASSERT(p.y == -37)
-
-  printf(" ...ok\n")
 }

@@ -2137,7 +2137,11 @@ void c_expression(FILE *f, Expression *e) {
     if (e->member->o_type->kind == ModuleT) {
       if (e->member->member->type->kind == StructT)
         fprintf(f, "%s%s", Type_defined_module(e->member->member->type)->c_name, e->member->member->name);
-      else
+      else if (e->member->member->type->kind == FnT) {
+        if (!e->member->member->type->fnT->is_extern_c)
+          fprintf(f, "%s", Type_defined_module(e->member->member->type)->c_name);
+        fprintf(f, "%s(", e->member->member->name);
+      } else
         FATAL(&e->location, "Missing implementation!");
       break;
     } else if (e->member->o_type->kind == EnumT) {
@@ -2864,8 +2868,8 @@ int main(int argc, char *argv[]) {
     FATALX("input path too long '%s' (sorry)\n", argv[1]);
   strncpy(main_mod, argv[1], jnq_len - 4);
 
-  char buffer[2048 * 64];
-  Program p = Program_new(buffer, 2048 * 64);
+  char buffer[2048 * 128];
+  Program p = Program_new(buffer, 2048 * 128);
 
   Module *m = Program_parse_file(&p, main_mod);
   if (!m)

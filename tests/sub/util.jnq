@@ -1,4 +1,6 @@
 
+cfn strlen(s *char) int
+
 type Point struct {
   x int
   y int
