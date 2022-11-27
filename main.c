@@ -28,6 +28,8 @@ typedef struct State {
 
 State State_new(const char *c, const char *file) { return (State){.file = file, .c = c, .line = 1, .column = 1}; }
 
+#define null_state ((State){.file = "", .c = "", .line = 1, .column = 1})
+
 void State_skip(State *s, int c) {
   s->c += c;
   s->column += c;
@@ -54,7 +56,7 @@ void FATALX(const char *format, ...) {
   longjmp(long_jump_end, 1);
 }
 
-State back(State *s, int c) {
+State back(State *s, size_t c) {
   State b = *s;
   if (b.column < c) {
     b.column = 0;
@@ -187,6 +189,7 @@ typedef struct Identifier {
 } Identifier;
 
 typedef struct Variable {
+  State location;
   const char *name;
   Type *type;
   Variable *next;
@@ -282,7 +285,7 @@ BinOp ops[] = {
     {"=", 100 - 14, ASSOC_RIGHT, false},   //
 };
 BinOp *getop(const char *ch) {
-  for (int i = 0; i < sizeof ops / sizeof ops[0]; ++i)
+  for (size_t i = 0; i < sizeof(ops) / sizeof(ops[0]); ++i)
     if (strcmp(ops[i].op, ch) == 0)
       return ops + i;
   return NULL;
@@ -373,6 +376,7 @@ typedef struct Enum {
 
 typedef struct UnionTypeEntry UnionTypeEntry;
 typedef struct UnionTypeEntry {
+  State location;
   Type *type;
   int index;
   UnionTypeEntry *next;
@@ -386,6 +390,7 @@ typedef struct Union {
 typedef struct Function {
   Variable *parameter;
   Type *returnType;
+  State return_type_location;
   bool is_extern_c;
   Statement *body;
   Module *module;
@@ -462,7 +467,7 @@ Program Program_new(char *buffer, size_t cap) {
 }
 
 void *Program_alloc(Program *p, size_t size) {
-  if (p->arena.len + size > p->arena.cap)
+  if (p->arena.len + size >= p->arena.cap)
     FATALX("Out of memory");
   void *d = (p->arena.buffer + p->arena.len);
   p->arena.len += size;
@@ -472,6 +477,7 @@ void *Program_alloc(Program *p, size_t size) {
 char *Program_copy_string(Program *p, const char *s, size_t l) {
   char *id = (char *)Program_alloc(p, l + 1);
   strncpy(id, s, l);
+  id[l] = '\0';
   return id;
 }
 
@@ -519,10 +525,14 @@ Type String = (Type){"string", .structT = &(Struct){NULL, &global}, StructT, NUL
 
 Type Ellipsis = (Type){"...", .structT = &(Struct){NULL, &global}, StructT, NULL};
 
-Function print =
-    (Function){&(Variable){"...", &Ellipsis, &(Variable){"format", &String, NULL}}, NULL, true, NULL, &global};
+Function print = (Function){&(Variable){null_state, "...", &Ellipsis, &(Variable){null_state, "format", &String, NULL}},
+                            NULL,
+                            null_state,
+                            true,
+                            NULL,
+                            &global};
 Type Printf = (Type){"printf", .fnT = &print, FnT, NULL};
-Function assert = (Function){&(Variable){"cond", &Bool, NULL}, NULL, true, NULL, &global};
+Function assert = (Function){&(Variable){null_state, "cond", &Bool, NULL}, NULL, null_state, true, NULL, &global};
 Type Assert = (Type){"ASSERT", .fnT = &assert, FnT, NULL};
 
 Type *Module_find_type(Module *m, const char *b, const char *e) {
@@ -544,7 +554,7 @@ Type *Module_find_type(Module *m, const char *b, const char *e) {
     return &Assert;
 
   for (TypeList *tl = m->types; tl; tl = tl->next)
-    if (strlen(tl->type->name) == e - b && strncmp(tl->type->name, b, e - b) == 0)
+    if (strlen(tl->type->name) == (size_t)(e - b) && strncmp(tl->type->name, b, e - b) == 0)
       return tl->type;
   return NULL;
 }
@@ -576,7 +586,7 @@ bool TypeDeclare_equal(Type *t1, Type *t2) {
 }
 
 Module *Program_add_module(Program *p, const char *pathc) {
-  size_t size = strlen(pathc) + 1;
+  size_t size = strlen(pathc);
   const char *path = Program_copy_string(p, pathc, size);
   char *cname = Program_copy_string(p, pathc, size + 1);
   for (char *c = cname; *c; ++c)
@@ -624,7 +634,7 @@ Type *Program_add_type(Program *p, TypeKind k, const char *name, Module *m) {
     tt->unionT->module = m;
     break;
   case FnT:
-    tt->fnT = Program_alloc(p, sizeof(Function));
+    tt->fnT = (Function *)Program_alloc(p, sizeof(Function));
     tt->fnT->body = NULL;
     tt->fnT->is_extern_c = false;
     tt->fnT->module = m;
@@ -661,51 +671,52 @@ Type *Program_add_type(Program *p, TypeKind k, const char *name, Module *m) {
   return tt;
 }
 
-Variable *Program_new_variable(Program *p, Variable *next) {
-  Variable *v = Program_alloc(p, sizeof(Variable));
+Variable *Program_new_variable(Program *p, State l, Variable *next) {
+  Variable *v = (Variable *)Program_alloc(p, sizeof(Variable));
   v->next = next;
+  v->location = l;
   return v;
 }
 
 Statement *Program_new_Statement(Program *p, StatementType t, Statement *n) {
-  Statement *s = Program_alloc(p, sizeof(Statement));
+  Statement *s = (Statement *)Program_alloc(p, sizeof(Statement));
   s->type = t;
   switch (t) {
   case ExpressionS:
-    s->express = Program_alloc(p, sizeof(ExpressionStatement));
+    s->express = (ExpressionStatement *)Program_alloc(p, sizeof(ExpressionStatement));
     break;
   case Return:
-    s->ret = Program_alloc(p, sizeof(ReturnStatement));
+    s->ret = (ReturnStatement *)Program_alloc(p, sizeof(ReturnStatement));
     break;
   case Break:
-    s->brk = Program_alloc(p, sizeof(BreakStatement));
+    s->brk = (BreakStatement *)Program_alloc(p, sizeof(BreakStatement));
     break;
   case Default:
-    s->defaultS = Program_alloc(p, sizeof(DefaultStatement));
+    s->defaultS = (DefaultStatement *)Program_alloc(p, sizeof(DefaultStatement));
     break;
   case Continue:
-    s->cont = Program_alloc(p, sizeof(ContinueStatement));
+    s->cont = (ContinueStatement *)Program_alloc(p, sizeof(ContinueStatement));
     break;
   case Case:
-    s->caseS = Program_alloc(p, sizeof(CaseStatement));
+    s->caseS = (CaseStatement *)Program_alloc(p, sizeof(CaseStatement));
     break;
   case Scope:
-    s->scope = Program_alloc(p, sizeof(ScopeStatement));
+    s->scope = (ScopeStatement *)Program_alloc(p, sizeof(ScopeStatement));
     break;
   case If:
-    s->ifS = Program_alloc(p, sizeof(IfStatement));
+    s->ifS = (IfStatement *)Program_alloc(p, sizeof(IfStatement));
     break;
   case For:
-    s->forS = Program_alloc(p, sizeof(ForStatement));
+    s->forS = (ForStatement *)Program_alloc(p, sizeof(ForStatement));
     break;
   case While:
-    s->whileS = Program_alloc(p, sizeof(WhileStatement));
+    s->whileS = (WhileStatement *)Program_alloc(p, sizeof(WhileStatement));
     break;
   case DoWhile:
-    s->doWhileS = Program_alloc(p, sizeof(DoWhileStatement));
+    s->doWhileS = (DoWhileStatement *)Program_alloc(p, sizeof(DoWhileStatement));
     break;
   case Switch:
-    s->switchS = Program_alloc(p, sizeof(SwitchStatement));
+    s->switchS = (SwitchStatement *)Program_alloc(p, sizeof(SwitchStatement));
     break;
   }
   s->next = n;
@@ -713,7 +724,7 @@ Statement *Program_new_Statement(Program *p, StatementType t, Statement *n) {
 }
 
 Expression *Program_new_Expression(Program *p, ExpressionType t, State l) {
-  Expression *e = Program_alloc(p, sizeof(Expression));
+  Expression *e = (Expression *)Program_alloc(p, sizeof(Expression));
   e->type = t;
   e->location = l;
   switch (t) {
@@ -726,37 +737,37 @@ Expression *Program_new_Expression(Program *p, ExpressionType t, State l) {
   case StringA:
     break;
   case IdentifierA:
-    e->id = Program_alloc(p, sizeof(Identifier));
+    e->id = (Identifier *)Program_alloc(p, sizeof(Identifier));
     break;
   case VarE:
-    e->var = Program_alloc(p, sizeof(Variable));
+    e->var = (Variable *)Program_alloc(p, sizeof(Variable));
     break;
   case BraceE:
-    e->brace = Program_alloc(p, sizeof(Brace));
+    e->brace = (Brace *)Program_alloc(p, sizeof(Brace));
     break;
   case CallE:
-    e->call = Program_alloc(p, sizeof(Call));
+    e->call = (Call *)Program_alloc(p, sizeof(Call));
     break;
   case ConstructE:
-    e->construct = Program_alloc(p, sizeof(Construct));
+    e->construct = (Construct *)Program_alloc(p, sizeof(Construct));
     break;
   case AccessE:
-    e->access = Program_alloc(p, sizeof(Access));
+    e->access = (Access *)Program_alloc(p, sizeof(Access));
     break;
   case MemberAccessE:
-    e->access = Program_alloc(p, sizeof(MemberAccess));
+    e->member = (MemberAccess *)Program_alloc(p, sizeof(MemberAccess));
     break;
   case AsCast:
-    e->access = Program_alloc(p, sizeof(Cast));
+    e->cast = (Cast *)Program_alloc(p, sizeof(Cast));
     break;
   case UnaryPrefixE:
-    e->unpre = Program_alloc(p, sizeof(UnaryPrefix));
+    e->unpre = (UnaryPrefix *)Program_alloc(p, sizeof(UnaryPrefix));
     break;
   case UnaryPostfixE:
-    e->unpost = Program_alloc(p, sizeof(UnaryPostfix));
+    e->unpost = (UnaryPostfix *)Program_alloc(p, sizeof(UnaryPostfix));
     break;
   case BinaryOperationE:
-    e->binop = Program_alloc(p, sizeof(BinaryOperation));
+    e->binop = (BinaryOperation *)Program_alloc(p, sizeof(BinaryOperation));
     break;
   }
   return e;
@@ -800,7 +811,7 @@ void skip_whitespace(State *st) {
 
 bool check_whitespace_for_nl(State *st) {
   if (st->line > 1)
-    for (int i = 1; i <= st->column; ++i)
+    for (size_t i = 1; i <= st->column; ++i)
       if (!isspace(st->c[-i]))
         return false;
   return st->line > 1;
@@ -969,7 +980,7 @@ Type *Program_parse_declared_type(Program *p, Module *m, State *st) {
   if (check_op(st, "*")) {
     Type *c = Program_parse_declared_type(p, m, st);
     if (c) {
-      Type *td = Program_alloc(p, sizeof(Type));
+      Type *td = (Type *)Program_alloc(p, sizeof(Type));
       td->kind = PointerT;
       td->child = c;
       return td;
@@ -983,7 +994,7 @@ Type *Program_parse_declared_type(Program *p, Module *m, State *st) {
     if (check_op(st, "]")) {
       Type *c = Program_parse_declared_type(p, m, st);
       if (c) {
-        Type *td = Program_alloc(p, sizeof(Type));
+        Type *td = (Type *)Program_alloc(p, sizeof(Type));
         td->kind = ArrayT;
         td->array_count = count;
         td->child = c;
@@ -1015,6 +1026,7 @@ Type *Program_parse_declared_type(Program *p, Module *m, State *st) {
 }
 
 Variable *Program_parse_variable_declaration(Program *p, Module *m, State *st, Variable *next) {
+  skip_whitespace(st);
   State old = *st;
   Type *type = NULL;
   if (check_identifier(st)) {
@@ -1022,7 +1034,7 @@ Variable *Program_parse_variable_declaration(Program *p, Module *m, State *st, V
     skip_whitespace(st);
     if (!check_whitespace_for_nl(st)) {
       if ((type = Program_parse_declared_type(p, m, st))) {
-        Variable *top = Program_new_variable(p, next);
+        Variable *top = Program_new_variable(p, old, next);
         top->name = Program_copy_string(p, old.c, name_end - old.c);
         top->type = type;
         return top;
@@ -1056,7 +1068,7 @@ EnumEntry *Program_parse_enum_entry_list(Program *p, State *st) {
     if (check_op(st, "}"))
       return top;
 
-    EnumEntry *e = Program_alloc(p, sizeof(EnumEntry));
+    EnumEntry *e = (EnumEntry *)Program_alloc(p, sizeof(EnumEntry));
     if ((e->name = read_identifier(p, st))) {
       e->valueSet = false;
       if (check_op(st, "=")) {
@@ -1086,7 +1098,9 @@ UnionTypeEntry *Program_parse_union_entry_list(Program *p, Module *m, State *st)
     }
 
     size++;
-    UnionTypeEntry *e = Program_alloc(p, sizeof(UnionTypeEntry));
+    UnionTypeEntry *e = (UnionTypeEntry *)Program_alloc(p, sizeof(UnionTypeEntry));
+    skip_whitespace(st);
+    e->location = *st;
     e->type = Program_parse_declared_type(p, m, st);
     check_op(st, ",");
     e->next = top;
@@ -1204,7 +1218,7 @@ Parameter *Program_parse_parameter_list(Program *p, Module *m, State *st) {
   Expression *e = NULL;
 
   while ((e = Program_parse_expression(p, m, st))) {
-    Parameter *pp = Program_alloc(p, sizeof(Parameter));
+    Parameter *pp = (Parameter *)Program_alloc(p, sizeof(Parameter));
     pp->next = param;
     pp->p = e;
     pp->v = NULL;
@@ -1233,10 +1247,10 @@ Parameter *Program_parse_named_parameter_list(Program *p, Module *m, State *st) 
       *st = old;
       break;
     }
-    Parameter *pp = Program_alloc(p, sizeof(Parameter));
+    Parameter *pp = (Parameter *)Program_alloc(p, sizeof(Parameter));
     pp->next = param;
     pp->p = e;
-    pp->v = Program_alloc(p, sizeof(Identifier));
+    pp->v = (Identifier *)Program_alloc(p, sizeof(Identifier));
     pp->v->name = Program_copy_string(p, old.c, id_end - old.c);
     pp->v->type = NULL;
     param = pp;
@@ -1285,7 +1299,7 @@ Expression *Program_parse_suffix_expression(Program *p, Module *m, State *st, Ex
     Expression *ma = Program_new_Expression(p, MemberAccessE, old);
     ma->member->o = e;
     ma->member->o_type = NULL;
-    ma->member->member = Program_alloc(p, sizeof(Identifier));
+    ma->member->member = (Identifier *)Program_alloc(p, sizeof(Identifier));
     ma->member->member->name = member;
     ma->member->member->type = NULL;
     ma->member->pointer = pointer;
@@ -1336,7 +1350,7 @@ Expression *Program_parse_suffix_expression(Program *p, Module *m, State *st, Ex
 Expression *Program_parse_unary_operand(Program *p, Module *m, State *st) {
   Expression *prefix = NULL;
   const char *un_pre_ops[] = {"++", "--", "*", "~", "!", "-", "+", "&"};
-  for (int i = 0; i < sizeof(un_pre_ops) / sizeof(const char *); ++i) {
+  for (size_t i = 0; i < sizeof(un_pre_ops) / sizeof(const char *); ++i) {
     if (check_op(st, un_pre_ops[i])) {
       prefix = Program_new_Expression(p, UnaryPrefixE, back(st, i < 2 ? 2 : 1));
       prefix->unpre->op = un_pre_ops[i];
@@ -1356,7 +1370,7 @@ Expression *Program_parse_unary_operand(Program *p, Module *m, State *st) {
   } else if ((e = Program_parse_construction(p, m, st))) {
     ;
   } else if ((temp_v = Program_parse_variable_declaration(p, m, st, NULL))) {
-    e = Program_alloc(p, sizeof(Expression));
+    e = (Expression *)Program_alloc(p, sizeof(Expression));
     e->type = VarE;
     e->var = temp_v;
   } else
@@ -1375,11 +1389,11 @@ Expression *Program_parse_unary_operand(Program *p, Module *m, State *st) {
   return e;
 }
 
-Expression *Program_parse_bin_operator(Program *p, Module *m, State *st) {
+Expression *Program_parse_bin_operator(Program *p, State *st) {
   if (check_whitespace_for_nl(st))
     return NULL;
 
-  for (int i = 0; i < sizeof(ops) / sizeof(BinOp); ++i) {
+  for (size_t i = 0; i < sizeof(ops) / sizeof(BinOp); ++i) {
     if (check_op(st, ops[i].op)) {
       Expression *bin = Program_new_Expression(p, BinaryOperationE, back(st, strlen(ops[i].op)));
       bin->binop->op = &ops[i];
@@ -1433,7 +1447,7 @@ Expression *Program_parse_expression(Program *p, Module *m, State *st) {
     if (check_whitespace_for_nl(st))
       break;
     State old = *st;
-    eop = Program_parse_bin_operator(p, m, st);
+    eop = Program_parse_bin_operator(p, st);
     if (!eop)
       break;
     ev = Program_parse_unary_operand(p, m, st);
@@ -1603,6 +1617,8 @@ void Program_parse_fn(Program *p, Module *m, State *st, bool extc) {
     Function *fn = Program_add_type(p, FnT, name, m)->fnT;
     if (check_op(st, "(")) {
       fn->parameter = Program_parse_variable_declaration_list(p, m, st, ")");
+      skip_whitespace(st);
+      fn->return_type_location = *st;
       fn->returnType = Program_parse_declared_type(p, m, st);
       fn->is_extern_c = extc;
       if (!extc) {
@@ -1673,14 +1689,14 @@ void c_use(FILE *f, TypeList *tl, ModuleFileCB cb) {
     cb(f, tl->type->moduleT);
 }
 
-bool c_type_declare(FILE *f, Type *t, const char *var) {
+bool c_type_declare(FILE *f, Type *t, State l, const char *var) {
   if (!t)
     return false;
 
   Type *tt = t->child;
   while (tt && tt->kind == ArrayT)
     tt = tt->child;
-  bool hasVarWritten = c_type_declare(f, tt, var);
+  bool hasVarWritten = c_type_declare(f, tt, l, var);
   switch (t->kind) {
   case ArrayT:
     fprintf(f, " %s", var);
@@ -1696,7 +1712,7 @@ bool c_type_declare(FILE *f, Type *t, const char *var) {
     fprintf(f, "*");
     break;
   case ModuleT:
-    FATALX("Can't use module '%s' as type!", t->name);
+    FATAL(&l, "Can't use module '%s' as type!", t->name);
     // fprintf(f, "%s", t->name);
     break;
   case StructT:
@@ -1706,12 +1722,12 @@ bool c_type_declare(FILE *f, Type *t, const char *var) {
     fprintf(f, "%s%s", Type_defined_module(t)->c_name, t->name);
     break;
   case FnT:
-    if (c_type_declare(f, t->fnT->returnType, ""))
-      FATALX("I don't know right now how to handle array function pointer stuff!");
+    if (c_type_declare(f, t->fnT->returnType, l, ""))
+      FATAL(&l, "I don't know right now how to handle array function pointer stuff!");
     fprintf(f, "(*())");
     break;
   case PlaceHolder:
-    FATALX("Unkown type '%s'!", t->name);
+    FATAL(&l, "Unkown type '%s'!", t->name);
     break;
   }
   return hasVarWritten;
@@ -1751,7 +1767,7 @@ void c_var_list(FILE *f, Variable *v, const char *br) {
   if (v->next)
     fprintf(f, "%s", br);
 
-  if (!c_type_declare(f, v->type, v->name))
+  if (!c_type_declare(f, v->type, v->location, v->name))
     fprintf(f, " %s", v->name);
 }
 
@@ -1787,7 +1803,7 @@ void c_uniontype_entry(FILE *f, UnionTypeEntry *entry) {
 
   if (entry->next)
     fprintf(f, ";\n    ");
-  if (c_type_declare(f, entry->type, "<u>"))
+  if (c_type_declare(f, entry->type, entry->location, "<u>"))
     FATALX("I don't know right now how to handle array union entry stuff!");
   fprintf(f, " _u%d", entry->index);
 }
@@ -2137,7 +2153,7 @@ void c_expression(FILE *f, Expression *e) {
   }
   case AsCast:
     fprintf(f, "((");
-    if (c_type_declare(f, e->cast->type, ""))
+    if (c_type_declare(f, e->cast->type, e->location, ""))
       FATAL(&e->location, "I don't know right now how to handle array cast  stuff!");
     fprintf(f, ")(");
     c_expression(f, e->cast->o);
@@ -2274,7 +2290,7 @@ void c_fn(FILE *f, const char *module_name, TypeList *tl) {
 
   Function *fn = tl->type->fnT;
   if (fn->returnType) {
-    if (c_type_declare(f, fn->returnType, ""))
+    if (c_type_declare(f, fn->returnType, fn->return_type_location, ""))
       FATALX("array return type not supported -> c backend!");
   } else
     fprintf(f, "void");
@@ -2376,7 +2392,7 @@ void c_fn_forward(FILE *f, const char *module_name, TypeList *tl) {
 
   Function *fn = tl->type->fnT;
   if (fn->returnType) {
-    if (c_type_declare(f, fn->returnType, ""))
+    if (c_type_declare(f, fn->returnType, fn->return_type_location, ""))
       FATALX("array return type not supported -> c backend!");
   } else
     fprintf(f, "void");
@@ -2448,7 +2464,7 @@ bool is_member_fn_for(Type *ot, Type *ft, Identifier *member) {
   return false;
 }
 
-Type *Module_find_member(Program *p, Type *t, Identifier *member) {
+Type *Module_find_member(Type *t, Identifier *member) {
   switch (t->kind) {
   case UnionT:
   case StructT: {
@@ -2575,7 +2591,7 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
         if (pa->v) {
           if (e->construct->type->kind != StructT && e->construct->type->kind != UnionT)
             FATAL(&pa->p->location, "Named construction '%s' for none struct type!", pa->v->name);
-          Type *vt = Module_find_member(p, e->construct->type, pa->v);
+          Type *vt = Module_find_member(e->construct->type, pa->v);
           if (!vt)
             FATAL(&pa->p->location, "Type '%s' has no member '%s'!", e->construct->type->name, pa->v->name);
           if (!TypeDeclare_equal(pt, vt))
@@ -2607,7 +2623,7 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
     }
     if (t->kind != StructT && t->kind != UnionT && t->kind != EnumT && t->kind != UnionTypeT && t->kind != ModuleT)
       FATAL(&e->location, "Expect non pointer type for member access");
-    if (!(e->member->member->type = Module_find_member(p, t, e->member->member)))
+    if (!(e->member->member->type = Module_find_member(t, e->member->member)))
       FATAL(&e->location, "unknown member '%s' for '%s'", e->member->member->name, t->name);
     e->member->o_type = t;
     return e->member->member->type;
@@ -2619,7 +2635,7 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
   case UnaryPrefixE: {
     Type *st = c_Expression_make_variables_typed(s, p, m, e->unpost->o);
     if (strcmp(e->unpre->op, "&") == 0) {
-      Type *td = Program_alloc(p, sizeof(Type));
+      Type *td = (Type *)Program_alloc(p, sizeof(Type));
       td->kind = PointerT;
       td->child = st;
       return td;

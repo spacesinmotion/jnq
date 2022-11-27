@@ -24,7 +24,7 @@ type ExpressionSelect union {
   cast *Cast 
   unpre *UnaryPrefix
   unpost *UnaryPostfix
-  //binop *BinaryOperation
+  binop *BinaryOperation
 }
 
 type Expression struct {
@@ -130,3 +130,9 @@ type BinOp struct {
 //                                            //
 //     {"=", 100 - 14, ASSOC_RIGHT, false},   //
 // }
+
+type BinaryOperation struct {
+  o1 *Expression
+  o2 *Expression
+  op *BinOp
+}
