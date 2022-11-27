@@ -62,3 +62,28 @@ type Variable struct {
   _type *Type
   next *Variable
 }
+
+fn defined_module(t *Type) *Module.Module {
+  switch (t.kind) {
+  case TypeKind.StructT:
+    return t.select.structT.module;
+  case TypeKind.UnionT:
+    return t.select.structT.module;
+  case TypeKind.EnumT:
+    return t.select.enumT.module;
+  case TypeKind.UnionTypeT:
+    return t.select.unionT.module;
+  case TypeKind.FnT:
+    return t.select.fnT.module;
+  case TypeKind.ModuleT:
+    ASSERT(false);
+  case TypeKind.ArrayT:
+    ASSERT(false);
+  case TypeKind.PointerT:
+    ASSERT(false);
+  case TypeKind.PlaceHolder:
+    //FATALX("invalid type for getting defined module.");
+    ASSERT(false);
+  }
+  return null;
+}

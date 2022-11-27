@@ -1505,7 +1505,7 @@ Statement *Program_parse_statement(Program *p, Module *m, State *st, Statement *
     statement->express->e = Program_parse_expression(p, m, st);
   } else if (check_word(st, "case")) {
     statement = Program_new_Statement(p, Case, next);
-    if (!(statement->caseS->caseE = Program_parse_atom(p, st)))
+    if (!(statement->caseS->caseE = Program_parse_expression(p, m, st)))
       FATAL(st, "Missing case expression");
     if (check_op(st, ":"))
       statement->caseS->body = Program_parse_case_body(p, m, st);
@@ -2112,7 +2112,12 @@ void c_expression(FILE *f, Expression *e) {
       FATAL(&e->location, "Use of unknow type '%s'", e->member->member->type->name);
       break;
     case EnumT:
-      fprintf(f, "%s%s", Type_defined_module(e->member->member->type)->c_name, e->member->member->name);
+      if (e->member->o_type->kind == EnumT)
+        fprintf(f, "%s%s", Type_defined_module(e->member->member->type)->c_name, e->member->member->name);
+      else {
+        c_expression(f, e->member->o);
+        fprintf(f, "%s%s", (e->member->pointer ? "->" : "."), e->member->member->name);
+      }
       break;
     case ModuleT:
     case StructT:
@@ -2824,8 +2829,8 @@ int main(int argc, char *argv[]) {
     FATALX("input path too long '%s' (sorry)\n", argv[1]);
   strncpy(main_mod, argv[1], jnq_len - 4);
 
-  char buffer[1024 * 64];
-  Program p = Program_new(buffer, 1024 * 64);
+  char buffer[2048 * 64];
+  Program p = Program_new(buffer, 2048 * 64);
 
   Module *m = Program_parse_file(&p, main_mod);
   if (!m)
