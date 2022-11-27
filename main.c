@@ -2106,6 +2106,7 @@ void c_expression(FILE *f, Expression *e) {
     case UnionT:
     case UnionTypeT:
     case PointerT:
+    case ArrayT:
       c_expression(f, e->member->o);
       fprintf(f, "%s%s", (e->member->pointer ? "->" : "."), e->member->member->name);
       break;
@@ -2134,10 +2135,6 @@ void c_expression(FILE *f, Expression *e) {
         c_expression(f, e->member->o);
       break;
     }
-
-    case ArrayT:
-      FATAL(&e->localtion, "array type has no member '%s'", e->member->member->name);
-      break;
     }
     break;
   }

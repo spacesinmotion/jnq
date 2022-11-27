@@ -24,7 +24,7 @@ type ExpressionSelect union {
   cast *Cast 
   unpre *UnaryPrefix
   unpost *UnaryPostfix
-  // BinaryOperation *binop;
+  //binop *BinaryOperation
 }
 
 type Expression struct {
@@ -86,3 +86,47 @@ type Parameter struct {
   v *Identifier
   next *Parameter
 }
+
+type Association enum { ASSOC_NONE, ASSOC_LEFT, ASSOC_RIGHT }
+
+type BinOp struct {
+  op *char
+  prec int
+  assoc Association
+  returns_bool bool
+}
+
+// ops []BinOp = {
+//     {">>=", 100 - 14, ASSOC_RIGHT, false}, //
+//     {"<<=", 100 - 14, ASSOC_RIGHT, false}, //
+//                                            //
+//     {"==", 100 - 7, ASSOC_LEFT, true},     //
+//     {"!=", 100 - 7, ASSOC_LEFT, true},     //
+//     {"<=", 100 - 6, ASSOC_LEFT, true},     //
+//     {">=", 100 - 6, ASSOC_LEFT, true},     //
+//     {"+=", 100 - 14, ASSOC_RIGHT, false},  //
+//     {"-=", 100 - 14, ASSOC_RIGHT, false},  //
+//     {"*=", 100 - 14, ASSOC_RIGHT, false},  //
+//     {"/=", 100 - 14, ASSOC_RIGHT, false},  //
+//     {"%=", 100 - 14, ASSOC_RIGHT, false},  //
+//     {"&=", 100 - 14, ASSOC_RIGHT, false},  //
+//     {"^=", 100 - 14, ASSOC_RIGHT, false},  //
+//     {"|=", 100 - 14, ASSOC_RIGHT, false},  //
+//     {"&&", 100 - 11, ASSOC_LEFT, true},    //
+//     {"||", 100 - 12, ASSOC_LEFT, true},    //
+//     {"<<", 100 - 5, ASSOC_LEFT, false},    //
+//     {">>", 100 - 5, ASSOC_LEFT, false},    //
+//                                            //
+//     {"*", 100 - 3, ASSOC_LEFT, false},     //
+//     {"/", 100 - 3, ASSOC_LEFT, false},     //
+//     {"%", 100 - 3, ASSOC_LEFT, false},     //
+//     {"+", 100 - 4, ASSOC_LEFT, false},     //
+//     {"-", 100 - 4, ASSOC_LEFT, false},     //
+//     {"<", 100 - 6, ASSOC_LEFT, false},     //
+//     {">", 100 - 6, ASSOC_LEFT, false},     //
+//     {"&", 100 - 8, ASSOC_LEFT, false},     //
+//     {"^", 100 - 9, ASSOC_LEFT, false},     //
+//     {"|", 100 - 10, ASSOC_LEFT, false},    //
+//                                            //
+//     {"=", 100 - 14, ASSOC_RIGHT, false},   //
+// }
