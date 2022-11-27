@@ -44,7 +44,7 @@ type UnionType struct {
 }
 
 type UnionTypeEntry struct {
-  type *Type
+  _type *Type
   index int
   next *UnionTypeEntry
 }

@@ -843,15 +843,36 @@ bool check_op(State *st, const char *op) {
   return false;
 }
 
+bool check_key_word(const char *b, const char *e) {
+  if ((e - b) == 2 && strncmp(b, "as", 2) == 0)
+    return true;
+  if ((e - b) == 2 && strncmp(b, "if", 2) == 0)
+    return true;
+  if ((e - b) == 2 && strncmp(b, "fn", 2) == 0)
+    return true;
+  if ((e - b) == 2 && strncmp(b, "do", 2) == 0)
+    return true;
+  if ((e - b) == 3 && strncmp(b, "cfn", 3) == 0)
+    return true;
+  if ((e - b) == 3 && strncmp(b, "for", 3) == 0)
+    return true;
+  if ((e - b) == 3 && strncmp(b, "use", 3) == 0)
+    return true;
+  if ((e - b) == 4 && strncmp(b, "type", 4) == 0)
+    return true;
+  if ((e - b) == 5 && strncmp(b, "while", 5) == 0)
+    return true;
+  return false;
+}
+
 bool check_identifier(State *st) {
   State old = *st;
   if (st->c[0] && (isalpha(st->c[0]) || st->c[0] == '_')) {
     while (st->c[0] && (isalnum(st->c[0]) || st->c[0] == '_'))
       State_skip(st, 1);
   }
-  if (st->c - old.c != 2 || strncmp(old.c, "as", 2) != 0)
-    if (old.c < st->c)
-      return true;
+  if (old.c < st->c && !check_key_word(old.c, st->c))
+    return true;
   *st = old;
   return false;
 }
@@ -1994,6 +2015,9 @@ void lisp_expression(FILE *f, Expression *e) {
     fprintf(f, " %s)", e->member->member->name);
     break;
   case AsCast:
+    fprintf(f, "(as ");
+    lisp_expression(f, e->cast->o);
+    fprintf(f, " %s)", e->cast->type->name);
     break;
   case UnaryPrefixE:
     fprintf(f, "(%s ", e->unpre->op);

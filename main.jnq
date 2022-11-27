@@ -1,5 +1,6 @@
 
 use tests.src.Statement
+use tests.src.Program
 
 use tests.sub.util
 

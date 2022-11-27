@@ -36,7 +36,7 @@ type StatementSelect union {
 
 type Statement struct {
   select StatementSelect
-  type StatementType 
+  _type StatementType 
   location State.State
   next *Statement
 }

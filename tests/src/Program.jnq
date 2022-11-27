@@ -1,0 +1,40 @@
+
+use Module
+
+cfn strncpy(d *char, s *char, l int) *char
+
+type MemoryArena struct {
+  buffer *char
+  len int
+  cap int
+}
+
+type Program struct {
+  arena MemoryArena
+  modules *Module.Module 
+}
+
+fn new(buffer *char, cap int) Program {
+  p Program
+  p.arena.buffer = buffer;
+  p.arena.len = 0;
+  p.arena.cap = cap;
+  p.modules = null;
+  return p;
+}
+
+fn alloc(p *Program, size int) *char {
+  if (p.arena.len + size >= p.arena.cap)
+    ASSERT(false)//FATALX("Out of memory");
+  c *int = &p->arena.len
+  d *char = &p->arena.buffer[p->arena.len]
+  p->arena.len += size;
+  return d;
+}
+
+fn copy_string(p *Program, s *char, l int) *char {
+  id *char = p.alloc(l + 1);
+  strncpy(id, s, l);
+  id[l] = '\0';
+  return id;
+}
