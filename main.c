@@ -1175,12 +1175,14 @@ Expression *Program_parse_atom(Program *p, State *st) {
 
   if (check_op(st, "\"")) {
     Expression *e = Program_new_Expression(p, StringA, old);
-    while (st->c[1] != '"') {
-      if (!st->c[0])
-        FATAL(&old, "unclosed string constant");
+    if (st->c[0] != '"') {
+      while (st->c[1] != '"') {
+        if (!st->c[0])
+          FATAL(&old, "unclosed string constant");
+        State_skip(st, 1);
+      }
       State_skip(st, 1);
     }
-    State_skip(st, 1);
 
     e->s = Program_copy_string(p, old.c + 1, st->c - old.c - 1);
     State_skip(st, 1);

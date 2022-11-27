@@ -63,6 +63,26 @@ type Variable struct {
   next *Variable
 }
 
+fn equals(t1 *Type, t2 *Type) bool {
+  // this should be globals
+  global Module.Module = Module.Module{"", "", null, true, null}
+  Null Type = Type{"null_t", &Struct{null, &global}, TypeKind.StructT, null};
+
+  if (!t1 && !t2)
+    return false;
+  if (t1 == &Null)
+    return t2 == &Null || t2->kind == TypeKind.PointerT;
+  if (t2 == &Null)
+    return t1 == &Null || t1->kind == TypeKind.PointerT;
+  if ((!t1 && t2) || (t1 && !t2))
+    return false;
+  if (t1 == t2)
+    return true;
+  if (t1->kind != t2->kind)
+    return false;
+  return equals(t1->child, t2->child);
+}
+
 fn defined_module(t *Type) *Module.Module {
   switch (t.kind) {
   case TypeKind.StructT:

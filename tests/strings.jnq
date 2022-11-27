@@ -1,0 +1,11 @@
+
+
+
+fn main() int {
+  printf("strings\n")
+
+  // check empty string
+  printf("")
+  
+  printf(" ...ok\n")
+}
