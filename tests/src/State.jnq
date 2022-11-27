@@ -111,13 +111,37 @@ fn check_op(st *State, op *char) bool {
   return false
 }
 
+cfn strncmp(a *char, b *char, l int) int
+
+fn check_key_word(b *char, e *char) bool {
+  if ((e - b) as int == 2 && strncmp(b, "as", 2) == 0)
+    return true;
+  if ((e - b) as int == 2 && strncmp(b, "if", 2) == 0)
+    return true;
+  if ((e - b) as int == 2 && strncmp(b, "fn", 2) == 0)
+    return true;
+  if ((e - b) as int == 2 && strncmp(b, "do", 2) == 0)
+    return true;
+  if ((e - b) as int == 3 && strncmp(b, "cfn", 3) == 0)
+    return true;
+  if ((e - b) as int == 3 && strncmp(b, "for", 3) == 0)
+    return true;
+  if ((e - b) as int == 3 && strncmp(b, "use", 3) == 0)
+    return true;
+  if ((e - b) as int == 4 && strncmp(b, "type", 4) == 0)
+    return true;
+  if ((e - b) as int == 5 && strncmp(b, "while", 5) == 0)
+    return true;
+  return false;
+}
+
 fn check_identifier(st *State ) bool {
   old State = *st;
   if (st->c[0] != '\0' && (isalpha(st->c[0]) || st->c[0] == '_')) {
     while (st->c[0] != '\0' && (isalnum(st->c[0]) || st->c[0] == '_'))
       st.skip(1);
   }
-  if (old.c < st->c)
+  if (old.c < st->c && !check_key_word(old.c, st->c))
     return true;
   *st = old;
   return false;

@@ -276,8 +276,8 @@ BinOp ops[] = {
     {"%", 100 - 3, ASSOC_LEFT, false},     //
     {"+", 100 - 4, ASSOC_LEFT, false},     //
     {"-", 100 - 4, ASSOC_LEFT, false},     //
-    {"<", 100 - 6, ASSOC_LEFT, false},     //
-    {">", 100 - 6, ASSOC_LEFT, false},     //
+    {"<", 100 - 6, ASSOC_LEFT, true},     //
+    {">", 100 - 6, ASSOC_LEFT, true},     //
     {"&", 100 - 8, ASSOC_LEFT, false},     //
     {"^", 100 - 9, ASSOC_LEFT, false},     //
     {"|", 100 - 10, ASSOC_LEFT, false},    //
