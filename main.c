@@ -533,6 +533,8 @@ Function print = (Function){&(Variable){null_state, "...", &Ellipsis, &(Variable
 Type Printf = (Type){"printf", .fnT = &print, FnT, NULL};
 Function assert = (Function){&(Variable){null_state, "cond", &Bool, NULL}, NULL, null_state, true, NULL, &global};
 Type Assert = (Type){"ASSERT", .fnT = &assert, FnT, NULL};
+Function SizeOfFn = (Function){&(Variable){null_state, "sizeof", &Int, NULL}, NULL, null_state, true, NULL, &global};
+Type SizeOf = (Type){"sizeof", .fnT = &SizeOfFn, FnT, NULL};
 
 Type *Module_find_type(Module *m, const char *b, const char *e) {
   if (4 == e - b && strncmp(Bool.name, b, 4) == 0)
@@ -551,6 +553,8 @@ Type *Module_find_type(Module *m, const char *b, const char *e) {
     return &Printf;
   if (6 == e - b && strncmp(Assert.name, b, 6) == 0)
     return &Assert;
+  if (6 == e - b && strncmp(SizeOf.name, b, 6) == 0)
+    return &SizeOf;
 
   for (TypeList *tl = m->types; tl; tl = tl->next)
     if (strlen(tl->type->name) == (size_t)(e - b) && strncmp(tl->type->name, b, e - b) == 0)
@@ -2130,6 +2134,19 @@ void c_expression(FILE *f, Expression *e) {
     fprintf(f, "]");
     break;
   case MemberAccessE: {
+    if (e->member->o_type->kind == ModuleT) {
+      if (e->member->member->type->kind == StructT)
+        fprintf(f, "%s%s", Type_defined_module(e->member->member->type)->c_name, e->member->member->name);
+      else
+        FATAL(&e->location, "Missing implementation!");
+      break;
+    } else if (e->member->o_type->kind == EnumT) {
+      if (e->member->member->type->kind == EnumT)
+        fprintf(f, "%s%s", Type_defined_module(e->member->member->type)->c_name, e->member->member->name);
+      else
+        FATAL(&e->location, "Missing implementation!");
+      break;
+    }
     if (!e->member->member->type)
       FATAL(&e->location, "unknown type for member '%s'", e->member->member->name);
     switch (e->member->member->type->kind) {
@@ -2137,13 +2154,6 @@ void c_expression(FILE *f, Expression *e) {
       FATAL(&e->location, "Use of unknow type '%s'", e->member->member->type->name);
       break;
     case EnumT:
-      if (e->member->o_type->kind == EnumT)
-        fprintf(f, "%s%s", Type_defined_module(e->member->member->type)->c_name, e->member->member->name);
-      else {
-        c_expression(f, e->member->o);
-        fprintf(f, "%s%s", (e->member->pointer ? "->" : "."), e->member->member->name);
-      }
-      break;
     case ModuleT:
     case StructT:
     case UnionT:

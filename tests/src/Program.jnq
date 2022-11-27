@@ -2,6 +2,8 @@
 use Module
 
 cfn strncpy(d *char, s *char, l int) *char
+cfn strcmp(a *char, b *char) int
+cfn strlen(a *char) int
 
 type MemoryArena struct {
   buffer *char
@@ -39,8 +41,6 @@ fn copy_string(p *Program, s *char, l int) *char {
   return id;
 }
 
-cfn strcmp(a *char, b *char) int
-
 
 fn find_module(p *Program, path *char) *Module.Module  {
   for (m *Module.Module = p->modules; m; m = m->next)
@@ -52,4 +52,22 @@ fn find_module(p *Program, path *char) *Module.Module  {
 fn reset_module_finished(p* Program) {
   for (m *Module.Module = p->modules; m; m = m->next)
     m->finished = false;
+}
+
+fn add_module(p *Program, pathc *char) *Module.Module {
+  size int = strlen(pathc);
+  path *char = p.copy_string(pathc, size);
+  cname *char = p.copy_string(pathc, size + 1);
+  for (c *char = cname; *c; ++c)
+    if (*c == '.')
+      *c = '_';
+  cname[size - 1] = '_';
+  cname[size] = '\0';
+  m *Module.Module = p.alloc(sizeof(Module.Module)) as *Module.Module
+  m->path = path;
+  m->c_name = cname;
+  m->types = null;
+  m->next = p->modules;
+  p->modules = m;
+  return m;
 }
