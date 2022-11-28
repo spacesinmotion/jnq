@@ -21,8 +21,8 @@
 
 typedef struct Location {
   const char *file;
-  size_t line;
-  size_t column;
+  unsigned short line;
+  unsigned short column;
 } Location;
 
 typedef struct State {
@@ -45,7 +45,7 @@ jmp_buf long_jump_end;
 
 void FATAL(Location *l, const char *format, ...) {
   va_list args;
-  fprintf(stderr, "%s:%zu:%zu: error: ", l->file, l->line, l->column);
+  fprintf(stderr, "%s:%hu:%hu: error: ", l->file, l->line, l->column);
   va_start(args, format);
   vfprintf(stderr, format, args);
   va_end(args);
@@ -126,6 +126,7 @@ typedef enum ExpressionType {
 } ExpressionType;
 
 typedef struct Expression {
+  Location location;
   union {
     bool b;
     char c[3];
@@ -144,7 +145,6 @@ typedef struct Expression {
     UnaryPostfix *unpost;
     BinaryOperation *binop;
   };
-  Location location;
   ExpressionType type;
 } Expression;
 
@@ -180,8 +180,8 @@ typedef struct Statement {
     DoWhileStatement *doWhileS;
     SwitchStatement *switchS;
   };
-  StatementType type;
   Statement *next;
+  StatementType type;
 } Statement;
 
 typedef struct Function Function;
@@ -2933,6 +2933,13 @@ int main(int argc, char *argv[]) {
   remove("jnq_bin.ilk");
   remove("jnq_bin.pdb");
 #endif
+
+  int percent = (int)(100.0 * (double)p.arena.len / (double)p.arena.cap);
+  printf("-------------------------------------\n");
+  printf("       memory usage %3d%% (%zu/%zu)\n", percent, p.arena.len, p.arena.cap);
+  printf("  size of Statement %zu\n", sizeof(Statement));
+  printf(" size of Expression %zu\n", sizeof(Expression));
+  printf("   size of Location %zu\n", sizeof(Location));
 
   return error;
 }
