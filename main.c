@@ -2907,6 +2907,8 @@ int main(int argc, char *argv[]) {
     strcat(clang_call, "clang -o " JNQ_BIN " -Werror -g "
 #ifndef _WIN32
                        "-lm "
+#else
+                       "-D_CRT_SECURE_NO_WARNINGS "
 #endif
     );
     strcat(clang_call, main_c);
