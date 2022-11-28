@@ -19,27 +19,33 @@
 #define JNQ_BIN "jnq_bin.exe"
 #endif
 
-typedef struct State {
+typedef struct Location {
   const char *file;
-  const char *c;
   size_t line;
   size_t column;
+} Location;
+
+typedef struct State {
+  const char *c;
+  Location location;
 } State;
 
-State State_new(const char *c, const char *file) { return (State){.file = file, .c = c, .line = 1, .column = 1}; }
+State State_new(const char *c, const char *file) {
+  return (State){.c = c, .location = (Location){.file = file, .line = 1, .column = 1}};
+}
 
-#define null_state ((State){.file = "", .c = "", .line = 1, .column = 1})
+#define null_location ((Location){.file = "", .line = 1, .column = 1})
 
 void State_skip(State *s, int c) {
   s->c += c;
-  s->column += c;
+  s->location.column += c;
 }
 
 jmp_buf long_jump_end;
 
-void FATAL(State *st, const char *format, ...) {
+void FATAL(Location *l, const char *format, ...) {
   va_list args;
-  fprintf(stderr, "%s:%zu:%zu: error: ", st->file, st->line, st->column);
+  fprintf(stderr, "%s:%zu:%zu: error: ", l->file, l->line, l->column);
   va_start(args, format);
   vfprintf(stderr, format, args);
   va_end(args);
@@ -56,8 +62,8 @@ void FATALX(const char *format, ...) {
   longjmp(long_jump_end, 1);
 }
 
-State back(State *s, size_t c) {
-  State b = *s;
+Location back(State *s, size_t c) {
+  Location b = s->location;
   if (b.column < c) {
     b.column = 0;
     FATAL(&b, "internal error calculating location");
@@ -138,7 +144,7 @@ typedef struct Expression {
     UnaryPostfix *unpost;
     BinaryOperation *binop;
   };
-  State location;
+  Location location;
   ExpressionType type;
 } Expression;
 
@@ -189,7 +195,7 @@ typedef struct Identifier {
 } Identifier;
 
 typedef struct Variable {
-  State location;
+  Location location;
   const char *name;
   Type *type;
   Variable *next;
@@ -376,7 +382,7 @@ typedef struct Enum {
 
 typedef struct UnionTypeEntry UnionTypeEntry;
 typedef struct UnionTypeEntry {
-  State location;
+  Location location;
   Type *type;
   int index;
   UnionTypeEntry *next;
@@ -390,7 +396,7 @@ typedef struct Union {
 typedef struct Function {
   Variable *parameter;
   Type *returnType;
-  State return_type_location;
+  Location return_type_location;
   bool is_extern_c;
   Statement *body;
   Module *module;
@@ -524,16 +530,18 @@ Type String = (Type){"string", .structT = &(Struct){NULL, &global}, StructT, NUL
 
 Type Ellipsis = (Type){"...", .structT = &(Struct){NULL, &global}, StructT, NULL};
 
-Function print = (Function){&(Variable){null_state, "...", &Ellipsis, &(Variable){null_state, "format", &String, NULL}},
-                            NULL,
-                            null_state,
-                            true,
-                            NULL,
-                            &global};
+Function print =
+    (Function){&(Variable){null_location, "...", &Ellipsis, &(Variable){null_location, "format", &String, NULL}},
+               NULL,
+               null_location,
+               true,
+               NULL,
+               &global};
 Type Printf = (Type){"printf", .fnT = &print, FnT, NULL};
-Function assert = (Function){&(Variable){null_state, "cond", &Bool, NULL}, NULL, null_state, true, NULL, &global};
+Function assert = (Function){&(Variable){null_location, "cond", &Bool, NULL}, NULL, null_location, true, NULL, &global};
 Type Assert = (Type){"ASSERT", .fnT = &assert, FnT, NULL};
-Function SizeOfFn = (Function){&(Variable){null_state, "sizeof", &Int, NULL}, NULL, null_state, true, NULL, &global};
+Function SizeOfFn =
+    (Function){&(Variable){null_location, "sizeof", &Int, NULL}, NULL, null_location, true, NULL, &global};
 Type SizeOf = (Type){"sizeof", .fnT = &SizeOfFn, FnT, NULL};
 
 Type *Module_find_type(Module *m, const char *b, const char *e) {
@@ -674,10 +682,10 @@ Type *Program_add_type(Program *p, TypeKind k, const char *name, Module *m) {
   return tt;
 }
 
-Variable *Program_new_variable(Program *p, State l, Variable *next) {
+Variable *Program_new_variable(Program *p, State *l, Variable *next) {
   Variable *v = (Variable *)Program_alloc(p, sizeof(Variable));
   v->next = next;
-  v->location = l;
+  v->location = l->location;
   return v;
 }
 
@@ -726,7 +734,7 @@ Statement *Program_new_Statement(Program *p, StatementType t, Statement *n) {
   return s;
 }
 
-Expression *Program_new_Expression(Program *p, ExpressionType t, State l) {
+Expression *Program_new_Expression(Program *p, ExpressionType t, Location l) {
   Expression *e = (Expression *)Program_alloc(p, sizeof(Expression));
   e->type = t;
   e->location = l;
@@ -780,10 +788,10 @@ bool skip_whitespace_space(State *st) {
   State old = *st;
   while (*st->c && isspace(*st->c)) {
     if (*st->c == '\n') {
-      st->line++;
-      st->column = 1;
+      st->location.line++;
+      st->location.column = 1;
     } else
-      ++st->column;
+      ++st->location.column;
     ++st->c;
   }
   return old.c > st->c;
@@ -793,12 +801,12 @@ bool skip_line_comment(State *st) {
   if (st->c[0] && st->c[0] == '/' && st->c[1] == '/') {
     while (*st->c) {
       if (*st->c == '\n') {
-        st->line++;
-        st->column = 1;
+        st->location.line++;
+        st->location.column = 1;
         ++st->c;
         break;
       } else {
-        ++st->column;
+        ++st->location.column;
         ++st->c;
       }
     }
@@ -813,11 +821,11 @@ void skip_whitespace(State *st) {
 }
 
 bool check_whitespace_for_nl(State *st) {
-  if (st->line > 1)
-    for (size_t i = 1; i <= st->column; ++i)
+  if (st->location.line > 1)
+    for (size_t i = 1; i <= st->location.column; ++i)
       if (!isspace(st->c[-i]))
         return false;
-  return st->line > 1;
+  return st->location.line > 1;
 }
 
 bool check_word(State *st, const char *word) {
@@ -885,7 +893,7 @@ bool read_int(State *st, int *i) {
   *i = strtol(st->c, &end, 10);
   if (end == st->c)
     return false;
-  st->column += end - st->c;
+  st->location.column += end - st->c;
   st->c = end;
   return true;
 }
@@ -895,7 +903,7 @@ bool read_float(State *st, double *f) {
   *f = strtod(st->c, &end);
   if (end == st->c)
     return false;
-  st->column += end - st->c;
+  st->location.column += end - st->c;
   st->c = end;
   return true;
 }
@@ -945,7 +953,7 @@ bool Program_parse_use_path(Program *p, Module *m, State *st) {
       old = *st;
 
       if (!check_identifier(st))
-        FATAL(st, "Error parsing use statement!");
+        FATAL(&st->location, "Error parsing use statement!");
       name = buffer + inb;
       inb += snprintf(buffer + inb, 256 - inb, "%.*s", (int)(st->c - old.c), old.c);
       old = *st;
@@ -955,7 +963,7 @@ bool Program_parse_use_path(Program *p, Module *m, State *st) {
 
   Module *use = Program_parse_sub_file(p, buffer, m);
   if (!use)
-    FATAL(&old, "import not found '%s'", buffer);
+    FATAL(&old.location, "import not found '%s'", buffer);
 
   const char *n = Program_copy_string(p, name, strlen(name));
   Program_add_type(p, ModuleT, n, m)->moduleT = use;
@@ -1058,7 +1066,7 @@ Variable *Program_parse_variable_declaration(Program *p, Module *m, State *st, V
     skip_whitespace(st);
     if (!check_whitespace_for_nl(st)) {
       if ((type = Program_parse_declared_type(p, m, st))) {
-        Variable *top = Program_new_variable(p, old, next);
+        Variable *top = Program_new_variable(p, &old, next);
         top->name = Program_copy_string(p, old.c, name_end - old.c);
         top->type = type;
         return top;
@@ -1077,11 +1085,11 @@ Variable *Program_parse_variable_declaration_list(Program *p, Module *m, State *
       return top;
     Variable *tn = Program_parse_variable_declaration(p, m, st, top);
     if (!tn)
-      FATAL(st, "missing variable name");
+      FATAL(&st->location, "missing variable name");
     top = tn;
     check_op(st, ",");
   }
-  FATAL(st, "Missing closing '%s'", end);
+  FATAL(&st->location, "Missing closing '%s'", end);
   return NULL;
 }
 
@@ -1098,15 +1106,15 @@ EnumEntry *Program_parse_enum_entry_list(Program *p, State *st) {
       if (check_op(st, "=")) {
         e->valueSet = true;
         if (!read_int(st, &e->value))
-          FATAL(st, "missing enum entry value ");
+          FATAL(&st->location, "missing enum entry value ");
       }
     } else
-      FATAL(st, "missing enum entry name");
+      FATAL(&st->location, "missing enum entry name");
     check_op(st, ",");
     e->next = top;
     top = e;
   }
-  FATAL(st, "Missing closing '}' for enum");
+  FATAL(&st->location, "Missing closing '}' for enum");
   return NULL;
 }
 
@@ -1124,13 +1132,13 @@ UnionTypeEntry *Program_parse_union_entry_list(Program *p, Module *m, State *st)
     size++;
     UnionTypeEntry *e = (UnionTypeEntry *)Program_alloc(p, sizeof(UnionTypeEntry));
     skip_whitespace(st);
-    e->location = *st;
+    e->location = st->location;
     e->type = Program_parse_declared_type(p, m, st);
     check_op(st, ",");
     e->next = top;
     top = e;
   }
-  FATAL(st, "Missing closing '}' for enum");
+  FATAL(&st->location, "Missing closing '}' for enum");
   return NULL;
 }
 void Program_parse_type(Program *p, Module *m, State *st) {
@@ -1149,9 +1157,9 @@ void Program_parse_type(Program *p, Module *m, State *st) {
       Union *u = Program_add_type(p, UnionTypeT, name, m)->unionT;
       u->member = Program_parse_union_entry_list(p, m, st);
     } else
-      FATAL(st, "Missing type declaration");
+      FATAL(&st->location, "Missing type declaration");
   } else
-    FATAL(st, "Missing type name");
+    FATAL(&st->location, "Missing type name");
 }
 
 Expression *Program_parse_atom(Program *p, State *st) {
@@ -1162,25 +1170,25 @@ Expression *Program_parse_atom(Program *p, State *st) {
 
     bool isTrue = l == 4 && strncmp(old.c, "true", 4) == 0;
     if (isTrue || (l == 5 && strncmp(old.c, "false", 5) == 0)) {
-      Expression *b = Program_new_Expression(p, BoolA, old);
+      Expression *b = Program_new_Expression(p, BoolA, old.location);
       b->b = isTrue;
       return b;
     }
 
     if (l == 4 && strncmp(old.c, "null", 4) == 0) {
-      return Program_new_Expression(p, NullA, old);
+      return Program_new_Expression(p, NullA, old.location);
     }
 
-    Expression *e = Program_new_Expression(p, IdentifierA, old);
+    Expression *e = Program_new_Expression(p, IdentifierA, old.location);
     e->id->name = Program_copy_string(p, old.c, st->c - old.c);
     e->id->type = NULL;
     return e;
   }
 
   if (check_op(st, "'")) {
-    Expression *e = Program_new_Expression(p, CharA, old);
+    Expression *e = Program_new_Expression(p, CharA, old.location);
     if (!st->c[0])
-      FATAL(st, "unclosed char constant");
+      FATAL(&st->location, "unclosed char constant");
     if (st->c[0] == '\\') {
       e->c[0] = st->c[0];
       e->c[1] = st->c[1];
@@ -1192,17 +1200,17 @@ Expression *Program_parse_atom(Program *p, State *st) {
       State_skip(st, 1);
     }
     if (st->c[0] != '\'')
-      FATAL(st, "Wrong char constant '%s' '%c'", e->c, st->c[0]);
+      FATAL(&st->location, "Wrong char constant '%s' '%c'", e->c, st->c[0]);
     State_skip(st, 1);
     return e;
   }
 
   if (check_op(st, "\"")) {
-    Expression *e = Program_new_Expression(p, StringA, old);
+    Expression *e = Program_new_Expression(p, StringA, old.location);
     if (st->c[0] != '"') {
       while (st->c[1] != '"') {
         if (!st->c[0])
-          FATAL(&old, "unclosed string constant");
+          FATAL(&old.location, "unclosed string constant");
         State_skip(st, 1);
       }
       State_skip(st, 1);
@@ -1219,12 +1227,12 @@ Expression *Program_parse_atom(Program *p, State *st) {
 
   int temp_i;
   if (read_int(st, &temp_i) && (!is_float || st->c >= f.c)) {
-    Expression *e = Program_new_Expression(p, IntA, old);
+    Expression *e = Program_new_Expression(p, IntA, old.location);
     e->i = temp_i;
     return e;
   } else if (is_float) {
     *st = f;
-    Expression *e = Program_new_Expression(p, DoubleA, old);
+    Expression *e = Program_new_Expression(p, DoubleA, old.location);
     if (st->c[0] == 'f') {
       e->type = FloatA;
       State_skip(st, 1);
@@ -1295,12 +1303,12 @@ Expression *Program_parse_construction(Program *p, Module *m, State *st) {
     Type *type = NULL;
     if ((type = Program_parse_declared_type(p, m, st))) {
       if (check_op(st, "{")) {
-        Expression *construct = Program_new_Expression(p, ConstructE, old);
+        Expression *construct = Program_new_Expression(p, ConstructE, old.location);
         construct->construct->p = Program_parse_named_parameter_list(p, m, st);
         if (!construct->construct->p)
           construct->construct->p = Program_parse_parameter_list(p, m, st);
         if (!check_op(st, "}"))
-          FATAL(st, "unfinished constructor call, missing '}'");
+          FATAL(&st->location, "unfinished constructor call, missing '}'");
         construct->construct->type = type;
         return construct;
       }
@@ -1321,8 +1329,8 @@ Expression *Program_parse_suffix_expression(Program *p, Module *m, State *st, Ex
   if (pointer || check_op(st, ".")) {
     const char *member = read_identifier(p, st);
     if (!member)
-      FATAL(st, "missing id for member access");
-    Expression *ma = Program_new_Expression(p, MemberAccessE, old);
+      FATAL(&st->location, "missing id for member access");
+    Expression *ma = Program_new_Expression(p, MemberAccessE, old.location);
     ma->member->o = e;
     ma->member->o_type = NULL;
     ma->member->member = (Identifier *)Program_alloc(p, sizeof(Identifier));
@@ -1335,7 +1343,7 @@ Expression *Program_parse_suffix_expression(Program *p, Module *m, State *st, Ex
 
   bool decrement = check_op(st, "--");
   if (decrement || check_op(st, "++")) {
-    Expression *post = Program_new_Expression(p, UnaryPostfixE, old);
+    Expression *post = Program_new_Expression(p, UnaryPostfixE, old.location);
     post->unpost->o = e;
     post->unpost->op = decrement ? "--" : "++";
     post = Program_parse_suffix_expression(p, m, st, post);
@@ -1343,29 +1351,29 @@ Expression *Program_parse_suffix_expression(Program *p, Module *m, State *st, Ex
   }
 
   if (check_op(st, "[")) {
-    Expression *acc = Program_new_Expression(p, AccessE, old);
+    Expression *acc = Program_new_Expression(p, AccessE, old.location);
     acc->access->o = e;
     acc->access->p = Program_parse_expression(p, m, st);
     if (!acc->access->p)
-      FATAL(st, "missing '[]' content");
+      FATAL(&st->location, "missing '[]' content");
     if (!check_op(st, "]"))
-      FATAL(st, "missing closing ']' for subscription '%s'", st->c);
+      FATAL(&st->location, "missing closing ']' for subscription '%s'", st->c);
     acc = Program_parse_suffix_expression(p, m, st, acc);
     return acc;
   }
 
   if (check_op(st, "(")) {
-    Expression *call = Program_new_Expression(p, CallE, old);
+    Expression *call = Program_new_Expression(p, CallE, old.location);
     call->call->o = e;
     call->call->p = Program_parse_parameter_list(p, m, st);
     if (!check_op(st, ")"))
-      FATAL(st, "unfinished function call, missing ')'");
+      FATAL(&st->location, "unfinished function call, missing ')'");
     call = Program_parse_suffix_expression(p, m, st, call);
     return call;
   }
 
   if (check_word(st, "as")) {
-    Expression *cast = Program_new_Expression(p, AsCast, old);
+    Expression *cast = Program_new_Expression(p, AsCast, old.location);
     cast->cast->o = e;
     cast->cast->type = Program_parse_declared_type(p, m, st);
     return cast;
@@ -1390,9 +1398,9 @@ Expression *Program_parse_unary_operand(Program *p, Module *m, State *st) {
     e = Program_new_Expression(p, BraceE, back(st, 1));
     e->brace->o = Program_parse_expression(p, m, st);
     if (!e->brace->o)
-      FATAL(st, "missing '(' content");
+      FATAL(&st->location, "missing '(' content");
     if (!check_op(st, ")"))
-      FATAL(st, "missing closing ')'");
+      FATAL(&st->location, "missing closing ')'");
   } else if ((e = Program_parse_construction(p, m, st))) {
     ;
   } else if ((temp_v = Program_parse_variable_declaration(p, m, st, NULL))) {
@@ -1403,7 +1411,7 @@ Expression *Program_parse_unary_operand(Program *p, Module *m, State *st) {
     e = Program_parse_atom(p, st);
 
   if (!e && prefix)
-    FATAL(st, "prefix operation without expression '%s'", prefix->unpre->op);
+    FATAL(&st->location, "prefix operation without expression '%s'", prefix->unpre->op);
   if (!e)
     return NULL;
 
@@ -1514,7 +1522,7 @@ Statement *Program_parse_case_body(Program *p, Module *m, State *st) {
     if (!body)
       break;
   }
-  FATAL(st, "Missing closing '}' for scope");
+  FATAL(&st->location, "Missing closing '}' for scope");
   return NULL;
 }
 
@@ -1532,17 +1540,17 @@ Statement *Program_parse_statement(Program *p, Module *m, State *st, Statement *
   } else if (check_word(st, "case")) {
     statement = Program_new_Statement(p, Case, next);
     if (!(statement->caseS->caseE = Program_parse_expression(p, m, st)))
-      FATAL(st, "Missing case expression");
+      FATAL(&st->location, "Missing case expression");
     if (check_op(st, ":"))
       statement->caseS->body = Program_parse_case_body(p, m, st);
     else
-      FATAL(st, "Missing ':' in case statement");
+      FATAL(&st->location, "Missing ':' in case statement");
   } else if (check_word(st, "default")) {
     statement = Program_new_Statement(p, Default, next);
     if (check_op(st, ":"))
       statement->defaultS->body = Program_parse_case_body(p, m, st);
     else
-      FATAL(st, "Missing ':' for default statement");
+      FATAL(&st->location, "Missing ':' for default statement");
   } else if (check_word(st, "break"))
     statement = Program_new_Statement(p, Break, next);
   else if (check_word(st, "continue"))
@@ -1552,55 +1560,55 @@ Statement *Program_parse_statement(Program *p, Module *m, State *st, Statement *
     if ((temp_e = Program_parse_expression(p, m, st)))
       statement->ifS->condition = temp_e;
     else
-      FATAL(st, "Missing if conditon");
+      FATAL(&st->location, "Missing if conditon");
     statement->ifS->ifBody = Program_parse_scope_block(p, m, st);
     if (!statement->ifS->ifBody)
-      FATAL(st, "Missing if block");
+      FATAL(&st->location, "Missing if block");
     if (check_word(st, "else")) {
       statement->ifS->elseBody = Program_parse_scope_block(p, m, st);
       if (!statement->ifS->elseBody)
-        FATAL(st, "Missing else block");
+        FATAL(&st->location, "Missing else block");
     }
   } else if (check_word(st, "for")) {
     statement = Program_new_Statement(p, For, next);
     if (!check_op(st, "("))
-      FATAL(st, "Missing for loop description");
+      FATAL(&st->location, "Missing for loop description");
     statement->forS->init = Program_parse_expression(p, m, st);
     if (!check_op(st, ";"))
-      FATAL(st, "Missing for init");
+      FATAL(&st->location, "Missing for init");
     statement->forS->condition = Program_parse_expression(p, m, st);
     if (!check_op(st, ";"))
-      FATAL(st, "Missing for condition");
+      FATAL(&st->location, "Missing for condition");
     statement->forS->incr = Program_parse_expression(p, m, st);
     if (!check_op(st, ")"))
-      FATAL(st, "Missing closing ')' of for condition");
+      FATAL(&st->location, "Missing closing ')' of for condition");
     statement->forS->body = Program_parse_scope_block(p, m, st);
     if (!statement->forS->body)
-      FATAL(st, "Missing for block");
+      FATAL(&st->location, "Missing for block");
   } else if (check_word(st, "while")) {
     statement = Program_new_Statement(p, While, next);
     if ((temp_e = Program_parse_expression(p, m, st)))
       statement->whileS->condition = temp_e;
     else
-      FATAL(st, "Missing while conditon");
+      FATAL(&st->location, "Missing while conditon");
     statement->whileS->body = Program_parse_scope_block(p, m, st);
     if (!statement->whileS->body)
-      FATAL(st, "Missing while block");
+      FATAL(&st->location, "Missing while block");
   } else if (check_word(st, "do")) {
     statement = Program_new_Statement(p, DoWhile, next);
     statement->doWhileS->body = Program_parse_scope_block(p, m, st);
     if (!check_word(st, "while"))
-      FATAL(st, "Missing 'while' for do block");
+      FATAL(&st->location, "Missing 'while' for do block");
     if ((temp_e = Program_parse_expression(p, m, st)))
       statement->doWhileS->condition = temp_e;
     else
-      FATAL(st, "Missing do while conditon");
+      FATAL(&st->location, "Missing do while conditon");
   } else if (check_word(st, "switch")) {
     statement = Program_new_Statement(p, Switch, next);
     if ((temp_e = Program_parse_expression(p, m, st)))
       statement->switchS->condition = temp_e;
     else
-      FATAL(st, "Missing switch expression");
+      FATAL(&st->location, "Missing switch expression");
     statement->switchS->body = Program_parse_scope_block(p, m, st);
   } else {
     skip_whitespace(st);
@@ -1623,7 +1631,7 @@ Statement *Program_parse_scope(Program *p, Module *m, State *st) {
     if (!body)
       break;
   }
-  FATAL(st, "Missing closing '}' for scope");
+  FATAL(&st->location, "Missing closing '}' for scope");
   return NULL;
 }
 Statement *Program_parse_scope_block(Program *p, Module *m, State *st) {
@@ -1644,19 +1652,19 @@ void Program_parse_fn(Program *p, Module *m, State *st, bool extc) {
     if (check_op(st, "(")) {
       fn->parameter = Program_parse_variable_declaration_list(p, m, st, ")");
       skip_whitespace(st);
-      fn->return_type_location = *st;
+      fn->return_type_location = st->location;
       fn->returnType = Program_parse_declared_type(p, m, st);
       fn->is_extern_c = extc;
       if (!extc) {
         if (check_op(st, "{"))
           fn->body = Program_parse_scope(p, m, st);
         else
-          FATAL(st, "Missing function body");
+          FATAL(&st->location, "Missing function body");
       }
     } else
-      FATAL(st, "Missing parameterlist");
+      FATAL(&st->location, "Missing parameterlist");
   } else
-    FATAL(st, "Missing type name");
+    FATAL(&st->location, "Missing type name");
 }
 
 void Program_parse_module(Program *p, Module *m, State *st) {
@@ -1672,7 +1680,7 @@ void Program_parse_module(Program *p, Module *m, State *st) {
       else if (check_word(st, "cfn"))
         Program_parse_fn(p, m, st, true);
       else {
-        FATAL(st, "Unknown keyword >>'%s'\n", st->c);
+        FATAL(&st->location, "Unknown keyword >>'%s'\n", st->c);
         break;
       }
     }
@@ -1715,7 +1723,7 @@ void c_use(FILE *f, TypeList *tl, ModuleFileCB cb) {
     cb(f, tl->type->moduleT);
 }
 
-bool c_type_declare(FILE *f, Type *t, State l, const char *var) {
+bool c_type_declare(FILE *f, Type *t, Location *l, const char *var) {
   if (!t)
     return false;
 
@@ -1738,7 +1746,7 @@ bool c_type_declare(FILE *f, Type *t, State l, const char *var) {
     fprintf(f, "*");
     break;
   case ModuleT:
-    FATAL(&l, "Can't use module '%s' as type!", t->name);
+    FATAL(l, "Can't use module '%s' as type!", t->name);
     // fprintf(f, "%s", t->name);
     break;
   case StructT:
@@ -1749,11 +1757,11 @@ bool c_type_declare(FILE *f, Type *t, State l, const char *var) {
     break;
   case FnT:
     if (c_type_declare(f, t->fnT->returnType, l, ""))
-      FATAL(&l, "I don't know right now how to handle array function pointer stuff!");
+      FATAL(l, "I don't know right now how to handle array function pointer stuff!");
     fprintf(f, "(*())");
     break;
   case PlaceHolder:
-    FATAL(&l, "Unkown type '%s'!", t->name);
+    FATAL(l, "Unkown type '%s'!", t->name);
     break;
   }
   return hasVarWritten;
@@ -1793,7 +1801,7 @@ void c_var_list(FILE *f, Variable *v, const char *br) {
   if (v->next)
     fprintf(f, "%s", br);
 
-  if (!c_type_declare(f, v->type, v->location, v->name))
+  if (!c_type_declare(f, v->type, &v->location, v->name))
     fprintf(f, " %s", v->name);
 }
 
@@ -1829,7 +1837,7 @@ void c_uniontype_entry(FILE *f, UnionTypeEntry *entry) {
 
   if (entry->next)
     fprintf(f, ";\n    ");
-  if (c_type_declare(f, entry->type, entry->location, "<u>"))
+  if (c_type_declare(f, entry->type, &entry->location, "<u>"))
     FATALX("I don't know right now how to handle array union entry stuff!");
   fprintf(f, " _u%d", entry->index);
 }
@@ -2197,7 +2205,7 @@ void c_expression(FILE *f, Expression *e) {
   }
   case AsCast:
     fprintf(f, "((");
-    if (c_type_declare(f, e->cast->type, e->location, ""))
+    if (c_type_declare(f, e->cast->type, &e->location, ""))
       FATAL(&e->location, "I don't know right now how to handle array cast  stuff!");
     fprintf(f, ")(");
     c_expression(f, e->cast->o);
@@ -2334,7 +2342,7 @@ void c_fn(FILE *f, const char *module_name, TypeList *tl) {
 
   Function *fn = tl->type->fnT;
   if (fn->returnType) {
-    if (c_type_declare(f, fn->returnType, fn->return_type_location, ""))
+    if (c_type_declare(f, fn->returnType, &fn->return_type_location, ""))
       FATALX("array return type not supported -> c backend!");
   } else
     fprintf(f, "void");
@@ -2436,7 +2444,7 @@ void c_fn_forward(FILE *f, const char *module_name, TypeList *tl) {
 
   Function *fn = tl->type->fnT;
   if (fn->returnType) {
-    if (c_type_declare(f, fn->returnType, fn->return_type_location, ""))
+    if (c_type_declare(f, fn->returnType, &fn->return_type_location, ""))
       FATALX("array return type not supported -> c backend!");
   } else
     fprintf(f, "void");
