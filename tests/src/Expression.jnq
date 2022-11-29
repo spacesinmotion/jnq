@@ -1,6 +1,6 @@
 
-use State
-use Type
+use State from State
+use Type, Variable from Type
 
 type ExpressionType enum {
   NullA, BoolA, CharA, IntA, FloatA, DoubleA, StringA,
@@ -15,7 +15,7 @@ type ExpressionSelect union {
   f double
   s *char
   id *Identifier
-  var *Type.Variable
+  var *Variable
   brace *Brace 
   call *Call
   construct *Construct 
@@ -30,12 +30,12 @@ type ExpressionSelect union {
 type Expression struct {
   select ExpressionSelect
   _type ExpressionType
-  localtion State.State
+  localtion State
 } 
 
 type Identifier struct {
   name *char
-  _type *Type.Type
+  _type *Type
 }
 
 type Brace struct {
@@ -48,7 +48,7 @@ type Call struct {
 }
 
 type Construct struct {
-  _type *Type.Type
+  _type *Type
   p *Parameter
 }
 
@@ -60,14 +60,14 @@ type Access struct {
 
 type MemberAccess struct {
   o *Expression
-  o_type *Type.Type
+  o_type *Type
   member *Identifier
   pointer bool
 }
 
 type Cast struct {
   o *Expression
-  _type *Type.Type
+  _type *Type
 }
 
 
