@@ -1,14 +1,16 @@
 
 use tests.src.Statement
-use tests.src.Program
+use Program, MemoryArena from tests.src.Program
 
-use tests.sub.util
+use Point from tests.sub.util
 
 fn main() int
 {
   printf("main\n")
 
-  p Program.Program = Program.Program{}
+  a int = sizeof(Point)
+  px Point = Point{}
+  pr Program = Program{}
 
   printf("ok\n")
 }

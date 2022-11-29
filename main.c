@@ -402,7 +402,13 @@ typedef struct Function {
   Module *module;
 } Function;
 
-typedef enum TypeKind { ModuleT, StructT, UnionT, EnumT, UnionTypeT, ArrayT, PointerT, FnT, PlaceHolder } TypeKind;
+typedef struct TypeList TypeList;
+typedef struct Use {
+  TypeList *types;
+  Module *module;
+} Use;
+
+typedef enum TypeKind { UseT, StructT, UnionT, EnumT, UnionTypeT, ArrayT, PointerT, FnT, PlaceHolder } TypeKind;
 
 typedef struct Type {
   const char *name;
@@ -411,7 +417,7 @@ typedef struct Type {
     Enum *enumT;
     Union *unionT;
     Function *fnT;
-    Module *moduleT;
+    Use *useT;
     int array_count;
   };
   TypeKind kind;
@@ -429,7 +435,7 @@ Module *Type_defined_module(Type *t) {
     return t->unionT->module;
   case FnT:
     return t->fnT->module;
-  case ModuleT:
+  case UseT:
   case ArrayT:
   case PointerT:
   case PlaceHolder:
@@ -439,7 +445,6 @@ Module *Type_defined_module(Type *t) {
   return NULL;
 }
 
-typedef struct TypeList TypeList;
 typedef struct TypeList {
   Type *type;
   TypeList *next;
@@ -541,7 +546,7 @@ Type Printf = (Type){"printf", .fnT = &print, FnT, NULL};
 Function assert = (Function){&(Variable){null_location, "cond", &Bool, NULL}, NULL, null_location, true, NULL, &global};
 Type Assert = (Type){"ASSERT", .fnT = &assert, FnT, NULL};
 Function SizeOfFn =
-    (Function){&(Variable){null_location, "sizeof", &Int, NULL}, NULL, null_location, true, NULL, &global};
+    (Function){&(Variable){null_location, "sizeof", &Int, NULL}, &Int, null_location, true, NULL, &global};
 Type SizeOf = (Type){"sizeof", .fnT = &SizeOfFn, FnT, NULL};
 
 Type *Module_find_type(Module *m, const char *b, const char *e) {
@@ -564,9 +569,16 @@ Type *Module_find_type(Module *m, const char *b, const char *e) {
   if (6 == e - b && strncmp(SizeOf.name, b, 6) == 0)
     return &SizeOf;
 
-  for (TypeList *tl = m->types; tl; tl = tl->next)
-    if (strlen(tl->type->name) == (size_t)(e - b) && strncmp(tl->type->name, b, e - b) == 0)
+  for (TypeList *tl = m->types; tl; tl = tl->next) {
+    if (tl->type->kind == UseT && tl->type->useT->types) {
+      for (TypeList *xtll = tl->type->useT->types; xtll; xtll = xtll->next) {
+        if (strlen(xtll->type->name) == (size_t)(e - b) && strncmp(xtll->type->name, b, e - b) == 0)
+          return xtll->type;
+      }
+    } else if (strlen(tl->type->name) == (size_t)(e - b) && strncmp(tl->type->name, b, e - b) == 0) {
       return tl->type;
+    }
+  }
   return NULL;
 }
 
@@ -603,8 +615,8 @@ Module *Program_add_module(Program *p, const char *pathc) {
   for (char *c = cname; *c; ++c)
     if (*c == '.')
       *c = '_';
-  cname[size - 1] = '_';
-  cname[size] = 0;
+  cname[size] = '_';
+  cname[size + 1] = 0;
   Module *m = (Module *)Program_alloc(p, sizeof(Module));
   m->path = path;
   m->c_name = cname;
@@ -625,8 +637,10 @@ Type *Program_add_type(Program *p, TypeKind k, const char *name, Module *m) {
   tt->name = name;
   tt->kind = k;
   switch (k) {
-  case ModuleT:
-    tt->moduleT = NULL;
+  case UseT:
+    tt->useT = (Use *)Program_alloc(p, sizeof(Use));
+    tt->useT->types = NULL;
+    tt->useT->module = NULL;
     break;
   case StructT:
   case UnionT:
@@ -935,9 +949,47 @@ Module *Program_parse_sub_file(Program *p, const char *path, Module *parent) {
   return mod;
 }
 
+typedef struct StringView {
+  const char *text;
+  int size;
+} StringView;
+
 bool Program_parse_use_path(Program *p, Module *m, State *st) {
   skip_whitespace(st);
   State old = *st;
+
+  StringView imp[32];
+  int imp_len = 0;
+
+  bool is_type_list = false;
+  const char *b = st->c;
+  if (check_identifier(st)) {
+    imp[imp_len++] = (StringView){b, st->c - b};
+    for (;;) {
+      if (check_word(st, "from")) {
+        is_type_list = true;
+        break;
+      }
+      if (check_op(st, ",")) {
+        skip_whitespace(st);
+        b = st->c;
+        if (check_identifier(st)) {
+          if (imp_len > (int)(sizeof(imp) / sizeof(StringView)))
+            FATALX("too many use imports!");
+          imp[imp_len++] = (StringView){b, st->c - b};
+          continue;
+        }
+      }
+      break;
+    }
+  }
+  if (!is_type_list) {
+    *st = old;
+    imp_len = 0;
+  } else {
+    skip_whitespace(st);
+    old = *st;
+  }
 
   char buffer[256] = {0};
   char *name = buffer;
@@ -966,7 +1018,18 @@ bool Program_parse_use_path(Program *p, Module *m, State *st) {
     FATAL(&old.location, "import not found '%s'", buffer);
 
   const char *n = Program_copy_string(p, name, strlen(name));
-  Program_add_type(p, ModuleT, n, m)->moduleT = use;
+  Use *u = Program_add_type(p, UseT, n, m)->useT;
+  u->module = use;
+  for (int i = 0; i < imp_len; ++i) {
+    Type *stype = Module_find_type(use, imp[i].text, imp[i].text + imp[i].size);
+    if (!stype)
+      FATALX("Did not found type '%*.s' in '%s'", imp[i].size, imp[i].text, name);
+    TypeList *tl = (TypeList *)Program_alloc(p, sizeof(TypeList));
+    tl->type = stype;
+    tl->next = u->types;
+    u->types = tl;
+  }
+
   return true;
 }
 
@@ -1040,11 +1103,11 @@ Type *Program_parse_declared_type(Program *p, Module *m, State *st) {
     Type *t = Module_temp_type(p, m, old.c, st->c);
     if (t) {
       old = *st;
-      if (t->kind == ModuleT && check_op(st, ".")) {
+      if (t->kind == UseT && check_op(st, ".")) {
         skip_whitespace(st);
         const char *s = st->c;
         if (check_identifier(st)) {
-          if ((t = Module_temp_type(p, t->moduleT, s, st->c)))
+          if ((t = Module_temp_type(p, t->useT->module, s, st->c)))
             return t;
         }
       }
@@ -1719,8 +1782,8 @@ typedef void (*ModuleFileCB)(FILE *, Module *);
 void c_use(FILE *f, TypeList *tl, ModuleFileCB cb) {
   if (tl->next)
     c_use(f, tl->next, cb);
-  if (tl->type->kind == ModuleT)
-    cb(f, tl->type->moduleT);
+  if (tl->type->kind == UseT)
+    cb(f, tl->type->useT->module);
 }
 
 bool c_type_declare(FILE *f, Type *t, Location *l, const char *var) {
@@ -1745,7 +1808,7 @@ bool c_type_declare(FILE *f, Type *t, Location *l, const char *var) {
   case PointerT:
     fprintf(f, "*");
     break;
-  case ModuleT:
+  case UseT:
     FATAL(l, "Can't use module '%s' as type!", t->name);
     // fprintf(f, "%s", t->name);
     break;
@@ -1880,7 +1943,7 @@ void c_type(FILE *f, const char *module_name, TypeList *t) {
   c_type(f, module_name, t->next);
 
   switch (t->type->kind) {
-  case ModuleT:
+  case UseT:
     break;
   case UnionT:
   case StructT:
@@ -1950,7 +2013,7 @@ void lisp_expression(FILE *f, Expression *e) {
       case PointerT:
         fprintf(f, "*");
         break;
-      case ModuleT:
+      case UseT:
       case StructT:
       case UnionT:
       case EnumT:
@@ -1993,7 +2056,7 @@ void lisp_expression(FILE *f, Expression *e) {
       case PointerT:
         fprintf(f, "*");
         break;
-      case ModuleT:
+      case UseT:
       case StructT:
       case UnionT:
       case EnumT:
@@ -2093,6 +2156,9 @@ void c_expression(FILE *f, Expression *e) {
       FATAL(&e->location, "unknown type for id '%s'", e->id->name);
     if (e->id->type->kind == FnT && !e->id->type->fnT->is_extern_c)
       fprintf(f, "%s", Type_defined_module(e->id->type)->c_name);
+    else if ((e->id->type->kind == StructT || e->id->type->kind == UnionT) && e->id->type->name &&
+             strcmp(e->id->name, e->id->type->name) == 0)
+      fprintf(f, "%s", Type_defined_module(e->id->type)->c_name);
     fprintf(f, "%s", e->id->name);
     break;
   case VarE:
@@ -2108,7 +2174,7 @@ void c_expression(FILE *f, Expression *e) {
     if (e->call->o->type != MemberAccessE)
       fprintf(f, "(");
     else if (e->call->p &&
-             (e->call->o->member->o->type != IdentifierA || e->call->o->member->o->id->type->kind != ModuleT))
+             (e->call->o->member->o->type != IdentifierA || e->call->o->member->o->id->type->kind != UseT))
       fprintf(f, ", ");
     c_parameter(f, e->call->p);
     fprintf(f, ")");
@@ -2142,7 +2208,7 @@ void c_expression(FILE *f, Expression *e) {
     fprintf(f, "]");
     break;
   case MemberAccessE: {
-    if (e->member->o_type->kind == ModuleT) {
+    if (e->member->o_type->kind == UseT) {
       if (e->member->member->type->kind == StructT)
         fprintf(f, "%s%s", Type_defined_module(e->member->member->type)->c_name, e->member->member->name);
       else if (e->member->member->type->kind == FnT) {
@@ -2166,7 +2232,7 @@ void c_expression(FILE *f, Expression *e) {
       FATAL(&e->location, "Use of unknow type '%s'", e->member->member->type->name);
       break;
     case EnumT:
-    case ModuleT:
+    case UseT:
     case StructT:
     case UnionT:
     case UnionTypeT:
@@ -2177,7 +2243,7 @@ void c_expression(FILE *f, Expression *e) {
       break;
 
     case FnT: {
-      if (e->member->o->type == IdentifierA && e->member->o->id->type->kind == ModuleT) {
+      if (e->member->o->type == IdentifierA && e->member->o->id->type->kind == UseT) {
         if (!e->member->member->type->fnT->is_extern_c)
           fprintf(f, "%s", Type_defined_module(e->member->member->type)->c_name);
         fprintf(f, "%s(", e->member->member->name);
@@ -2196,7 +2262,7 @@ void c_expression(FILE *f, Expression *e) {
       if (!e->member->member->type->fnT->is_extern_c)
         fprintf(f, "%s", Type_defined_module(e->member->member->type)->c_name);
       fprintf(f, "%s(%s", e->member->member->name, prefix);
-      if (e->member->o->type != IdentifierA || e->member->o->id->type->kind != ModuleT)
+      if (e->member->o->type != IdentifierA || e->member->o->id->type->kind != UseT)
         c_expression(f, e->member->o);
       break;
     }
@@ -2408,7 +2474,7 @@ void c_type_forward(FILE *f, const char *module_name, TypeList *t) {
   case UnionTypeT:
     c_union_forward(f, module_name, t->type->name, t->type->unionT->member);
     break;
-  case ModuleT:
+  case UseT:
     break;
   case PlaceHolder:
   case FnT:
@@ -2535,8 +2601,8 @@ Type *Module_find_member(Type *t, Identifier *member) {
   case UnionTypeT:
     // union?? -> some build in ()
     break;
-  case ModuleT:
-    return Module_find_type(t->moduleT, member->name, member->name + strlen(member->name));
+  case UseT:
+    return Module_find_type(t->useT->module, member->name, member->name + strlen(member->name));
 
   case ArrayT:
   case PointerT:
@@ -2673,7 +2739,7 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
       t = t->child;
       e->member->pointer = true;
     }
-    if (t->kind != StructT && t->kind != UnionT && t->kind != EnumT && t->kind != UnionTypeT && t->kind != ModuleT)
+    if (t->kind != StructT && t->kind != UnionT && t->kind != EnumT && t->kind != UnionTypeT && t->kind != UseT)
       FATAL(&e->location, "Expect non pointer type for member access");
     if (!(e->member->member->type = Module_find_member(t, e->member->member)))
       FATAL(&e->location, "unknown member '%s' for '%s'", e->member->member->name, t->name);
@@ -2711,7 +2777,7 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
       lisp_expression(stderr, e->binop->o2);
       fprintf(stderr, "\n");
       FATAL(&e->location, "Expect equal types for binary operation '%s' (%s, %s) (%d, %d)", e->binop->op->op, t1->name,
-            t2->name, t1->kind, t2->kind);
+            t2 ? t2->name : "<br>", t1 ? t1->kind : -1, t2 ? t2->kind : -1);
     }
     if (e->binop->op->returns_bool)
       return &Bool;
@@ -2818,8 +2884,8 @@ void c_Module_make_variables_typed(Program *p, Module *m) {
   m->finished = true;
 
   for (TypeList *tl = m->types; tl; tl = tl->next)
-    if (tl->type->kind == ModuleT)
-      c_Module_make_variables_typed(p, tl->type->moduleT);
+    if (tl->type->kind == UseT)
+      c_Module_make_variables_typed(p, tl->type->useT->module);
 
   VariableStack stack = (VariableStack){};
   for (TypeList *tl = m->types; tl; tl = tl->next)

@@ -1,5 +1,5 @@
 
-use Module
+use Module, TypeList from Module
 use Type
 use State
 
@@ -15,7 +15,7 @@ type MemoryArena struct {
 
 type Program struct {
   arena MemoryArena
-  modules *Module.Module 
+  modules *Module 
 }
 
 fn new(buffer *char, cap int) Program {
@@ -44,19 +44,19 @@ fn copy_string(p *Program, s *char, l int) *char {
 }
 
 
-fn find_module(p *Program, path *char) *Module.Module  {
-  for (m *Module.Module = p->modules; m; m = m->next)
+fn find_module(p *Program, path *char) *Module  {
+  for (m *Module = p->modules; m; m = m->next)
     if (strcmp(m->path, path) == 0)
       return m;
   return null;
 }
 
 fn reset_module_finished(p* Program) {
-  for (m *Module.Module = p->modules; m; m = m->next)
+  for (m *Module = p->modules; m; m = m->next)
     m->finished = false;
 }
 
-fn add_module(p *Program, pathc *char) *Module.Module {
+fn add_module(p *Program, pathc *char) *Module {
   size int = strlen(pathc);
   path *char = p.copy_string(pathc, size);
   cname *char = p.copy_string(pathc, size + 1);
@@ -65,7 +65,7 @@ fn add_module(p *Program, pathc *char) *Module.Module {
       *c = '_';
   cname[size - 1] = '_';
   cname[size] = '\0';
-  m *Module.Module = p.alloc(sizeof(Module.Module)) as *Module.Module
+  m *Module = p.alloc(sizeof(Module)) as *Module
   m->path = path;
   m->c_name = cname;
   m->types = null;
@@ -82,7 +82,7 @@ fn new_variable(p *Program, l *State.State, next *Type.Variable) *Type.Variable 
 }
 
 
-fn add_type(p *Program, k Type.TypeKind, name *char, m *Module.Module) *Type.Type {
+fn add_type(p *Program, k Type.TypeKind, name *char, m *Module) *Type.Type {
   tt *Type.Type = m.find_type(name, &name[strlen(name)])
   if (tt != null && tt->kind != Type.TypeKind.PlaceHolder)
     ASSERT(false) // FATALX("Type '%s' allready defined!", name);
@@ -136,9 +136,9 @@ fn add_type(p *Program, k Type.TypeKind, name *char, m *Module.Module) *Type.Typ
   if (was_placeholder) {
     if (m->types->_type == tt)
       return tt;
-    for (tl *Module.TypeList = m->types; tl->next; tl = tl->next) {
+    for (tl *TypeList = m->types; tl->next; tl = tl->next) {
       if (tl->next->_type == tt) {
-        tlt *Module.TypeList  = tl->next;
+        tlt *TypeList  = tl->next;
         tl->next = tlt->next;
         tlt->next = m->types;
         m->types = tlt;
@@ -149,7 +149,7 @@ fn add_type(p *Program, k Type.TypeKind, name *char, m *Module.Module) *Type.Typ
     return tt;
   }
 
-  tl *Module.TypeList  = p.alloc(sizeof(Module.TypeList)) as *Module.TypeList
+  tl *TypeList  = p.alloc(sizeof(TypeList)) as *TypeList
   tl->_type = tt;
   tl->next = m->types;
   m->types = tl;
