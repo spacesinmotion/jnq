@@ -1,7 +1,7 @@
 
 use Statement
-use State
-use Module
+use State from State
+use Module from Module
 
 type TypeKind enum { ModuleT, StructT, UnionT, EnumT, UnionTypeT, ArrayT, PointerT, FnT, PlaceHolder }
 
@@ -10,7 +10,7 @@ type TypeSelect union {
   enumT *Enum
   unionT *UnionType
   fnT *Function
-  moduleT *Module.Module 
+  moduleT *Module 
 
   array_count int
 }
@@ -24,12 +24,12 @@ type Type struct {
 
 type Struct struct {
   member *Variable
-  module *Module.Module
+  module *Module
 }
 
 type Enum struct {
   entries *EnumEntry
-  module *Module.Module
+  module *Module
 }
 
 type EnumEntry struct {
@@ -41,7 +41,7 @@ type EnumEntry struct {
 
 type UnionType struct {
   member *UnionTypeEntry
-  module *Module.Module
+  module *Module
 }
 
 type UnionTypeEntry struct {
@@ -55,19 +55,19 @@ type Function struct {
   returnType *Type
   is_extern_c bool 
   body *Statement.Statement
-  module *Module.Module 
+  module *Module 
 }
 
 type Variable struct {
   name *char
   _type *Type
-  location State.State
+  location State
   next *Variable
 }
 
 fn equals(t1 *Type, t2 *Type) bool {
   // this should be globals
-  global Module.Module = Module.Module{"", "", null, true, null}
+  global Module = Module{"", "", null, true, null}
   Null Type = Type{"null_t", &Struct{null, &global}, TypeKind.StructT, null};
 
   if (!t1 && !t2)
@@ -85,7 +85,7 @@ fn equals(t1 *Type, t2 *Type) bool {
   return equals(t1->child, t2->child);
 }
 
-fn defined_module(t *Type) *Module.Module {
+fn defined_module(t *Type) *Module {
   switch (t.kind) {
   case TypeKind.StructT:
     return t.select.structT.module;

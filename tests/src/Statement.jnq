@@ -1,5 +1,5 @@
 
-use State
+use State from State
 use Type
 use Expression
 
@@ -37,7 +37,7 @@ type StatementSelect union {
 type Statement struct {
   select StatementSelect
   _type StatementType 
-  location State.State
+  location State
   next *Statement
 }
 
