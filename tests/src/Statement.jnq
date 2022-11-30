@@ -1,7 +1,7 @@
 
 use State from State
-use Type
-use Expression
+use Variable from Type
+use Expression from Expression
 
 type StatementType enum {
   ExpressionS,
@@ -42,16 +42,16 @@ type Statement struct {
 }
 
 type DeclarationStatement struct {
-  e *Expression.Expression
-  v *Type.Variable 
+  e *Expression
+  v *Variable 
 }
 
 type ExpressionStatement struct {
-  e *Expression.Expression
+  e *Expression
 }
 
 type ReturnStatement struct {
-  e *Expression.Expression
+  e *Expression
 }
 
 type BreakStatement struct {
@@ -61,7 +61,7 @@ type ContinueStatement struct {
 }
 
 type CaseStatement struct {
-  caseE *Expression.Expression
+  caseE *Expression
   body *Statement
 }
 
@@ -74,29 +74,29 @@ type ScopeStatement struct {
 }
 
 type IfStatement struct {
-  condition *Expression.Expression
+  condition *Expression
   ifbody *Statement
   elsebody *Statement
 }
 
 type ForStatement struct {
-  init *Expression.Expression
-  condition *Expression.Expression 
-  incr *Expression.Expression
+  init *Expression
+  condition *Expression 
+  incr *Expression
   body *Statement
 }
 
 type WhileStatement struct {
-  condition *Expression.Expression 
+  condition *Expression 
   body *Statement
 }
 
 type DoWhileStatement struct {
   body *Statement
-  condition *Expression.Expression 
+  condition *Expression 
 }
 
 type SwitchStatement struct {
   body *Statement
-  condition *Expression.Expression 
+  condition *Expression 
 }

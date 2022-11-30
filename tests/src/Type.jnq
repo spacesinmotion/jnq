@@ -1,5 +1,5 @@
 
-use Statement
+use Statement from Statement
 use State from State
 use Module from Module
 
@@ -54,7 +54,7 @@ type Function struct {
   parameter *Variable
   returnType *Type
   is_extern_c bool 
-  body *Statement.Statement
+  body *Statement
   module *Module 
 }
 
