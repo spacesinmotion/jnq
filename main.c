@@ -1021,7 +1021,7 @@ bool Program_parse_use_path(Program *p, Module *m, State *st) {
   Use *u = Program_add_type(p, UseT, n, m)->useT;
   u->module = use;
   for (int i = 0; i < imp_len; ++i) {
-    Type *stype = Module_find_type(use, imp[i].text, imp[i].text + imp[i].size);
+    Type *stype = Module_temp_type(p, use, imp[i].text, imp[i].text + imp[i].size);
     if (!stype)
       FATALX("Did not found type '%*.s' in '%s'", imp[i].size, imp[i].text, name);
     TypeList *tl = (TypeList *)Program_alloc(p, sizeof(TypeList));

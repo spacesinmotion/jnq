@@ -1,7 +1,13 @@
 #!/usr/bin/sh
 
 cd tests
+errors=()
 for t in `ls *.jnq`; do
-  ../jnq $t
+  if ! ../jnq $t; then
+    errors+=("FAILED $t")
+  fi
 done
+
+echo "FAILED: ${errors[*]}"
+
 cd - > /dev/null
