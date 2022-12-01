@@ -1,6 +1,7 @@
 
 use Module, TypeList from Module
 use * from Type
+use * from Statement
 use State from State
 
 cfn strncpy(d *char, s *char, l int) *char
@@ -81,7 +82,6 @@ fn new_variable(p *Program, l *State, next *Variable) *Variable {
   return v;
 }
 
-
 fn add_type(p *Program, k TypeKind, name *char, m *Module) *Type {
   tt *Type = m.find_type(name, &name[strlen(name)])
   if (tt != null && tt->kind != TypeKind.PlaceHolder)
@@ -154,4 +154,49 @@ fn add_type(p *Program, k TypeKind, name *char, m *Module) *Type {
   tl->next = m->types;
   m->types = tl;
   return tt;
+}
+
+fn new_Statement(p *Program , t StatementType , n *Statement)*Statement {
+  s *Statement = p.alloc(sizeof(Statement)) as *Statement;
+  s->_type = t;
+  switch (t) {
+  case StatementType.ExpressionS:
+    s->select.express = p.alloc(sizeof(ExpressionStatement)) as *ExpressionStatement
+    break;
+  case StatementType.Return:
+    s->select.ret = p.alloc(sizeof(ReturnStatement)) as *ReturnStatement
+    break;
+  case StatementType.Break:
+    s->select.brk = p.alloc(sizeof(BreakStatement)) as *BreakStatement
+    break;
+  case StatementType.Default:
+    s->select.defaultS = p.alloc(sizeof(DefaultStatement)) as *DefaultStatement
+    break;
+  case StatementType.Continue:
+    s->select.cont = p.alloc(sizeof(ContinueStatement)) as *ContinueStatement
+    break;
+  case StatementType.Case:
+    s->select.caseS = p.alloc(sizeof(CaseStatement)) as *CaseStatement
+    break;
+  case StatementType.Scope:
+    s->select.scope = p.alloc(sizeof(ScopeStatement)) as *ScopeStatement
+    break;
+  case StatementType.If:
+    s->select.ifS = p.alloc(sizeof(IfStatement)) as *IfStatement
+    break;
+  case StatementType.For:
+    s->select.forS = p.alloc(sizeof(ForStatement)) as *ForStatement
+    break;
+  case StatementType.While:
+    s->select.whileS = p.alloc(sizeof(WhileStatement)) as *WhileStatement
+    break;
+  case StatementType.DoWhile:
+    s->select.doWhileS = p.alloc(sizeof(DoWhileStatement)) as *DoWhileStatement
+    break;
+  case StatementType.Switch:
+    s->select.switchS = p.alloc(sizeof(SwitchStatement)) as *SwitchStatement
+    break;
+  }
+  s->next = n;
+  return s;
 }
