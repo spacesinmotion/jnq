@@ -17,7 +17,7 @@ type State struct {
   column int
 }
 
-fn new(c *char, file *char) State { 
+fn StartState(c *char, file *char) State { 
   return State{
     file: file, 
     c: c,

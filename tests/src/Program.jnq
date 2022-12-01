@@ -2,11 +2,14 @@
 use Module, TypeList from Module
 use * from Type
 use * from Statement
-use State from State
+use State, StartState from State
 
 cfn strncpy(d *char, s *char, l int) *char
+cfn strcpy(d *char, s *char) *char
+cfn strcat(d *char, s *char)
 cfn strcmp(a *char, b *char) int
 cfn strlen(a *char) int
+cfn free(a *char) int
 
 type MemoryArena struct {
   buffer *char
@@ -199,4 +202,46 @@ fn new_Statement(p *Program , t StatementType , n *Statement)*Statement {
   }
   s->next = n;
   return s;
+}
+
+fn parse_sub_file(p *Program, path *char, parent *Module) *Module {
+  tempPath [256]char
+  strcpy(tempPath, parent->path);
+  l int = strlen(tempPath) - 1;
+  while (l >= 0) {
+    if (tempPath[l] == '.') {
+      tempPath[l + 1] = '\0';
+      break;
+    }
+    --l;
+  }
+  strcat(tempPath, path);
+  mod *Module = p.parse_file(tempPath);
+  if (!mod)
+    mod = p.parse_file(path);
+  return mod;
+}
+
+fn parse_file(p *Program, path *char) *Module {
+  m *Module = p.find_module(path)
+  if (m)
+    return m;
+
+  tempPath [512]char
+  strcpy(tempPath, path);
+  for (t *char = &tempPath[0]; *t; ++t)
+    if (*t == '.')
+      *t = '/';
+  strcat(tempPath, ".jnq");
+  code *char //= readFile(tempPath);
+  if (!code)
+    return null;
+
+  st_path *char = p.copy_string(tempPath, strlen(tempPath));
+  st State = StartState(code, st_path);
+  m = p.add_module( path);
+  //p.parse_module(p, m, &st);
+
+  free(code);
+  return m;
 }
