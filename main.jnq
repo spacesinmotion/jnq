@@ -1,7 +1,5 @@
 
-use tests.src.Statement
 use Program, MemoryArena from tests.src.Program
-
 use Point from tests.sub.util
 
 fn main() int

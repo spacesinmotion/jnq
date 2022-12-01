@@ -406,6 +406,7 @@ typedef struct TypeList TypeList;
 typedef struct Use {
   TypeList *types;
   Module *module;
+  bool take_all;
 } Use;
 
 typedef enum TypeKind { UseT, StructT, UnionT, EnumT, UnionTypeT, ArrayT, PointerT, FnT, PlaceHolder } TypeKind;
@@ -524,6 +525,11 @@ void Program_reset_module_finished(Program *p) {
     m->finished = false;
 }
 
+bool Type_is_import_type(Type *t) {
+  return t->kind == StructT || t->kind == UnionTypeT || t->kind == UnionT || t->kind == FnT || t->kind == EnumT ||
+         t->kind == PlaceHolder;
+}
+
 Module global = (Module){"", "", NULL, true, NULL};
 Type Null = (Type){"null_t", .structT = &(Struct){NULL, &global}, StructT, NULL};
 Type Bool = (Type){"bool", .structT = &(Struct){NULL, &global}, StructT, NULL};
@@ -570,9 +576,16 @@ Type *Module_find_type(Module *m, const char *b, const char *e) {
     return &SizeOf;
 
   for (TypeList *tl = m->types; tl; tl = tl->next) {
-    if (tl->type->kind == UseT && tl->type->useT->types) {
+    if (tl->type->kind == UseT && tl->type->useT->take_all) {
+      for (TypeList *xtll = tl->type->useT->module->types; xtll; xtll = xtll->next) {
+        if (Type_is_import_type(xtll->type) && strlen(xtll->type->name) == (size_t)(e - b) &&
+            strncmp(xtll->type->name, b, e - b) == 0)
+          return xtll->type;
+      }
+    } else if (tl->type->kind == UseT && tl->type->useT->types) {
       for (TypeList *xtll = tl->type->useT->types; xtll; xtll = xtll->next) {
-        if (strlen(xtll->type->name) == (size_t)(e - b) && strncmp(xtll->type->name, b, e - b) == 0)
+        if (Type_is_import_type(xtll->type) && strlen(xtll->type->name) == (size_t)(e - b) &&
+            strncmp(xtll->type->name, b, e - b) == 0)
           return xtll->type;
       }
     } else if (strlen(tl->type->name) == (size_t)(e - b) && strncmp(tl->type->name, b, e - b) == 0) {
@@ -641,6 +654,7 @@ Type *Program_add_type(Program *p, TypeKind k, const char *name, Module *m) {
     tt->useT = (Use *)Program_alloc(p, sizeof(Use));
     tt->useT->types = NULL;
     tt->useT->module = NULL;
+    tt->useT->take_all = false;
     break;
   case StructT:
   case UnionT:
@@ -962,6 +976,7 @@ bool Program_parse_use_path(Program *p, Module *m, State *st) {
   int imp_len = 0;
 
   bool is_type_list = false;
+  bool take_all = false;
   const char *b = st->c;
   if (check_identifier(st)) {
     imp[imp_len++] = (StringView){b, st->c - b};
@@ -982,7 +997,11 @@ bool Program_parse_use_path(Program *p, Module *m, State *st) {
       }
       break;
     }
+  } else if (check_op(st, "*") && check_word(st, "from")) {
+    is_type_list = true;
+    take_all = true;
   }
+
   if (!is_type_list) {
     *st = old;
     imp_len = 0;
@@ -1020,15 +1039,17 @@ bool Program_parse_use_path(Program *p, Module *m, State *st) {
   const char *n = Program_copy_string(p, name, strlen(name));
   Use *u = Program_add_type(p, UseT, n, m)->useT;
   u->module = use;
-  for (int i = 0; i < imp_len; ++i) {
-    Type *stype = Module_temp_type(p, use, imp[i].text, imp[i].text + imp[i].size);
-    if (!stype)
-      FATALX("Did not found type '%*.s' in '%s'", imp[i].size, imp[i].text, name);
-    TypeList *tl = (TypeList *)Program_alloc(p, sizeof(TypeList));
-    tl->type = stype;
-    tl->next = u->types;
-    u->types = tl;
-  }
+  u->take_all = take_all;
+  if (!take_all)
+    for (int i = 0; i < imp_len; ++i) {
+      Type *stype = Module_temp_type(p, use, imp[i].text, imp[i].text + imp[i].size);
+      if (!stype)
+        FATALX("Did not found type '%*.s' in '%s'", imp[i].size, imp[i].text, name);
+      TypeList *tl = (TypeList *)Program_alloc(p, sizeof(TypeList));
+      tl->type = stype;
+      tl->next = u->types;
+      u->types = tl;
+    }
 
   return true;
 }
@@ -2893,7 +2914,21 @@ void c_Module_make_variables_typed(Program *p, Module *m) {
       c_Function_make_variables_typed(&stack, p, m, tl->type->fnT);
 }
 
+void c_check_types(Module *m) {
+  if (m->finished)
+    return;
+  m->finished = true;
+  for (TypeList *tl = m->types; tl; tl = tl->next) {
+    if (tl->type->kind == PlaceHolder)
+      FATALX("undefined type '%s' in module '%s'", tl->type->name, m->path);
+    else if (tl->type->kind == UseT)
+      c_check_types(tl->type->useT->module);
+  }
+}
+
 void c_Program(FILE *f, Program *p, Module *m) {
+  Program_reset_module_finished(p);
+  c_check_types(m);
 
   fputs("#include <ctype.h>\n", f);
   fputs("#include <stdarg.h>\n", f);

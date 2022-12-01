@@ -1,6 +1,6 @@
 
 use Module, TypeList from Module
-use Type
+use * from Type
 use State from State
 
 cfn strncpy(d *char, s *char, l int) *char
@@ -74,62 +74,62 @@ fn add_module(p *Program, pathc *char) *Module {
   return m;
 }
 
-fn new_variable(p *Program, l *State, next *Type.Variable) *Type.Variable {
-  v *Type.Variable = p.alloc(sizeof(Type.Variable)) as *Type.Variable
+fn new_variable(p *Program, l *State, next *Variable) *Variable {
+  v *Variable = p.alloc(sizeof(Variable)) as *Variable
   v->next = next;
   v->location = *l;
   return v;
 }
 
 
-fn add_type(p *Program, k Type.TypeKind, name *char, m *Module) *Type.Type {
-  tt *Type.Type = m.find_type(name, &name[strlen(name)])
-  if (tt != null && tt->kind != Type.TypeKind.PlaceHolder)
+fn add_type(p *Program, k TypeKind, name *char, m *Module) *Type {
+  tt *Type = m.find_type(name, &name[strlen(name)])
+  if (tt != null && tt->kind != TypeKind.PlaceHolder)
     ASSERT(false) // FATALX("Type '%s' allready defined!", name);
-  was_placeholder bool = tt != null && tt->kind == Type.TypeKind.PlaceHolder;
+  was_placeholder bool = tt != null && tt->kind == TypeKind.PlaceHolder;
   if (!tt)
-    tt = p.alloc(sizeof(Type.Type)) as *Type.Type;
+    tt = p.alloc(sizeof(Type)) as *Type;
 
   tt->name = name;
   tt->kind = k;
   switch (k) {
-  case Type.TypeKind.ModuleT:
+  case TypeKind.ModuleT:
     tt->select.moduleT = null;
 
-  case Type.TypeKind.StructT:
-    tt->select.structT = p.alloc(sizeof(Type.Struct)) as *Type.Struct
+  case TypeKind.StructT:
+    tt->select.structT = p.alloc(sizeof(Struct)) as *Struct
     tt->select.structT->member = null;
     tt->select.structT->module = m;
 
-  case Type.TypeKind.UnionT:
-    tt->select.structT = p.alloc(sizeof(Type.Struct)) as *Type.Struct
+  case TypeKind.UnionT:
+    tt->select.structT = p.alloc(sizeof(Struct)) as *Struct
     tt->select.structT->member = null;
     tt->select.structT->module = m;
 
-  case Type.TypeKind.EnumT:
-    tt->select.enumT = p.alloc(sizeof(Type.Enum)) as *Type.Enum
+  case TypeKind.EnumT:
+    tt->select.enumT = p.alloc(sizeof(Enum)) as *Enum
     tt->select.enumT->entries = null;
     tt->select.enumT->module = m;
 
-  case Type.TypeKind.UnionTypeT:
-    tt->select.unionT = p.alloc(sizeof(Type.UnionType)) as *Type.UnionType
+  case TypeKind.UnionTypeT:
+    tt->select.unionT = p.alloc(sizeof(UnionType)) as *UnionType
     tt->select.unionT->member = null;
     tt->select.unionT->module = m;
 
-  case Type.TypeKind.FnT:
-    tt->select.fnT = p.alloc(sizeof(Type.Function)) as *Type.Function
+  case TypeKind.FnT:
+    tt->select.fnT = p.alloc(sizeof(Function)) as *Function
     tt->select.fnT->body = null;
     tt->select.fnT->is_extern_c = false;
     tt->select.fnT->module = m;
 
-  case Type.TypeKind.PlaceHolder:
+  case TypeKind.PlaceHolder:
     break;
 
-  case Type.TypeKind.ArrayT:
+  case TypeKind.ArrayT:
     tt->select.array_count = 0;
     ASSERT(false) //FATALX("Only base types are implemented to add types");
 
-  case Type.TypeKind.PointerT:
+  case TypeKind.PointerT:
     ASSERT(false) //FATALX("Only base types are implemented to add types");
 
   }
