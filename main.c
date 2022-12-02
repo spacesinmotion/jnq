@@ -370,9 +370,9 @@ typedef struct Struct {
 
 typedef struct EnumEntry {
   const char *name;
+  EnumEntry *next;
   int value;
   bool valueSet;
-  EnumEntry *next;
 } EnumEntry;
 
 typedef struct Enum {
@@ -397,15 +397,16 @@ typedef struct Function {
   Variable *parameter;
   Type *returnType;
   Location return_type_location;
-  bool is_extern_c;
   Statement *body;
   Module *module;
+  bool is_extern_c;
 } Function;
 
 typedef struct TypeList TypeList;
 typedef struct Use {
-  TypeList *types;
   Module *module;
+  Type **type;
+  int type_len;
   bool take_all;
 } Use;
 
@@ -545,14 +546,14 @@ Function print =
     (Function){&(Variable){null_location, "...", &Ellipsis, &(Variable){null_location, "format", &String, NULL}},
                NULL,
                null_location,
-               true,
                NULL,
-               &global};
+               &global,
+               true};
 Type Printf = (Type){"printf", .fnT = &print, FnT, NULL};
-Function assert = (Function){&(Variable){null_location, "cond", &Bool, NULL}, NULL, null_location, true, NULL, &global};
+Function assert = (Function){&(Variable){null_location, "cond", &Bool, NULL}, NULL, null_location, NULL, &global, true};
 Type Assert = (Type){"ASSERT", .fnT = &assert, FnT, NULL};
 Function SizeOfFn =
-    (Function){&(Variable){null_location, "sizeof", &Int, NULL}, &Int, null_location, true, NULL, &global};
+    (Function){&(Variable){null_location, "sizeof", &Int, NULL}, &Int, null_location, NULL, &global, true};
 Type SizeOf = (Type){"sizeof", .fnT = &SizeOfFn, FnT, NULL};
 
 Type *Module_find_type(Module *m, const char *b, const char *e) {
@@ -582,11 +583,11 @@ Type *Module_find_type(Module *m, const char *b, const char *e) {
             strncmp(xtll->type->name, b, e - b) == 0)
           return xtll->type;
       }
-    } else if (tl->type->kind == UseT && tl->type->useT->types) {
-      for (TypeList *xtll = tl->type->useT->types; xtll; xtll = xtll->next) {
-        if (Type_is_import_type(xtll->type) && strlen(xtll->type->name) == (size_t)(e - b) &&
-            strncmp(xtll->type->name, b, e - b) == 0)
-          return xtll->type;
+    } else if (tl->type->kind == UseT && tl->type->useT->type_len > 0) {
+      Type **xt = tl->type->useT->type;
+      for (int i = 0; i < tl->type->useT->type_len; ++i) {
+        if (Type_is_import_type(xt[i]) && strlen(xt[i]->name) == (size_t)(e - b) && strncmp(xt[i]->name, b, e - b) == 0)
+          return xt[i];
       }
     } else if (strlen(tl->type->name) == (size_t)(e - b) && strncmp(tl->type->name, b, e - b) == 0) {
       return tl->type;
@@ -652,7 +653,8 @@ Type *Program_add_type(Program *p, TypeKind k, const char *name, Module *m) {
   switch (k) {
   case UseT:
     tt->useT = (Use *)Program_alloc(p, sizeof(Use));
-    tt->useT->types = NULL;
+    tt->useT->type = NULL;
+    tt->useT->type_len = 0;
     tt->useT->module = NULL;
     tt->useT->take_all = false;
     break;
@@ -1040,16 +1042,15 @@ bool Program_parse_use_path(Program *p, Module *m, State *st) {
   Use *u = Program_add_type(p, UseT, n, m)->useT;
   u->module = use;
   u->take_all = take_all;
-  if (!take_all)
+  if (!take_all) {
+    u->type_len = imp_len;
+    u->type = Program_alloc(p, imp_len * sizeof(Type *));
     for (int i = 0; i < imp_len; ++i) {
-      Type *stype = Module_temp_type(p, use, imp[i].text, imp[i].text + imp[i].size);
-      if (!stype)
+      u->type[i] = Module_temp_type(p, use, imp[i].text, imp[i].text + imp[i].size);
+      if (!u->type[i])
         FATALX("Did not found type '%*.s' in '%s'", imp[i].size, imp[i].text, name);
-      TypeList *tl = (TypeList *)Program_alloc(p, sizeof(TypeList));
-      tl->type = stype;
-      tl->next = u->types;
-      u->types = tl;
     }
+  }
 
   return true;
 }
