@@ -198,8 +198,12 @@ typedef struct Variable {
   Location location;
   const char *name;
   Type *type;
-  Variable *next;
 } Variable;
+
+typedef struct VariableList {
+  Variable *v;
+  int len;
+} VariableList;
 
 typedef struct Parameter {
   Expression *p;
@@ -367,7 +371,7 @@ typedef struct SwitchStatement {
 } SwitchStatement;
 
 typedef struct Struct {
-  Variable *member;
+  VariableList member;
   Module *module;
 } Struct;
 
@@ -397,7 +401,7 @@ typedef struct Union {
 } Union;
 
 typedef struct Function {
-  Variable *parameter;
+  VariableList parameter;
   Type *returnType;
   Location return_type_location;
   Statement *body;
@@ -535,28 +539,25 @@ bool Type_is_import_type(Type *t) {
 }
 
 Module global = (Module){"", "", NULL, true, NULL};
-Type Null = (Type){"null_t", .structT = &(Struct){NULL, &global}, StructT, NULL};
-Type Bool = (Type){"bool", .structT = &(Struct){NULL, &global}, StructT, NULL};
-Type Char = (Type){"char", .structT = &(Struct){NULL, &global}, StructT, NULL};
-Type Int = (Type){"int", .structT = &(Struct){NULL, &global}, StructT, NULL};
-Type Float = (Type){"float", .structT = &(Struct){NULL, &global}, StructT, NULL};
-Type Double = (Type){"double", .structT = &(Struct){NULL, &global}, StructT, NULL};
-Type String = (Type){"string", .structT = &(Struct){NULL, &global}, StructT, NULL};
+Type Null = (Type){"null_t", .structT = &(Struct){{}, &global}, StructT, NULL};
+Type Bool = (Type){"bool", .structT = &(Struct){{}, &global}, StructT, NULL};
+Type Char = (Type){"char", .structT = &(Struct){{}, &global}, StructT, NULL};
+Type Int = (Type){"int", .structT = &(Struct){{}, &global}, StructT, NULL};
+Type Float = (Type){"float", .structT = &(Struct){{}, &global}, StructT, NULL};
+Type Double = (Type){"double", .structT = &(Struct){{}, &global}, StructT, NULL};
+Type String = (Type){"string", .structT = &(Struct){{}, &global}, StructT, NULL};
 
-Type Ellipsis = (Type){"...", .structT = &(Struct){NULL, &global}, StructT, NULL};
+Type Ellipsis = (Type){"...", .structT = &(Struct){{}, &global}, StructT, NULL};
 
-Function print =
-    (Function){&(Variable){null_location, "...", &Ellipsis, &(Variable){null_location, "format", &String, NULL}},
-               NULL,
-               null_location,
-               NULL,
-               &global,
-               true};
+Variable print_param[] = {{null_location, "format", &String}, {null_location, "...", &Ellipsis}};
+Function print = (Function){(VariableList){print_param, 2}, NULL, null_location, NULL, &global, true};
+
 Type Printf = (Type){"printf", .fnT = &print, FnT, NULL};
-Function assert = (Function){&(Variable){null_location, "cond", &Bool, NULL}, NULL, null_location, NULL, &global, true};
+Function assert =
+    (Function){(VariableList){&(Variable){null_location, "cond", &Bool}, 1}, NULL, null_location, NULL, &global, true};
 Type Assert = (Type){"ASSERT", .fnT = &assert, FnT, NULL};
 Function SizeOfFn =
-    (Function){&(Variable){null_location, "sizeof", &Int, NULL}, &Int, null_location, NULL, &global, true};
+    (Function){(VariableList){&(Variable){null_location, "sizeof", &Int}, 1}, &Int, null_location, NULL, &global, true};
 Type SizeOf = (Type){"sizeof", .fnT = &SizeOfFn, FnT, NULL};
 
 Type *Module_find_type(Module *m, const char *b, const char *e) {
@@ -664,7 +665,7 @@ Type *Program_add_type(Program *p, TypeKind k, const char *name, Module *m) {
   case StructT:
   case UnionT:
     tt->structT = (Struct *)Program_alloc(p, sizeof(Struct));
-    tt->structT->member = NULL;
+    tt->structT->member = (VariableList){NULL, 0};
     tt->structT->module = m;
     break;
   case EnumT:
@@ -713,13 +714,6 @@ Type *Program_add_type(Program *p, TypeKind k, const char *name, Module *m) {
   tl->next = m->types;
   m->types = tl;
   return tt;
-}
-
-Variable *Program_new_variable(Program *p, State *l, Variable *next) {
-  Variable *v = (Variable *)Program_alloc(p, sizeof(Variable));
-  v->next = next;
-  v->location = l->location;
-  return v;
 }
 
 Statement *Program_new_Statement(Program *p, StatementType t, Statement *n) {
@@ -1138,7 +1132,7 @@ Type *Program_parse_declared_type(Program *p, Module *m, State *st) {
   return NULL;
 }
 
-Variable *Program_parse_variable_declaration(Program *p, Module *m, State *st, Variable *next) {
+Variable Program_parse_variable_declaration(Program *p, Module *m, State *st) {
   skip_whitespace(st);
   State old = *st;
   Type *type = NULL;
@@ -1147,31 +1141,38 @@ Variable *Program_parse_variable_declaration(Program *p, Module *m, State *st, V
     skip_whitespace(st);
     if (!check_whitespace_for_nl(st)) {
       if ((type = Program_parse_declared_type(p, m, st))) {
-        Variable *top = Program_new_variable(p, &old, next);
-        top->name = Program_copy_string(p, old.c, name_end - old.c);
-        top->type = type;
-        return top;
+        return (Variable){old.location, Program_copy_string(p, old.c, name_end - old.c), type};
       }
     }
     *st = old;
   }
-  return NULL;
+  return (Variable){old.location, NULL, NULL};
 }
 
-Variable *Program_parse_variable_declaration_list(Program *p, Module *m, State *st, const char *end) {
+VariableList Program_parse_variable_declaration_list(Program *p, Module *m, State *st, const char *end) {
   skip_whitespace(st);
-  Variable *top = NULL;
+
+  Variable v[32];
+  int v_len = 0;
+
   while (*st->c) {
-    if (check_op(st, end))
-      return top;
-    Variable *tn = Program_parse_variable_declaration(p, m, st, top);
-    if (!tn)
+    if (check_op(st, end)) {
+      VariableList vl = {Program_alloc(p, v_len * sizeof(Variable)), v_len};
+      for (int i = 0; i < v_len; ++i)
+        vl.v[i] = v[i];
+      return vl;
+    }
+
+    if (v_len >= 32)
+      FATALX("Out of internal memory for variable list!");
+    v[v_len] = Program_parse_variable_declaration(p, m, st);
+    if (!v[v_len].name)
       FATAL(&st->location, "missing variable name");
-    top = tn;
+    v_len++;
     check_op(st, ",");
   }
   FATAL(&st->location, "Missing closing '%s'", end);
-  return NULL;
+  return (VariableList){NULL, 0};
 }
 
 EnumEntry *Program_parse_enum_entry_list(Program *p, State *st) {
@@ -1493,7 +1494,7 @@ Expression *Program_parse_unary_operand(Program *p, Module *m, State *st) {
   }
 
   Expression *e = NULL;
-  Variable *temp_v = NULL;
+  Variable temp_v;
   if (check_op(st, "(")) {
     e = Program_new_Expression(p, BraceE, back(st, 1));
     e->brace->o = Program_parse_expression(p, m, st);
@@ -1503,10 +1504,11 @@ Expression *Program_parse_unary_operand(Program *p, Module *m, State *st) {
       FATAL(&st->location, "missing closing ')'");
   } else if ((e = Program_parse_construction(p, m, st))) {
     ;
-  } else if ((temp_v = Program_parse_variable_declaration(p, m, st, NULL))) {
+  } else if ((temp_v = Program_parse_variable_declaration(p, m, st)).name) {
     e = (Expression *)Program_alloc(p, sizeof(Expression));
     e->type = VarE;
-    e->var = temp_v;
+    e->var = Program_alloc(p, sizeof(Variable));
+    *e->var = temp_v;
   } else
     e = Program_parse_atom(p, st);
 
@@ -1894,27 +1896,24 @@ void c_enum(FILE *f, const char *module_name, const char *name, EnumEntry *entri
   fprintf(f, "\n} %s%s;\n\n", module_name, name);
 }
 
-void c_var_list(FILE *f, Variable *v, const char *br) {
-  if (!v)
-    return;
-
-  c_var_list(f, v->next, br);
-  if (v->next)
-    fprintf(f, "%s", br);
-
-  if (!c_type_declare(f, v->type, &v->location, v->name))
-    fprintf(f, " %s", v->name);
+void c_var_list(FILE *f, VariableList *v, const char *br) {
+  for (int i = 0; i < v->len; ++i) {
+    if (i > 0)
+      fprintf(f, "%s", br);
+    if (!c_type_declare(f, v->v[i].type, &v->v[i].location, v->v[i].name))
+      fprintf(f, " %s", v->v[i].name);
+  }
 }
 
-void c_struct(FILE *f, const char *module_name, const char *name, bool is_union, Variable *member) {
+void c_struct(FILE *f, const char *module_name, const char *name, bool is_union, VariableList *vl) {
   fprintf(f, "typedef %s %s%s", (is_union ? "union" : "struct"), module_name, name);
-  if (!member) {
+  if (vl->len == 0) {
     fprintf(f, " {} %s%s;\n\n", module_name, name);
     return;
   }
 
   fprintf(f, " {\n  ");
-  c_var_list(f, member, ";\n  ");
+  c_var_list(f, vl, ";\n  ");
   fprintf(f, "");
   fprintf(f, ";\n} %s%s;\n\n", module_name, name);
 }
@@ -1985,7 +1984,7 @@ void c_type(FILE *f, const char *module_name, TypeList *t) {
     break;
   case UnionT:
   case StructT:
-    c_struct(f, module_name, t->type->name, t->type->kind == UnionT, t->type->structT->member);
+    c_struct(f, module_name, t->type->name, t->type->kind == UnionT, &t->type->structT->member);
     break;
   case EnumT:
     break;
@@ -2168,11 +2167,9 @@ void c_parameter(FILE *f, ParameterList *pl) {
 }
 
 void c_member_access_fn(FILE *f, Expression *e) {
-  if (!e->member->member->type->fnT->parameter)
+  if (e->member->member->type->fnT->parameter.len == 0)
     FATAL(&e->location, "internal error creating member function call!");
-  Variable *first = e->member->member->type->fnT->parameter;
-  while (first->next)
-    first = first->next;
+  Variable *first = &e->member->member->type->fnT->parameter.v[0];
   const char *prefix = "";
   if (e->member->pointer && first->type->kind != PointerT)
     prefix = "*";
@@ -2220,7 +2217,7 @@ void c_expression(FILE *f, Expression *e) {
     fprintf(f, "%s", e->id->name);
     break;
   case VarE:
-    c_var_list(f, e->var, ";");
+    c_var_list(f, &(VariableList){e->var, 1}, ";");
     break;
   case BraceE:
     fprintf(f, "(");
@@ -2309,7 +2306,7 @@ void c_expression(FILE *f, Expression *e) {
         fprintf(f, "%s(", e->member->member->name);
         break;
       }
-      if (!e->member->member->type->fnT->parameter)
+      if (e->member->member->type->fnT->parameter.len == 0)
         FATAL(&e->location, "internal error creating member function call!");
       c_member_access_fn(f, e);
       break;
@@ -2461,8 +2458,8 @@ void c_fn(FILE *f, const char *module_name, TypeList *tl) {
   } else
     fprintf(f, "void");
   fprintf(f, " %s%s(", module_name, tl->type->name);
-  if (fn->parameter)
-    c_var_list(f, fn->parameter, ", ");
+  if (fn->parameter.len > 0)
+    c_var_list(f, &fn->parameter, ", ");
   else
     fprintf(f, "void");
   if (!fn->body)
@@ -2560,8 +2557,8 @@ void c_fn_forward(FILE *f, const char *module_name, TypeList *tl) {
   } else
     fprintf(f, "void");
   fprintf(f, " %s%s(", module_name, tl->type->name);
-  if (fn->parameter)
-    c_var_list(f, fn->parameter, ", ");
+  if (fn->parameter.len > 0)
+    c_var_list(f, &fn->parameter, ", ");
   else
     fprintf(f, "void");
   fprintf(f, ");\n");
@@ -2608,13 +2605,10 @@ bool is_member_fn_for(Type *ot, Type *ft, Identifier *member) {
   if (ft->kind != FnT)
     return false;
   Function *f = ft->fnT;
-  if (!f->parameter || strcmp(ft->name, member->name) != 0)
+  if (f->parameter.len == 0 || strcmp(ft->name, member->name) != 0)
     return false;
 
-  Variable *first = f->parameter;
-  while (first->next)
-    first = first->next;
-
+  Variable *first = &f->parameter.v[0];
   if (TypeDeclare_equal(first->type, ot))
     return true;
 
@@ -2628,7 +2622,7 @@ Type *Module_find_member(Type *t, Identifier *member) {
   switch (t->kind) {
   case UnionT:
   case StructT: {
-    for (Variable *v = t->structT->member; v; v = v->next)
+    for (Variable *v = t->structT->member.v; v < t->structT->member.v + t->structT->member.len; ++v)
       if (strcmp(v->name, member->name) == 0) {
         return v->type;
       }
@@ -2707,20 +2701,20 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
       c_Expression_make_variables_typed(s, p, m, e->call->p.p[i].p);
 
     Parameter *pa = e->call->p.len > 0 ? e->call->p.p : NULL;
-    Variable *va = t->fnT->parameter;
+    Variable *va = t->fnT->parameter.len > 0 ? t->fnT->parameter.v : NULL;
     while (pa && va) {
       pa = ((pa + 1) < (e->call->p.p + e->call->p.len)) ? (pa + 1) : NULL;
-      va = va->next;
+      va = ((va + 1) < (t->fnT->parameter.v + t->fnT->parameter.len)) ? (va + 1) : NULL;
     }
     if (va && !pa && e->call->o->type == MemberAccessE) {
       if (!e->call->o->member->o_type)
         FATAL(&e->call->o->location, "Missing type on member access");
-      va = va->next;
+      va = ((va + 1) < (t->fnT->parameter.v + t->fnT->parameter.len)) ? (va + 1) : NULL;
       // compare pa->type with e->call->o->member->o_type
     }
-    if (pa && (!t->fnT->parameter || t->fnT->parameter->type != &Ellipsis))
+    if (pa && (t->fnT->parameter.len == 0 || t->fnT->parameter.v[t->fnT->parameter.len - 1].type != &Ellipsis))
       FATAL(&e->location, "To much parameter for function call");
-    if (va && (!t->fnT->parameter || t->fnT->parameter->type != &Ellipsis))
+    if (va && (t->fnT->parameter.len == 0 || t->fnT->parameter.v[t->fnT->parameter.len - 1].type != &Ellipsis))
       FATAL(&e->location, "Missing parameter for function call");
     return t->fnT->returnType;
   }
@@ -2912,7 +2906,7 @@ void c_Statement_make_variables_typed(VariableStack *s, Program *p, Module *m, S
 
 void c_Function_make_variables_typed(VariableStack *s, Program *p, Module *m, Function *f) {
   int size = s->stackSize;
-  for (Variable *p = f->parameter; p; p = p->next)
+  for (Variable *p = f->parameter.v; p < f->parameter.v + f->parameter.len; ++p)
     VariableStack_push(s, p->name, p->type);
 
   c_Statement_make_variables_typed(s, p, m, f->body);
