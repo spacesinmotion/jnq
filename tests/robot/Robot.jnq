@@ -1,0 +1,222 @@
+
+cfn system(c *char)
+cfn scanf(c *char, x *char)
+cfn rand() int
+cfn srand(s int)
+
+type Robot struct {
+  x int
+  y int
+  dir int
+  coins int
+  alive bool
+}
+
+type Field enum { EmptyC, CoinC, WallC, RobotC }
+
+fn as_char(g *Game, f Field) char {
+  switch(f) {
+    case Field.EmptyC: return ' ' 
+    case Field.CoinC: return 'c' 
+    case Field.WallC: return 'W' 
+    case Field.RobotC: 
+      if (g.robi.dir == 0)
+        return '>'
+      else if (g.robi.dir == 1)
+        return '.'
+      else if (g.robi.dir == 2)
+        return '<'
+      else if (g.robi.dir == 3)
+        return '\''
+      else 
+        return 'X'
+
+    default: return ':' 
+  }
+}
+
+type Game struct {
+  fields [6][6]Field
+  robi Robot
+}
+
+fn clear_field(g *Game) {
+  for (i int = 0; i<6; ++i)
+    for (j int = 0; j<6; ++j)
+      g.fields[i][j] = Field.EmptyC
+}
+
+//  -----------------------
+// | > |   |   |   |   |   |
+//  -----------------------
+// |   | c |   |   | c |   |
+//  -----------------------
+// |   | W | c |   |   |   |
+//  -----------------------
+// |   | W |   | W |   |   |
+//  -----------------------
+// | W |   |   |   | W |   |
+//  -----------------------
+// | c | c | c |   | W |   |
+//  -----------------------
+
+// Welt01
+//  -----------------------
+// | > |   |   |   | c | W |
+//  -----------------------
+// | c |   |   |   | c |   |
+//  -----------------------
+// |   | W | W |   | c |   |
+//  -----------------------
+// |   |   | W | W |   |   |
+//  -----------------------
+// |   |   |   |   | c |   |
+//  -----------------------
+// | W | c |   |   |   |   |
+//  -----------------------
+
+fn rand_field(g *Game) {
+  g.fields[0][0] = Field.RobotC
+  c int = 0
+  w int = 0
+  while (c < 6 || w < 6) {
+    if (c < 6) {
+      x int = rand() % 6
+      y int = rand() % 6
+      if (g.fields[x][y] == Field.EmptyC)
+      {
+        g.fields[x][y] = Field.CoinC
+        c++
+      }
+    }
+    if (w < 6) {
+      x int = rand() % 6
+      y int = rand() % 6
+      if (g.fields[x][y] == Field.EmptyC)
+      {
+        g.fields[x][y] = Field.WallC
+        w++
+      }
+    }
+  }
+}
+
+
+fn print_field(g *Game, prog *char, pos int) {
+  for (i int = 0; i<6; ++i) {
+    printf(" -----------------------\n")
+    for (j int = 0; j<6; ++j)
+      printf("| %c ", as_char(g, g.fields[i][j]))
+    printf("|\n")
+  }
+  printf(" -----------------------\n")
+  printf("> %s\n  ", prog)
+  printf("%*.s^\n", pos, "                                               ")
+}
+
+fn dreh_links(g *Game) {
+  g->robi.dir = (g->robi.dir + 3) % 4
+} 
+
+fn dreh_rechts(g *Game) {
+  g->robi.dir = (g->robi.dir + 1) % 4
+} 
+
+fn beweg_dich(g *Game) bool {
+  x int = g.robi.x
+  y int = g.robi.y
+  if (g.robi.dir == 0)
+    y++
+  else if (g.robi.dir == 1)
+    x++
+  else if (g.robi.dir == 2)
+    y--
+  else if (g.robi.dir == 3)
+    x--
+  
+  if (x<0 || y<0 || x>=6 || y>=6)
+    return false
+  
+  if (g.fields[x][y] == Field.CoinC)
+    g.robi.coins++
+  if (g.fields[x][y] == Field.WallC)
+    return true
+  
+  g.fields[g.robi.x][g.robi.y] = Field.EmptyC
+  g.fields[x][y] = Field.RobotC
+  g.robi.x = x
+  g.robi.y = y
+  return true
+} 
+
+fn start(g *Game, prog *char) {
+  all *char = prog
+  pos int = 0
+
+  ok bool = true
+  while (ok && prog[0] != '\0')
+  {
+    system("clear")
+    g.print_field(all, pos++)
+    //c char;
+    //scanf("%c", &c);
+    //if (c == 'q') {
+    //  printf("ENDE!\n")
+    //  return
+    //}
+
+    if (prog[0] == 'R' || prog[0] == 'r')
+      g.dreh_rechts()
+    else if (prog[0] == 'L' || prog[0] == 'l')
+      g.dreh_links()
+    else if (prog[0] == 'B' || prog[0] == 'b')
+      ok = g.beweg_dich()
+
+    prog = &prog[1]
+  }
+
+  if (!ok) {
+    system("clear")
+    printf("Du bist runtergefallen!\n");
+    printf("Du hast %d!\nVERLOREN\n", g.robi.coins);
+    return
+  }
+  if (g.robi.coins == 6) {
+    system("clear")
+    printf("Du hast alle Rubine eingesammelt!\nGEWONNEN\n");
+    return
+  }
+
+  system("clear")
+  printf("Du hast %d Rubine eingesammelt!\nEs fehlen dir %d!\nNA JA\n", g.robi.coins, 6-g.robi.coins);
+}
+
+fn as_number(c *char) int {
+  n int = 0
+  x int = 0
+  while(c[0] != '\0') {
+    if (x % 3 == 0)
+      n += c[0] as int
+    else if (x % 3 == 1)
+      n *= c[0] as int
+    else if (x % 3 == 2)
+      n %= c[0] as int
+    ++n
+    c = &c[1]
+  }
+  return n
+}
+
+fn new_Game(name *char) Game {
+  game Game
+  game.clear_field()
+  srand(as_number(name))
+  game.rand_field()
+
+  game.robi = Robot{0, 0, 0, 0, true};
+  return game
+}
+
+
+
+

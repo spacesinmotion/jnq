@@ -1,0 +1,12 @@
+
+use Game, new_Game from robot.Robot
+
+fn main() int
+{
+  printf("robot_test\n")
+
+  g Game = new_Game("Welt01")
+  g.start("RBBBBLBRBLBBBLBBBBB")
+
+  printf(" ...ok\n")
+}
