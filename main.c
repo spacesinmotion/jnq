@@ -1382,18 +1382,16 @@ Expression *Program_parse_construction(Program *p, Module *m, State *st) {
 
   if (Program_parse_check_declared_type(p, st) && check_op(st, "{")) {
     *st = old;
-    Type *type = NULL;
-    if ((type = Program_parse_declared_type(p, m, st))) {
-      if (check_op(st, "{")) {
-        Expression *construct = Program_new_Expression(p, ConstructE, old.location);
-        construct->construct->p = Program_parse_named_parameter_list(p, m, st);
-        if (!construct->construct->p)
-          construct->construct->p = Program_parse_parameter_list(p, m, st);
-        if (!check_op(st, "}"))
-          FATAL(&st->location, "unfinished constructor call, missing '}'");
-        construct->construct->type = type;
-        return construct;
-      }
+    Type *type = Program_parse_declared_type(p, m, st);
+    if (type && check_op(st, "{")) {
+      Expression *construct = Program_new_Expression(p, ConstructE, old.location);
+      construct->construct->p = Program_parse_named_parameter_list(p, m, st);
+      if (!construct->construct->p)
+        construct->construct->p = Program_parse_parameter_list(p, m, st);
+      if (!check_op(st, "}"))
+        FATAL(&st->location, "unfinished constructor call, missing '}'");
+      construct->construct->type = type;
+      return construct;
     }
   }
 
