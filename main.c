@@ -938,13 +938,6 @@ bool read_float(State *st, double *f) {
   return true;
 }
 
-const char *read_identifier(Program *p, State *st) {
-  State old = *st;
-  if (check_identifier(st))
-    return Program_copy_string(p, old.c, st->c - old.c);
-  return NULL;
-}
-
 Module *Program_parse_file(Program *p, const char *path);
 
 Module *Program_parse_sub_file(Program *p, const char *path, Module *parent) {
@@ -1185,8 +1178,11 @@ EnumEntry *Program_parse_enum_entry_list(Program *p, State *st) {
     if (check_op(st, "}"))
       return top;
 
+    skip_whitespace(st);
+    State old = *st;
     EnumEntry *e = (EnumEntry *)Program_alloc(p, sizeof(EnumEntry));
-    if ((e->name = read_identifier(p, st))) {
+    if (check_identifier(st)) {
+      e->name = Program_copy_string(p, old.c, st->c - old.c);
       e->valueSet = false;
       if (check_op(st, "=")) {
         e->valueSet = true;
@@ -1228,9 +1224,10 @@ UnionTypeEntry *Program_parse_union_entry_list(Program *p, Module *m, State *st)
 }
 void Program_parse_type(Program *p, Module *m, State *st) {
   skip_whitespace(st);
+  State old = *st;
 
-  const char *name = NULL;
-  if ((name = read_identifier(p, st))) {
+  if (check_identifier(st)) {
+    const char *name = Program_copy_string(p, old.c, st->c - old.c);
     bool is_union = check_word(st, "union");
     if ((is_union || check_word(st, "struct")) && check_op(st, "{")) {
       Struct *s = Program_add_type(p, is_union ? UnionT : StructT, name, m)->structT;
@@ -1412,9 +1409,11 @@ Expression *Program_parse_suffix_expression(Program *p, Module *m, State *st, Ex
 
   bool pointer = check_op(st, "->");
   if (pointer || check_op(st, ".")) {
-    const char *member = read_identifier(p, st);
-    if (!member)
+    skip_whitespace(st);
+    const char *b = st->c;
+    if (!check_identifier(st))
       FATAL(&st->location, "missing id for member access");
+    const char *member = Program_copy_string(p, b, st->c - b);
     Expression *ma = Program_new_Expression(p, MemberAccessE, old.location);
     ma->member->o = e;
     ma->member->o_type = NULL;
@@ -1731,8 +1730,9 @@ Statement *Program_parse_scope_block(Program *p, Module *m, State *st) {
 void Program_parse_fn(Program *p, Module *m, State *st, bool extc) {
   skip_whitespace(st);
 
-  const char *name = read_identifier(p, st);
-  if (name) {
+  const char *b = st->c;
+  if (check_identifier(st)) {
+    const char *name = Program_copy_string(p, b, st->c - b);
     Function *fn = Program_add_type(p, FnT, name, m)->fnT;
     if (check_op(st, "(")) {
       fn->parameter = Program_parse_variable_declaration_list(p, m, st, ")");
