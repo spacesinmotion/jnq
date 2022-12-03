@@ -5,6 +5,18 @@ type Days enum {
   Mon, Tue, Wed, Thu = 4, Fri, Sat = -4, Sun
 }
 
+fn tostring(d Days) *char {
+  switch(d) {
+    case Days.Mon: return "Mon"
+    case Days.Tue: return "Tue"
+    case Days.Wed: return "Wed"
+    case Days.Thu: return "Thu"
+    case Days.Fri: return "Fri"
+    case Days.Sat: return "Sat"
+    case Days.Sun: return "Sun"
+  }
+}
+
 fn main() int {
   printf("enums\n")
 
@@ -19,4 +31,5 @@ fn main() int {
   ASSERT(n == util.Nix.Nicer)
 
   printf(" ..ok\n")
+  return 0
 }

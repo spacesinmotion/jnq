@@ -23,4 +23,5 @@ fn main() int {
   ASSERT(b == 21 * 3)
 
   printf(" ...ok\n")
+  return 0
 }

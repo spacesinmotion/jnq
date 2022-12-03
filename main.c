@@ -2434,10 +2434,7 @@ void c_fn(FILE *f, const char *module_name, TypeList *tl) {
       FATALX("array return type not supported -> c backend!");
   } else
     fprintf(f, "void");
-  if (strcmp(tl->type->name, "main") == 0)
-    fprintf(f, " %s(", tl->type->name);
-  else
-    fprintf(f, " %s%s(", module_name, tl->type->name);
+  fprintf(f, " %s%s(", module_name, tl->type->name);
   if (fn->parameter)
     c_var_list(f, fn->parameter, ", ");
   else
@@ -2536,10 +2533,7 @@ void c_fn_forward(FILE *f, const char *module_name, TypeList *tl) {
       FATALX("array return type not supported -> c backend!");
   } else
     fprintf(f, "void");
-  if (strcmp(tl->type->name, "main") == 0)
-    fprintf(f, " %s(", tl->type->name);
-  else
-    fprintf(f, " %s%s(", module_name, tl->type->name);
+  fprintf(f, " %s%s(", module_name, tl->type->name);
   if (fn->parameter)
     c_var_list(f, fn->parameter, ", ");
   else
@@ -2963,6 +2957,11 @@ void c_Program(FILE *f, Program *p, Module *m) {
 
   Program_reset_module_finished(p);
   c_Module_fn(f, m);
+
+  fputs("\n", f);
+  fputs("int main() {\n", f);
+  fprintf(f, "  return %smain();\n", m->c_name);
+  fputs("}\n", f);
 }
 
 int main(int argc, char *argv[]) {

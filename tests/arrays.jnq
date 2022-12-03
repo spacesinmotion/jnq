@@ -69,4 +69,5 @@ fn main() int {
   matrix_test()
   
   printf(" ...ok\n")
+  return 0
 }

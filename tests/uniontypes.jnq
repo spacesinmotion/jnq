@@ -23,4 +23,5 @@ fn main() int {
   n VecU = VecU{util.Nix.Nice}
 
   printf(" ...ok\n")
+  return 0
 }

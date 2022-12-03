@@ -26,4 +26,5 @@ fn main() int {
   ASSERT(5 == util.strlen("hallo"))
 
   printf(" ...ok\n")
+  return 0
 }
