@@ -1,4 +1,6 @@
 
+cfn strcmp(a *char, b *char) int
+
 use sub.util
 
 type Days enum {
@@ -29,6 +31,9 @@ fn main() int {
   n util.Nix = util.Nix.Nicer
   ASSERT(n != util.Nix.Nice)
   ASSERT(n == util.Nix.Nicer)
+
+  ASSERT(strcmp("Tue", e.tostring()) == 0)
+  ASSERT(strcmp("Fri", Days.Fri.tostring()) == 0)
 
   printf(" ..ok\n")
   return 0

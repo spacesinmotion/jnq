@@ -2149,6 +2149,24 @@ void c_parameter(FILE *f, Parameter *param) {
   c_expression(f, param->p);
 }
 
+void c_member_access_fn(FILE *f, Expression *e) {
+  if (!e->member->member->type->fnT->parameter)
+    FATAL(&e->location, "internal error creating member function call!");
+  Variable *first = e->member->member->type->fnT->parameter;
+  while (first->next)
+    first = first->next;
+  const char *prefix = "";
+  if (e->member->pointer && first->type->kind != PointerT)
+    prefix = "*";
+  else if (!e->member->pointer && first->type->kind == PointerT)
+    prefix = "&";
+  if (!e->member->member->type->fnT->is_extern_c)
+    fprintf(f, "%s", Type_defined_module(e->member->member->type)->c_name);
+  fprintf(f, "%s(%s", e->member->member->name, prefix);
+  if (e->member->o->type != IdentifierA || e->member->o->id->type->kind != UseT)
+    c_expression(f, e->member->o);
+}
+
 void c_expression(FILE *f, Expression *e) {
   if (!e)
     return;
@@ -2243,7 +2261,9 @@ void c_expression(FILE *f, Expression *e) {
     } else if (e->member->o_type->kind == EnumT) {
       if (e->member->member->type->kind == EnumT)
         fprintf(f, "%s%s", Type_defined_module(e->member->member->type)->c_name, e->member->member->name);
-      else
+      else if (e->member->member->type->kind == FnT) {
+        c_member_access_fn(f, e);
+      } else
         FATAL(&e->location, "Missing implementation!");
       break;
     }
@@ -2273,19 +2293,7 @@ void c_expression(FILE *f, Expression *e) {
       }
       if (!e->member->member->type->fnT->parameter)
         FATAL(&e->location, "internal error creating member function call!");
-      Variable *first = e->member->member->type->fnT->parameter;
-      while (first->next)
-        first = first->next;
-      const char *prefix = "";
-      if (e->member->pointer && first->type->kind != PointerT)
-        prefix = "*";
-      else if (!e->member->pointer && first->type->kind == PointerT)
-        prefix = "&";
-      if (!e->member->member->type->fnT->is_extern_c)
-        fprintf(f, "%s", Type_defined_module(e->member->member->type)->c_name);
-      fprintf(f, "%s(%s", e->member->member->name, prefix);
-      if (e->member->o->type != IdentifierA || e->member->o->id->type->kind != UseT)
-        c_expression(f, e->member->o);
+      c_member_access_fn(f, e);
       break;
     }
     }

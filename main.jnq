@@ -1,4 +1,6 @@
 
+cfn strcmp(a *char, b *char) int
+
 use Program, MemoryArena from tests.src.Program
 use Point from tests.sub.util
 
@@ -11,6 +13,12 @@ fn main() int
   a int = sizeof(Point)
   px Point = Point{}
   pr Program = Program{}
+
+  py Point = px.neg()
+
+  d enums.Days = enums.Days.Tue
+  ASSERT(strcmp("Tue", d.tostring()) == 0)
+  ASSERT(strcmp("Fri", enums.Days.Fri.tostring()) == 0)
 
   printf("ok\n")
   return 0
