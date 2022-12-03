@@ -14,19 +14,19 @@ type Robot struct {
 
 type Field enum { EmptyC, CoinC, WallC, RobotC }
 
-fn as_char(g *Game, f Field) char {
+fn as_char(f Field, robi *Robot) char {
   switch(f) {
     case Field.EmptyC: return ' ' 
     case Field.CoinC: return 'c' 
     case Field.WallC: return 'W' 
     case Field.RobotC: 
-      if (g.robi.dir == 0)
+      if (robi.dir == 0)
         return '>'
-      else if (g.robi.dir == 1)
+      else if (robi.dir == 1)
         return '.'
-      else if (g.robi.dir == 2)
+      else if (robi.dir == 2)
         return '<'
-      else if (g.robi.dir == 3)
+      else if (robi.dir == 3)
         return '\''
       else 
         return 'X'
@@ -101,12 +101,11 @@ fn rand_field(g *Game) {
   }
 }
 
-
 fn print_field(g *Game, prog *char, pos int) {
   for (i int = 0; i<6; ++i) {
     printf(" -----------------------\n")
     for (j int = 0; j<6; ++j)
-      printf("| %c ", as_char(g, g.fields[i][j]))
+      printf("| %c ", g.fields[i][j].as_char(&g.robi))
     printf("|\n")
   }
   printf(" -----------------------\n")
