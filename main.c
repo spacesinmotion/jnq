@@ -74,6 +74,8 @@ Location back(State *s, size_t c) {
 
 typedef struct Identifier Identifier;
 typedef struct Variable Variable;
+typedef struct Variable Variable;
+typedef struct AutoTypeDeclaration AutoTypeDeclaration;
 typedef struct Brace Brace;
 typedef struct Call Call;
 typedef struct Construct Construct;
@@ -114,6 +116,7 @@ typedef enum ExpressionType {
   StringA,
   IdentifierA,
   VarE,
+  AutoTypeE,
   BraceE,
   CallE,
   ConstructE,
@@ -135,6 +138,7 @@ typedef struct Expression {
     const char *s;
     Identifier *id;
     Variable *var;
+    AutoTypeDeclaration *autotype;
     Brace *brace;
     Call *call;
     Construct *construct;
@@ -204,6 +208,12 @@ typedef struct VariableList {
   Variable *v;
   int len;
 } VariableList;
+
+typedef struct AutoTypeDeclaration {
+  Expression *e;
+  const char *name;
+  Type *type;
+} AutoTypeDeclaration;
 
 typedef struct Parameter {
   Expression *p;
@@ -779,6 +789,12 @@ Expression *Program_new_Expression(Program *p, ExpressionType t, Location l) {
     break;
   case VarE:
     e->var = (Variable *)Program_alloc(p, sizeof(Variable));
+    break;
+  case AutoTypeE:
+    e->autotype = (AutoTypeDeclaration *)Program_alloc(p, sizeof(AutoTypeDeclaration));
+    e->autotype->e = NULL;
+    e->autotype->name = NULL;
+    e->autotype->type = NULL;
     break;
   case BraceE:
     e->brace = (Brace *)Program_alloc(p, sizeof(Brace));
@@ -1482,6 +1498,26 @@ Expression *Program_parse_suffix_expression(Program *p, Module *m, State *st, Ex
   return e;
 }
 
+Expression *Program_parse_auto_declaration_(Program *p, Module *m, State *st) {
+  skip_whitespace(st);
+  State old = *st;
+
+  if (check_identifier(st)) {
+    const char *ne = st->c;
+    if (check_op(st, ":=")) {
+      Expression *at = Program_new_Expression(p, AutoTypeE, old.location);
+      at->autotype->e = Program_parse_expression(p, m, st);
+      if (!at->autotype->e)
+        FATAL(&st->location, "missing expression for auto assignment ");
+      at->autotype->name = Program_copy_string(p, old.c, ne - old.c);
+      return at;
+    }
+  }
+
+  *st = old;
+  return NULL;
+}
+
 Expression *Program_parse_unary_operand(Program *p, Module *m, State *st) {
   Expression *prefix = NULL;
   const char *un_pre_ops[] = {"++", "--", "*", "~", "!", "-", "+", "&"};
@@ -1503,6 +1539,8 @@ Expression *Program_parse_unary_operand(Program *p, Module *m, State *st) {
     if (!check_op(st, ")"))
       FATAL(&st->location, "missing closing ')'");
   } else if ((e = Program_parse_construction(p, m, st))) {
+    ;
+  } else if ((e = Program_parse_auto_declaration_(p, m, st))) {
     ;
   } else if ((temp_v = Program_parse_variable_declaration(p, m, st)).name) {
     e = (Expression *)Program_alloc(p, sizeof(Expression));
@@ -2068,6 +2106,33 @@ void lisp_expression(FILE *f, Expression *e) {
     }
     fprintf(f, ")");
     break;
+  case AutoTypeE:
+    fprintf(f, "(:: %s ", e->autotype->name);
+    for (Type *t = e->autotype->type; t; t = t->child) {
+      switch (t->kind) {
+      case ArrayT:
+        fprintf(f, "[%d]", t->array_count);
+        break;
+      case PointerT:
+        fprintf(f, "*");
+        break;
+      case UseT:
+      case StructT:
+      case UnionT:
+      case EnumT:
+      case UnionTypeT:
+        fprintf(f, "%s", t->name);
+        break;
+      case FnT:
+        fprintf(f, "(*())");
+        break;
+      case PlaceHolder:
+        fprintf(f, "**%s**", t->name);
+        break;
+      }
+    }
+    fprintf(f, ")");
+    break;
   case BraceE:
     fprintf(f, "(() ");
     lisp_expression(f, e->brace->o);
@@ -2219,6 +2284,13 @@ void c_expression(FILE *f, Expression *e) {
   case VarE:
     c_var_list(f, &(VariableList){e->var, 1}, ";");
     break;
+  case AutoTypeE: {
+    if (!c_type_declare(f, e->autotype->type, &e->location, e->autotype->name))
+      fprintf(f, " %s", e->autotype->name);
+    fprintf(f, " = ");
+    c_expression(f, e->autotype->e);
+    break;
+  }
   case BraceE:
     fprintf(f, "(");
     c_expression(f, e->brace->o);
@@ -2691,6 +2763,12 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
   case VarE:
     VariableStack_push(s, e->var->name, e->var->type);
     return e->var->type;
+  case AutoTypeE: {
+    Type *t = c_Expression_make_variables_typed(s, p, m, e->autotype->e);
+    e->autotype->type = t;
+    VariableStack_push(s, e->autotype->name, t);
+    return t;
+  }
   case BraceE:
     return c_Expression_make_variables_typed(s, p, m, e->brace->o);
   case CallE: {

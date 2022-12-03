@@ -10,13 +10,15 @@ fn main() int
 {
   printf("main\n")
 
-  a int = sizeof(Point)
-  px Point = Point{}
-  pr Program = Program{}
+  a := sizeof(Point)
+  px := Point{}
+  pr := Program{}
+  py := px.neg()
+  d := enums.Days.Tue
+  
+  np *int = null
+  np := null as *int
 
-  py Point = px.neg()
-
-  d enums.Days = enums.Days.Tue
   ASSERT(strcmp("Tue", d.tostring()) == 0)
   ASSERT(strcmp("Fri", enums.Days.Fri.tostring()) == 0)
 

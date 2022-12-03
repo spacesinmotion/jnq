@@ -33,7 +33,7 @@ fn swap_a_b_ptr(s *Stuff) Stuff {
 
 fn construction()  {
   printf(" .construction\n")
-  s Stuff = Stuff{}
+  s := Stuff{}
   ASSERT(s.a == 0)
   ASSERT(s.b == 0)
 
@@ -54,8 +54,8 @@ fn construction()  {
 fn call_member()  {
   printf(" .call_member\n")
 
-  s Stuff = Stuff{3, 2}
-  ss Stuff = s.swap_a_b()
+  s := Stuff{3, 2}
+  ss := s.swap_a_b()
   ASSERT(ss.a == 2)
   ASSERT(ss.b == 3)
 
@@ -67,9 +67,9 @@ fn call_member()  {
 fn call_member_pointer_or_not()  {
   printf(" .call_member_pointer_or_not\n")
 
-  s Stuff = Stuff{3, 2}
-  sp *Stuff = &s
-  ss Stuff = s.swap_a_b()
+  s := Stuff{3, 2}
+  sp := &s
+  ss := s.swap_a_b()
   ASSERT(ss.a == 2)
   ASSERT(ss.b == 3)
 
@@ -85,7 +85,7 @@ fn call_member_pointer_or_not()  {
 fn union_check()  {
   printf(" .union_check\n")
 
-  s Swoll = Swoll{0.4}
+  s := Swoll{0.4}
   ASSERT(s.a == 0.4)
   ASSERT(s.b == 0.4)
 
@@ -109,9 +109,9 @@ type Y struct {
 fn use_structs_defined_later()  {
   printf(" .use_structs_defined_later\n")
 
-  a_y Y = Y{1.0f}
-  a_x X = X{0, null, &a_y}
-  b_x X = X{1, &a_x, &a_y}
+  a_y := Y{1.0f}
+  a_x := X{0, null, &a_y}
+  b_x := X{1, &a_x, &a_y}
 
   ASSERT(a_x.y.f == 1.0f)
   ASSERT(b_x.y.f == 1.0f)
@@ -127,7 +127,7 @@ fn use_structs_defined_later()  {
 fn compined_check()  {
   printf(" .compined_check\n")
 
-  s Spold = Spold{
+  s := Spold{
     x: Stuff{
       a: 3,
       b: 12
@@ -143,7 +143,7 @@ fn compined_check()  {
 fn member_call_with_args()  {
   printf(" .member_call_with_args\n")
 
-  s Stuff = Stuff{}
+  s := Stuff{}
   ASSERT(s.a == 0)
   ASSERT(s.b == 0)
 
@@ -166,7 +166,7 @@ type Vec struct {
 fn structs_with_arrays_and_enums()  {
   printf(" .structs_with_arrays_and_enums\n")
 
-  dir Vec = Vec{}
+  dir := Vec{}
   dir.i = 25
   dir.n = Kool.KoolB
   dir.x = util.Nix.Nicer

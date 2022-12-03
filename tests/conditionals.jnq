@@ -2,8 +2,8 @@
 fn main() int {
   printf("conditionsls\n")
 
-  a int = 3
-  b int = 42
+  a := 3
+  b := 42
 
   if (a == 2) 
     b = 42

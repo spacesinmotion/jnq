@@ -2,7 +2,7 @@
 
 fn main() int {
   printf("switches\n")
-  a int = 0
+  a := 0
 
   switch (3) {
     case 1:

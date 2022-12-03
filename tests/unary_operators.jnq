@@ -24,15 +24,15 @@ fn booleans() {
 fn pointer_cast_to_bool() {
   printf(" .pointer_cast_to_bool\n")
 
-  a int = 5
-  ap *int = &a
+  a := 5
+  ap := &a
   ASSERT(ap)
   ASSERT(ap != null)
 
-  b bool = ap != null
+  b := ap != null
   ASSERT(b)
 
-  np *int = null
+  np := null as *int
   ASSERT(!np)
 
   ASSERT(np || ap)

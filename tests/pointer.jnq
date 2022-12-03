@@ -1,7 +1,7 @@
 
 fn simple() {
-  b int = 5
-  a *int = &b
+  b := 5
+  a := &b
   ASSERT(b == *a); 
 
   b = 42
@@ -15,11 +15,11 @@ type Gee struct {
 }
 
 fn with_struct() {
-  g *Gee = &Gee{52}
+  g := &Gee{52}
   ASSERT(52 == g.b)
 
-  gg Gee = *g
-  gp *Gee = g
+  gg := *g
+  gp := g
   ASSERT(52 == gg.b)
   ASSERT(52 == gp.b)
 

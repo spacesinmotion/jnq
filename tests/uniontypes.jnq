@@ -17,10 +17,10 @@ type VecU uniontype { Vec3, Vec2, util.Point, util.Nix }
 fn main() int {
   printf("uniontypes\n")
 
-  x VecU = VecU{Vec2{0.1f, 0.3f}}
-  y VecU = VecU{Vec3{0.1f, 0.3f}}
-  p VecU = VecU{util.Point{20, 42}}
-  n VecU = VecU{util.Nix.Nice}
+  x := VecU{Vec2{0.1f, 0.3f}}
+  y := VecU{Vec3{0.1f, 0.3f}}
+  p := VecU{util.Point{20, 42}}
+  n := VecU{util.Nix.Nice}
 
   printf(" ...ok\n")
   return 0

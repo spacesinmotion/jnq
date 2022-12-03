@@ -22,13 +22,13 @@ fn tostring(d Days) *char {
 fn main() int {
   printf("enums\n")
 
-  e Days = Days.Tue
-  f Days = Days.Sun
+  e := Days.Tue
+  f := Days.Sun
   ASSERT(e == Days.Tue)
   ASSERT(e != f)
   ASSERT(-3 == f as int)
 
-  n util.Nix = util.Nix.Nicer
+  n := util.Nix.Nicer
   ASSERT(n != util.Nix.Nice)
   ASSERT(n == util.Nix.Nicer)
 
