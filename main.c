@@ -201,12 +201,15 @@ typedef struct Variable {
   Variable *next;
 } Variable;
 
-typedef struct Parameter Parameter;
 typedef struct Parameter {
   Expression *p;
   Identifier *v;
-  Parameter *next;
 } Parameter;
+
+typedef struct ParameterList {
+  Parameter *p;
+  int len;
+} ParameterList;
 
 typedef struct Brace {
   Expression *o;
@@ -214,12 +217,12 @@ typedef struct Brace {
 
 typedef struct Call {
   Expression *o;
-  Parameter *p;
+  ParameterList p;
 } Call;
 
 typedef struct Construct {
   Type *type;
-  Parameter *p;
+  ParameterList p;
 } Construct;
 
 typedef struct Access {
@@ -1329,24 +1332,33 @@ Expression *Program_parse_atom(Program *p, State *st) {
 
 Expression *Program_parse_expression(Program *p, Module *m, State *st);
 
-Parameter *Program_parse_parameter_list(Program *p, Module *m, State *st) {
-  Parameter *param = NULL;
-  Expression *e = NULL;
+ParameterList Program_parse_parameter_list(Program *p, Module *m, State *st) {
+  Parameter param[32];
+  int param_len = 0;
 
+  Expression *e = NULL;
   while ((e = Program_parse_expression(p, m, st))) {
-    Parameter *pp = (Parameter *)Program_alloc(p, sizeof(Parameter));
-    pp->next = param;
+    if (param_len >= 32)
+      FATALX("out of local memory for parameter list");
+    Parameter *pp = &param[param_len++];
     pp->p = e;
     pp->v = NULL;
-    param = pp;
     if (!check_op(st, ","))
       break;
   }
-  return param;
+
+  ParameterList pl;
+  pl.len = param_len;
+  pl.p = (Parameter *)Program_alloc(p, pl.len * sizeof(Parameter));
+  for (int i = 0; i < param_len; ++i)
+    pl.p[i] = param[i];
+
+  return pl;
 }
 
-Parameter *Program_parse_named_parameter_list(Program *p, Module *m, State *st) {
-  Parameter *param = NULL;
+ParameterList Program_parse_named_parameter_list(Program *p, Module *m, State *st) {
+  Parameter param[32];
+  int param_len = 0;
 
   for (;;) {
     skip_whitespace(st);
@@ -1363,17 +1375,23 @@ Parameter *Program_parse_named_parameter_list(Program *p, Module *m, State *st) 
       *st = old;
       break;
     }
-    Parameter *pp = (Parameter *)Program_alloc(p, sizeof(Parameter));
-    pp->next = param;
+    if (param_len >= 32)
+      FATALX("out of local memory for parameter list");
+    Parameter *pp = &param[param_len++];
     pp->p = e;
     pp->v = (Identifier *)Program_alloc(p, sizeof(Identifier));
     pp->v->name = Program_copy_string(p, old.c, id_end - old.c);
     pp->v->type = NULL;
-    param = pp;
     if (!check_op(st, ","))
       break;
   }
-  return param;
+
+  ParameterList pl;
+  pl.len = param_len;
+  pl.p = (Parameter *)Program_alloc(p, pl.len * sizeof(Parameter));
+  for (int i = 0; i < param_len; ++i)
+    pl.p[i] = param[i];
+  return pl;
 }
 
 Expression *Program_parse_construction(Program *p, Module *m, State *st) {
@@ -1386,7 +1404,7 @@ Expression *Program_parse_construction(Program *p, Module *m, State *st) {
     if (type && check_op(st, "{")) {
       Expression *construct = Program_new_Expression(p, ConstructE, old.location);
       construct->construct->p = Program_parse_named_parameter_list(p, m, st);
-      if (!construct->construct->p)
+      if (construct->construct->p.len == 0)
         construct->construct->p = Program_parse_parameter_list(p, m, st);
       if (!check_op(st, "}"))
         FATAL(&st->location, "unfinished constructor call, missing '}'");
@@ -1987,14 +2005,15 @@ void c_type(FILE *f, const char *module_name, TypeList *t) {
 
 void lisp_expression(FILE *f, Expression *e);
 
-void lisp_parameter(FILE *f, Parameter *param) {
-  if (!param)
+void lisp_parameter(FILE *f, ParameterList *pl) {
+  if (pl->len == 0)
     return;
 
-  lisp_parameter(f, param->next);
-  if (param->next)
-    fprintf(f, " ");
-  lisp_expression(f, param->p);
+  for (int i = 0; i < pl->len; ++i) {
+    lisp_expression(f, pl->p[i].p);
+    if (i + 1 < pl->len)
+      fprintf(f, " ");
+  }
 }
 
 void lisp_expression(FILE *f, Expression *e) {
@@ -2058,9 +2077,9 @@ void lisp_expression(FILE *f, Expression *e) {
   case CallE:
     fprintf(f, "(__ ");
     lisp_expression(f, e->call->o);
-    if (e->call->p)
+    if (e->call->p.len > 0)
       fprintf(f, " ");
-    lisp_parameter(f, e->call->p);
+    lisp_parameter(f, &e->call->p);
     fprintf(f, ")");
     break;
   case ConstructE:
@@ -2088,9 +2107,9 @@ void lisp_expression(FILE *f, Expression *e) {
         break;
       }
     }
-    if (e->call->p)
+    if (e->call->p.len > 0)
       fprintf(f, " ");
-    lisp_parameter(f, e->construct->p);
+    lisp_parameter(f, &e->construct->p);
     fprintf(f, ")");
     break;
   case AccessE:
@@ -2135,16 +2154,17 @@ void lisp_expression(FILE *f, Expression *e) {
 
 void c_expression(FILE *f, Expression *e);
 
-void c_parameter(FILE *f, Parameter *param) {
-  if (!param)
+void c_parameter(FILE *f, ParameterList *pl) {
+  if (pl->len == 0)
     return;
 
-  c_parameter(f, param->next);
-  if (param->next)
-    fprintf(f, ", ");
-  if (param->v)
-    fprintf(f, ".%s = ", param->v->name);
-  c_expression(f, param->p);
+  for (int i = 0; i < pl->len; ++i) {
+    if (i > 0)
+      fprintf(f, ", ");
+    if (pl->p[i].v)
+      fprintf(f, ".%s = ", pl->p[i].v->name);
+    c_expression(f, pl->p[i].p);
+  }
 }
 
 void c_member_access_fn(FILE *f, Expression *e) {
@@ -2211,20 +2231,20 @@ void c_expression(FILE *f, Expression *e) {
     c_expression(f, e->call->o);
     if (e->call->o->type != MemberAccessE)
       fprintf(f, "(");
-    else if (e->call->p &&
+    else if (e->call->p.len > 0 &&
              (e->call->o->member->o->type != IdentifierA || e->call->o->member->o->id->type->kind != UseT))
       fprintf(f, ", ");
-    c_parameter(f, e->call->p);
+    c_parameter(f, &e->call->p);
     fprintf(f, ")");
     break;
   case ConstructE: {
     if (e->construct->type->kind == UnionTypeT) {
       fprintf(f, "(%s%s){", Type_defined_module(e->construct->type)->c_name, e->construct->type->name);
-      if (!e->construct->p->v)
+      if (e->construct->p.len == 0 || !e->construct->p.p[0].v)
         FATAL(&e->location, "internal error: no union entry selected");
-      UnionTypeEntry *ua = (UnionTypeEntry *)e->construct->p->v;
+      UnionTypeEntry *ua = (UnionTypeEntry *)e->construct->p.p[0].v;
       fprintf(f, "._u%d = ", ua->index);
-      c_expression(f, e->construct->p->p);
+      c_expression(f, e->construct->p.p[0].p);
       fprintf(f, ", .type = %s_%s_u%d_t}", Type_defined_module(e->construct->type)->c_name, e->construct->type->name,
               ua->index);
     } else {
@@ -2234,7 +2254,7 @@ void c_expression(FILE *f, Expression *e) {
         fprintf(f, "{");
       else
         FATAL(&e->location, "unexpect type for construction (or missing impementation)");
-      c_parameter(f, e->construct->p);
+      c_parameter(f, &e->construct->p);
       fprintf(f, "}");
     }
     break;
@@ -2683,13 +2703,13 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
     Type *t = c_Expression_make_variables_typed(s, p, m, e->call->o);
     if (!t || t->kind != FnT)
       FATAL(&e->location, "Need a function to be called!");
-    for (Parameter *pa = e->call->p; pa; pa = pa->next)
-      c_Expression_make_variables_typed(s, p, m, pa->p);
+    for (int i = 0; i < e->call->p.len; ++i)
+      c_Expression_make_variables_typed(s, p, m, e->call->p.p[i].p);
 
-    Parameter *pa = e->call->p;
+    Parameter *pa = e->call->p.len > 0 ? e->call->p.p : NULL;
     Variable *va = t->fnT->parameter;
     while (pa && va) {
-      pa = pa->next;
+      pa = ((pa + 1) < (e->call->p.p + e->call->p.len)) ? (pa + 1) : NULL;
       va = va->next;
     }
     if (va && !pa && e->call->o->type == MemberAccessE) {
@@ -2706,27 +2726,27 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
   }
   case ConstructE: {
     if (e->construct->type->kind == ArrayT) {
-      for (Parameter *pa = e->construct->p; pa; pa = pa->next) {
+      for (Parameter *pa = e->construct->p.p; pa < e->construct->p.p + e->construct->p.len; ++pa) {
         Type *pt = c_Expression_make_variables_typed(s, p, m, pa->p);
         Type *et = e->construct->type->child;
         if (!TypeDeclare_equal(pt, et))
           FATAL(&e->location, "Type missmatch for array element of '%s'!", e->construct->type->child->name);
       }
     } else if (e->construct->type->kind == UnionTypeT) {
-      if (e->construct->p->next)
+      if (e->construct->p.len != 1)
         FATAL(&e->location, "A union type could be only of one kind");
-      if (e->construct->p->v)
+      if (e->construct->p.p[0].v)
         FATAL(&e->location, "Named initialisation of a union das not work");
-      Type *pt = c_Expression_make_variables_typed(s, p, m, e->construct->p->p);
+      Type *pt = c_Expression_make_variables_typed(s, p, m, e->construct->p.p[0].p);
       UnionTypeEntry *ua = e->construct->type->unionT->member;
       for (; ua; ua = ua->next)
         if (TypeDeclare_equal(pt, ua->type))
           break;
       if (!ua)
         FATAL(&e->location, "type '%s' not supported by '%s'", pt->name, e->construct->type->name);
-      e->construct->p->v = (Identifier *)ua; // unsafe
+      e->construct->p.p[0].v = (Identifier *)ua; // unsafe
     } else if (e->construct->type->kind == StructT || e->construct->type->kind == UnionT) {
-      for (Parameter *pa = e->construct->p; pa; pa = pa->next) {
+      for (Parameter *pa = e->construct->p.p; pa < e->construct->p.p + e->construct->p.len; ++pa) {
         Type *pt = c_Expression_make_variables_typed(s, p, m, pa->p);
         if (pa->v) {
           if (e->construct->type->kind != StructT && e->construct->type->kind != UnionT)
