@@ -1,6 +1,18 @@
 
 use sub.util
 
+ccode {
+#include <math.h>
+
+float distance(float ax, float ay, float bx, float by) {
+  float x = bx-ax;
+  float y = by-ay;
+  return sqrt(x*x + y*y);
+}
+}
+
+cfn distance(ax float, ay float, bx float, by float) float
+
 cfn sqrt(x double) double
 
 fn main() int {
@@ -8,6 +20,9 @@ fn main() int {
 
   ASSERT(sqrt(4.0) == 2.0)
   ASSERT(util.round(-4.23) == -4.0)
+
+  d := distance(0.0f, 0.0f, 3.0, 4.0)
+  ASSERT(d == 5.0f)
 
   printf(" ..ok\n")
   return 0
