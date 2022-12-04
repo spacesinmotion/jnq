@@ -476,6 +476,12 @@ typedef struct Module {
   Module *next;
 } Module;
 
+typedef struct CBlock CBlock;
+typedef struct CBlock {
+  const char *block;
+  CBlock *next;
+} CBlock;
+
 typedef struct Program {
   struct {
     char *buffer;
@@ -484,6 +490,7 @@ typedef struct Program {
   } arena;
 
   Module *modules;
+  CBlock *cblocks;
 } Program;
 
 Program Program_new(char *buffer, size_t cap) {
@@ -492,6 +499,7 @@ Program Program_new(char *buffer, size_t cap) {
   p.arena.len = 0;
   p.arena.cap = cap;
   p.modules = NULL;
+  p.cblocks = NULL;
   return p;
 }
 
@@ -1799,6 +1807,35 @@ void Program_parse_fn(Program *p, Module *m, State *st, bool extc) {
     FATAL(&st->location, "Missing type name");
 }
 
+void Program_parse_ccode(Program *p, State *st) {
+  State old = *st;
+  if (!check_op(st, "{"))
+    FATAL(&old.location, "missing block start for ccode");
+
+  int open_brace = 1;
+  old = *st;
+  while (*st->c && open_brace > 0) {
+    if (st->c[0] == '{')
+      ++open_brace;
+    if (st->c[0] == '}')
+      --open_brace;
+
+    if (*st->c == '\n') {
+      st->location.line++;
+      st->location.column = 1;
+    } else
+      ++st->location.column;
+    ++st->c;
+  }
+  if (open_brace > 0)
+    FATAL(&old.location, "missing close block for ccode");
+
+  CBlock *cb = (CBlock *)Program_alloc(p, sizeof(CBlock));
+  cb->next = p->cblocks;
+  cb->block = Program_copy_string(p, old.c, st->c - old.c - 1);
+  p->cblocks = cb;
+}
+
 void Program_parse_module(Program *p, Module *m, State *st) {
   while (st->c[0]) {
     skip_whitespace(st);
@@ -1811,6 +1848,8 @@ void Program_parse_module(Program *p, Module *m, State *st) {
         Program_parse_fn(p, m, st, false);
       else if (check_word(st, "cfn"))
         Program_parse_fn(p, m, st, true);
+      else if (check_word(st, "ccode"))
+        Program_parse_ccode(p, st);
       else {
         FATAL(&st->location, "Unknown keyword >>'%s'\n", st->c);
         break;
@@ -2998,6 +3037,10 @@ void c_Program(FILE *f, Program *p, Module *m) {
   fputs("      exit(1); \\\n", f);
   fputs("    } \\\n", f);
   fputs("  } while (0)\n", f);
+  fputs("\n", f);
+
+  for (CBlock *cb = p->cblocks; cb; cb = cb->next)
+    fputs(cb->block, f);
 
   Program_reset_module_finished(p);
   c_Module_make_variables_typed(p, m);

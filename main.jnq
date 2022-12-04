@@ -1,9 +1,24 @@
 
+ccode {
+#include <math.h>
+
+float distance(float ax, float ay, float bx, float by) {
+  float x = bx-ax;
+  float y = by-ay;
+  return sqrt(x*x + y*y);
+}
+}
+
+cfn distance(ax float, ay float, bx float, by float) float
+
 use Game from tests.game.Game
 
 fn main() int
 {
   printf("main\n")
+
+  d := distance(0.0f, 0.0f, 3.0, 4.0)
+  ASSERT(d == 5.0f)
 
   dx := 3.0
   f := dx * dx;
