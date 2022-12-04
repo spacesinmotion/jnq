@@ -11,6 +11,11 @@ fn main() int {
   ASSERT(a == 11)
   ASSERT(b == 2)
 
+  dx := 3.0
+  f := dx * dx;
+  ASSERT(dx == 3.0)
+  ASSERT(f == 9.0)
+
   printf(" ...ok\n")
   return 0
 }
