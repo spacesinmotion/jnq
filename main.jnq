@@ -16,7 +16,6 @@ fn main() int
   py := px.neg()
   d := enums.Days.Tue
   
-  np *int = null
   np := null as *int
 
   ASSERT(strcmp("Tue", d.tostring()) == 0)
