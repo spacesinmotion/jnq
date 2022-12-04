@@ -23,7 +23,7 @@ type Program struct {
 }
 
 fn new(buffer *char, cap int) Program {
-  p Program
+  p := Program{}
   p.arena.buffer = buffer;
   p.arena.len = 0;
   p.arena.cap = cap;
@@ -34,14 +34,14 @@ fn new(buffer *char, cap int) Program {
 fn alloc(p *Program, size int) *char {
   if (p.arena.len + size >= p.arena.cap)
     ASSERT(false)//FATALX("Out of memory");
-  c *int = &p->arena.len
-  d *char = &p->arena.buffer[p->arena.len]
+  c := &p->arena.len
+  d := &p->arena.buffer[p->arena.len]
   p->arena.len += size;
   return d;
 }
 
 fn copy_string(p *Program, s *char, l int) *char {
-  id *char = p.alloc(l + 1);
+  id := p.alloc(l + 1);
   strncpy(id, s, l);
   id[l] = '\0';
   return id;
@@ -49,27 +49,27 @@ fn copy_string(p *Program, s *char, l int) *char {
 
 
 fn find_module(p *Program, path *char) *Module  {
-  for (m *Module = p->modules; m; m = m->next)
+  for (m := p->modules; m; m = m->next)
     if (strcmp(m->path, path) == 0)
       return m;
   return null;
 }
 
 fn reset_module_finished(p* Program) {
-  for (m *Module = p->modules; m; m = m->next)
+  for (m := p->modules; m; m = m->next)
     m->finished = false;
 }
 
 fn add_module(p *Program, pathc *char) *Module {
-  size int = strlen(pathc);
-  path *char = p.copy_string(pathc, size);
-  cname *char = p.copy_string(pathc, size + 1);
-  for (c *char = cname; *c; ++c)
+  size := strlen(pathc);
+  path := p.copy_string(pathc, size);
+  cname := p.copy_string(pathc, size + 1);
+  for (c := cname; *c; ++c)
     if (*c == '.')
       *c = '_';
   cname[size - 1] = '_';
   cname[size] = '\0';
-  m *Module = p.alloc(sizeof(Module)) as *Module
+  m := p.alloc(sizeof(Module)) as *Module
   m->path = path;
   m->c_name = cname;
   m->types = null;
@@ -79,17 +79,17 @@ fn add_module(p *Program, pathc *char) *Module {
 }
 
 fn new_variable(p *Program, l *State, next *Variable) *Variable {
-  v *Variable = p.alloc(sizeof(Variable)) as *Variable
+  v := p.alloc(sizeof(Variable)) as *Variable
   v->next = next;
   v->location = *l;
   return v;
 }
 
 fn add_type(p *Program, k TypeKind, name *char, m *Module) *Type {
-  tt *Type = m.find_type(name, &name[strlen(name)])
+  tt := m.find_type(name, &name[strlen(name)])
   if (tt != null && tt->kind != TypeKind.PlaceHolder)
     ASSERT(false) // FATALX("Type '%s' allready defined!", name);
-  was_placeholder bool = tt != null && tt->kind == TypeKind.PlaceHolder;
+  was_placeholder := tt != null && tt->kind == TypeKind.PlaceHolder;
   if (!tt)
     tt = p.alloc(sizeof(Type)) as *Type;
 
@@ -139,9 +139,9 @@ fn add_type(p *Program, k TypeKind, name *char, m *Module) *Type {
   if (was_placeholder) {
     if (m->types->_type == tt)
       return tt;
-    for (tl *TypeList = m->types; tl->next; tl = tl->next) {
+    for (tl := m->types; tl->next; tl = tl->next) {
       if (tl->next->_type == tt) {
-        tlt *TypeList  = tl->next;
+        tlt := tl->next;
         tl->next = tlt->next;
         tlt->next = m->types;
         m->types = tlt;
@@ -152,7 +152,7 @@ fn add_type(p *Program, k TypeKind, name *char, m *Module) *Type {
     return tt;
   }
 
-  tl *TypeList  = p.alloc(sizeof(TypeList)) as *TypeList
+  tl := p.alloc(sizeof(TypeList)) as *TypeList
   tl->_type = tt;
   tl->next = m->types;
   m->types = tl;
@@ -160,7 +160,7 @@ fn add_type(p *Program, k TypeKind, name *char, m *Module) *Type {
 }
 
 fn new_Statement(p *Program , t StatementType , n *Statement)*Statement {
-  s *Statement = p.alloc(sizeof(Statement)) as *Statement;
+  s := p.alloc(sizeof(Statement)) as *Statement;
   s->_type = t;
   switch (t) {
   case StatementType.ExpressionS:
@@ -205,7 +205,7 @@ fn new_Statement(p *Program , t StatementType , n *Statement)*Statement {
 }
 
 fn parse_sub_file(p *Program, path *char, parent *Module) *Module {
-  tempPath [256]char
+  tempPath := [256]char{}
   strcpy(tempPath, parent->path);
   l int = strlen(tempPath) - 1;
   while (l >= 0) {
@@ -216,29 +216,29 @@ fn parse_sub_file(p *Program, path *char, parent *Module) *Module {
     --l;
   }
   strcat(tempPath, path);
-  mod *Module = p.parse_file(tempPath);
+  mod := p.parse_file(tempPath);
   if (!mod)
     mod = p.parse_file(path);
   return mod;
 }
 
 fn parse_file(p *Program, path *char) *Module {
-  m *Module = p.find_module(path)
+  m := p.find_module(path)
   if (m)
     return m;
 
-  tempPath [512]char
+  tempPath = [512]char{}
   strcpy(tempPath, path);
-  for (t *char = &tempPath[0]; *t; ++t)
+  for (t := &tempPath[0]; *t; ++t)
     if (*t == '.')
       *t = '/';
   strcat(tempPath, ".jnq");
-  code *char //= readFile(tempPath);
+  code = *char{} //= readFile(tempPath);
   if (!code)
     return null;
 
-  st_path *char = p.copy_string(tempPath, strlen(tempPath));
-  st State = StartState(code, st_path);
+  st_path := p.copy_string(tempPath, strlen(tempPath));
+  st := StartState(code, st_path);
   m = p.add_module( path);
   //p.parse_module(p, m, &st);
 

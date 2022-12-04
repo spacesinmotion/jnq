@@ -1,0 +1,15 @@
+
+use sqrt from util
+
+type Vec2 struct {
+  x float, 
+  y float, 
+}
+
+fn distance(self Vec2, o Vec2) float {
+  dx := o.x - self.x;
+  dy := o.y - self.y;
+
+  return sqrt(dx * dx + dy * dy)
+}
+

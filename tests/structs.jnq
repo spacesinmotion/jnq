@@ -21,7 +21,7 @@ fn set_a(s *Stuff, x int) {
 }
 
 fn swap_a_b(s Stuff) Stuff {
-  x int = s.b
+  x := s.b
   s.b = s.a
   s.a = x
   return s
@@ -59,7 +59,7 @@ fn call_member()  {
   ASSERT(ss.a == 2)
   ASSERT(ss.b == 3)
 
-  sss Stuff = swap_a_b(s)
+  sss := swap_a_b(s)
   ASSERT(sss.a == 2)
   ASSERT(sss.b == 3)
 }

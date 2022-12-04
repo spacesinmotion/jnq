@@ -1,0 +1,7 @@
+
+type Vec3 struct {
+  x float, 
+  y float, 
+  z float, 
+}
+

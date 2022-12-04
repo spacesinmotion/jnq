@@ -67,8 +67,8 @@ type Variable struct {
 
 fn equals(t1 *Type, t2 *Type) bool {
   // this should be globals
-  global Module = Module{"", "", null, true, null}
-  Null Type = Type{"null_t", &Struct{null, &global}, TypeKind.StructT, null};
+  global := Module{"", "", null, true, null}
+  Null := Type{"null_t", &Struct{null, &global}, TypeKind.StructT, null};
 
   if (!t1 && !t2)
     return false;

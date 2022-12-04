@@ -2,8 +2,7 @@
 fn simple() {
   printf(" .simple\n")
 
-  a [3]int
-
+  a := [3]int{}
   a[0] = 1
   a[1] = 2
   a[2] = 4
@@ -20,8 +19,7 @@ fn simple() {
 fn multidimension() {
   printf(" .multidimension\n")
 
-  a [2][3][4]int
-
+  a := [2][3][4]int{}
   a[0][0][0] = 1
   a[1][2][3] = 2
 
@@ -47,7 +45,7 @@ fn construct_assign() {
 fn matrix_test() {
   printf(" .matrix_test\n")
 
-  m [4][4]int
+  m := [4][4]int{}
   for (i := 0; i<4; ++i)
     for (j := 0; j<4; ++j)
       m[i][j] = i*4+j

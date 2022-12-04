@@ -1,0 +1,37 @@
+
+use Vec2 from tests.game.math.Vec2
+use Matrix4x4, translate from tests.game.math.Matrix4x4
+
+type Graphics struct {}
+
+type Object struct {
+  c Vec2
+  r float
+} 
+
+fn create(cx float, cy float, r float) Object {
+  return Object{Vec2{x:cx, y:cy}, r}
+}
+
+fn update(self *Object, dt float) {
+  ASSERT(false)
+} 
+
+fn draw(self *Object, g *Graphics) {
+}
+
+fn center(self *Object) Vec2 {
+  return self.c
+}
+
+fn translation(self *Object, h float) Matrix4x4 {
+  return translate(self.c.x, h, self.c.y)
+}
+
+fn radius(self *Object) float {
+  return self.r
+}
+
+fn center_dist_to(self *Object, o *Object) float {
+  return self.center().distance(o.center())
+}

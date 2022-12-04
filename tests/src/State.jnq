@@ -32,7 +32,7 @@ fn skip(s *State, c int) {
 }
 
 fn back(s *State, c int) State {
-  b State = *s;
+  b := *s;
   if (b.column < c) {
     b.column = 0;
     //FATAL(&b, "internal error calculating location");
@@ -42,7 +42,7 @@ fn back(s *State, c int) State {
 }
 
 fn skip_whitespace_space(st *State) bool {
-  old State = *st;
+  old := *st;
   while (*st->c != '\0' && isspace(*st->c)) {
     if (*st->c == '\n') {
       st->line++;
@@ -79,7 +79,7 @@ fn skip_whitespace(st *State) {
 
 fn check_whitespace_for_nl(st *State) bool {
   if (st->line > 1)
-    for (i int = 1; i <= st->column; ++i)
+    for (i := 1; i <= st->column; ++i)
       if (!isspace(st->c[-i]))
         return false;
   return st->line > 1;
@@ -87,7 +87,7 @@ fn check_whitespace_for_nl(st *State) bool {
 
 fn check_word(st *State , word *char) bool {
   st.skip_whitespace();
-  old State = *st;
+  old := *st;
   while (st->c[0] && *word && *word == st->c[0]) {
     st.skip(1);
     ++word;
@@ -100,7 +100,7 @@ fn check_word(st *State , word *char) bool {
 
 fn check_op(st *State, op *char) bool {
   st.skip_whitespace()
-  old State = *st;
+  old := *st;
   while (st->c[0] != '\0' && op[0] != '\0' && op[0] == st->c[0]) {
     st.skip(1);
     ++op
@@ -136,7 +136,7 @@ fn check_key_word(b *char, e *char) bool {
 }
 
 fn check_identifier(st *State ) bool {
-  old State = *st;
+  old := *st;
   if (st->c[0] != '\0' && (isalpha(st->c[0]) || st->c[0] == '_')) {
     while (st->c[0] != '\0' && (isalnum(st->c[0]) || st->c[0] == '_'))
       st.skip(1);
@@ -148,7 +148,7 @@ fn check_identifier(st *State ) bool {
 }
 
 fn read_int(st *State, i *int) bool {
-  end *char;
+  end := null as *char;
   *i = strtol(st->c, &end, 10);
   if (end == st->c)
     return false;
@@ -159,7 +159,7 @@ fn read_int(st *State, i *int) bool {
 
 
 fn read_float(st *State, f *double) bool {
-  end *char;
+  end := null as *char;
   *f = strtod(st->c, &end);
   if (end == st->c)
     return false;

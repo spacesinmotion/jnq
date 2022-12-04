@@ -1,0 +1,7 @@
+
+use base.Camera
+use base.Object
+
+type Game struct {
+
+}

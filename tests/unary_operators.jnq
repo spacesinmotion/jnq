@@ -3,21 +3,21 @@
 fn pointer() {
   printf(" .pointer\n")
 
-  a int = 5
-  ap *int = &a
+  a := 5
+  ap := &a
   ASSERT(*ap == a)
   ASSERT(ap == &a)
 
-  b int = *ap
+  b := *ap
   ASSERT(b == a)
 }
 
 fn booleans() {
   printf(" .booleans\n")
 
-  t bool = true
+  t := true
   ASSERT(t)
-  f bool = false
+  f := false
   ASSERT(!f)
 }
 

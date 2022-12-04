@@ -115,7 +115,6 @@ typedef enum ExpressionType {
   DoubleA,
   StringA,
   IdentifierA,
-  VarE,
   AutoTypeE,
   BraceE,
   CallE,
@@ -786,9 +785,6 @@ Expression *Program_new_Expression(Program *p, ExpressionType t, Location l) {
     break;
   case IdentifierA:
     e->id = (Identifier *)Program_alloc(p, sizeof(Identifier));
-    break;
-  case VarE:
-    e->var = (Variable *)Program_alloc(p, sizeof(Variable));
     break;
   case AutoTypeE:
     e->autotype = (AutoTypeDeclaration *)Program_alloc(p, sizeof(AutoTypeDeclaration));
@@ -1530,7 +1526,7 @@ Expression *Program_parse_unary_operand(Program *p, Module *m, State *st) {
   }
 
   Expression *e = NULL;
-  Variable temp_v;
+  // Variable temp_v;
   if (check_op(st, "(")) {
     e = Program_new_Expression(p, BraceE, back(st, 1));
     e->brace->o = Program_parse_expression(p, m, st);
@@ -1542,11 +1538,6 @@ Expression *Program_parse_unary_operand(Program *p, Module *m, State *st) {
     ;
   } else if ((e = Program_parse_auto_declaration_(p, m, st))) {
     ;
-  } else if ((temp_v = Program_parse_variable_declaration(p, m, st)).name) {
-    e = (Expression *)Program_alloc(p, sizeof(Expression));
-    e->type = VarE;
-    e->var = Program_alloc(p, sizeof(Variable));
-    *e->var = temp_v;
   } else
     e = Program_parse_atom(p, st);
 
@@ -2079,33 +2070,6 @@ void lisp_expression(FILE *f, Expression *e) {
   case IdentifierA:
     fprintf(f, "%s", e->id->name);
     break;
-  case VarE:
-    fprintf(f, "(:: %s ", e->var->name);
-    for (Type *t = e->var->type; t; t = t->child) {
-      switch (t->kind) {
-      case ArrayT:
-        fprintf(f, "[%d]", t->array_count);
-        break;
-      case PointerT:
-        fprintf(f, "*");
-        break;
-      case UseT:
-      case StructT:
-      case UnionT:
-      case EnumT:
-      case UnionTypeT:
-        fprintf(f, "%s", t->name);
-        break;
-      case FnT:
-        fprintf(f, "(*())");
-        break;
-      case PlaceHolder:
-        fprintf(f, "**%s**", t->name);
-        break;
-      }
-    }
-    fprintf(f, ")");
-    break;
   case AutoTypeE:
     fprintf(f, "(:: %s ", e->autotype->name);
     for (Type *t = e->autotype->type; t; t = t->child) {
@@ -2280,9 +2244,6 @@ void c_expression(FILE *f, Expression *e) {
              strcmp(e->id->name, e->id->type->name) == 0)
       fprintf(f, "%s", Type_defined_module(e->id->type)->c_name);
     fprintf(f, "%s", e->id->name);
-    break;
-  case VarE:
-    c_var_list(f, &(VariableList){e->var, 1}, ";");
     break;
   case AutoTypeE: {
     if (!c_type_declare(f, e->autotype->type, &e->location, e->autotype->name))
@@ -2760,9 +2721,6 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
     FATAL(&e->location, "unknown type for '%s'", e->id->name);
     return NULL;
   }
-  case VarE:
-    VariableStack_push(s, e->var->name, e->var->type);
-    return e->var->type;
   case AutoTypeE: {
     Type *t = c_Expression_make_variables_typed(s, p, m, e->autotype->e);
     e->autotype->type = t;

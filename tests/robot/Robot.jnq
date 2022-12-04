@@ -1,5 +1,7 @@
 
-cfn system(c *char)
+//cfn system(c *char)
+fn system(c *char) {}
+
 cfn scanf(c *char, x *char)
 cfn rand() int
 cfn srand(s int)
@@ -41,8 +43,8 @@ type Game struct {
 }
 
 fn clear_field(g *Game) {
-  for (i int = 0; i<6; ++i)
-    for (j int = 0; j<6; ++j)
+  for (i := 0; i<6; ++i)
+    for (j := 0; j<6; ++j)
       g.fields[i][j] = Field.EmptyC
 }
 
@@ -77,12 +79,12 @@ fn clear_field(g *Game) {
 
 fn rand_field(g *Game) {
   g.fields[0][0] = Field.RobotC
-  c int = 0
-  w int = 0
+  c := 0
+  w := 0
   while (c < 6 || w < 6) {
     if (c < 6) {
-      x int = rand() % 6
-      y int = rand() % 6
+      x := rand() % 6
+      y := rand() % 6
       if (g.fields[x][y] == Field.EmptyC)
       {
         g.fields[x][y] = Field.CoinC
@@ -90,8 +92,8 @@ fn rand_field(g *Game) {
       }
     }
     if (w < 6) {
-      x int = rand() % 6
-      y int = rand() % 6
+      x := rand() % 6
+      y := rand() % 6
       if (g.fields[x][y] == Field.EmptyC)
       {
         g.fields[x][y] = Field.WallC
@@ -102,9 +104,9 @@ fn rand_field(g *Game) {
 }
 
 fn print_field(g *Game, prog *char, pos int) {
-  for (i int = 0; i<6; ++i) {
+  for (i := 0; i<6; ++i) {
     printf(" -----------------------\n")
-    for (j int = 0; j<6; ++j)
+    for (j := 0; j<6; ++j)
       printf("| %c ", g.fields[i][j].as_char(&g.robi))
     printf("|\n")
   }
@@ -122,8 +124,8 @@ fn dreh_rechts(g *Game) {
 } 
 
 fn beweg_dich(g *Game) bool {
-  x int = g.robi.x
-  y int = g.robi.y
+  x := g.robi.x
+  y := g.robi.y
   if (g.robi.dir == 0)
     y++
   else if (g.robi.dir == 1)
@@ -149,10 +151,10 @@ fn beweg_dich(g *Game) bool {
 } 
 
 fn start(g *Game, prog *char) {
-  all *char = prog
-  pos int = 0
+  all := prog
+  pos := 0
 
-  ok bool = true
+  ok := true
   while (ok && prog[0] != '\0')
   {
     system("clear")
@@ -191,8 +193,8 @@ fn start(g *Game, prog *char) {
 }
 
 fn as_number(c *char) int {
-  n int = 0
-  x int = 0
+  n := 0
+  x := 0
   while(c[0] != '\0') {
     if (x % 3 == 0)
       n += c[0] as int
@@ -207,7 +209,7 @@ fn as_number(c *char) int {
 }
 
 fn new_Game(name *char) Game {
-  game Game
+  game := Game{}
   game.clear_field()
   srand(as_number(name))
   game.rand_field()

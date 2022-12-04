@@ -1,25 +1,14 @@
 
-cfn strcmp(a *char, b *char) int
-
-use Program, MemoryArena from tests.src.Program
-use Point from tests.sub.util
-
-use tests.enums
+use Game from tests.game.Game
 
 fn main() int
 {
   printf("main\n")
 
-  a := sizeof(Point)
-  px := Point{}
-  pr := Program{}
-  py := px.neg()
-  d := enums.Days.Tue
-  
-  np := null as *int
+  dx := 3.0
+  f := dx * dx;
 
-  ASSERT(strcmp("Tue", d.tostring()) == 0)
-  ASSERT(strcmp("Fri", enums.Days.Fri.tostring()) == 0)
+  g := Game{}
 
   printf("ok\n")
   return 0

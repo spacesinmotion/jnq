@@ -36,8 +36,8 @@ fn find_type(m *Module, b *char, e *char) *Type {
   // if (6 == e - b && strncmp(Assert.name, b, 6) == 0)
   //   return &Assert;
 
-  bel int = (e - b) as int 
-  for (tl *TypeList = m->types; tl; tl = tl->next)
+  bel := (e - b) as int 
+  for (tl := m->types; tl; tl = tl->next)
     if (strlen(tl->_type->name) == bel && strncmp(tl->_type->name, b, bel) == 0)
       return tl->_type;
   return null;

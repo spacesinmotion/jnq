@@ -6,7 +6,7 @@ fn util_user() {
 
   ASSERT(21 == util.add(11, 10))
 
-  p util.Point = util.Point{95, 37}
+  p := util.Point{95, 37}
   ASSERT(p.x == 95)
   ASSERT(p.y == 37)
   p = p.neg()
