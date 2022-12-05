@@ -1,6 +1,9 @@
 
 use base.Camera
 use base.Object
+use base.Clock
+use base.HealthBar
+use base.HealthOverlayBar
 
 type Game struct {
 

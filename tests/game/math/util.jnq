@@ -7,11 +7,25 @@ cfn acos(a float) float
 cfn tan(a float) float 
 cfn atan(a float) float 
 cfn rand() int
+cfn floor(d double) double 
+cfn pow(d double, c double) double 
 
 fn random() float {
   return (rand() % 100000) as double / 1000000.0
 }
 
+fn rand_in(mi float, ma float) float {
+  return mi + random() * (ma-mi) 
+}
+
 fn lerp(a float, b float, t float) float {
   return (1.0f-t) * a + t * b
+}
+
+fn clamp(a float, mi float, ma float) float {
+  if (a < mi)
+    return mi
+  else if (a > ma)
+    return ma
+  return a
 }

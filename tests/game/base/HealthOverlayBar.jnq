@@ -1,0 +1,44 @@
+
+use lerp, clamp from tests.game.math.util
+
+
+type HealthOverlayBar struct {
+  current_lp float
+  lp float
+  max_lp float
+}
+
+//local w, h = 320, 16 // constants ?
+
+fn NewHealthOverlayBar(max_lp float) HealthOverlayBar {
+  return HealthOverlayBar{0.0f, max_lp, max_lp}
+
+  //hob.back = gfx.new_overlay_billboard()
+  //hob.back:set_position(64, 16)
+  //hob.back:set_color(rgb(4, 3, 34))
+  //hob.back:set_size(w, h)
+  //hob.bar = hob.back:clone()
+  //hob.bar:set_color(rgb(224, 53, 34))
+//
+  //hob.text_display = gfx.new_overlay_text()
+  //hob.text_display:set_position(64 + w + 8, 17)
+  //hob.text_display:set_scale(2, 2)
+  //hob.text_display:set_color(rgb(224, 53, 34))
+  //hob.text_display:set_text(hob.lp .. '/' .. hob.max_lp)
+}
+
+fn destroy(hob *HealthOverlayBar) {
+  // hob.back:destroy()
+  // hob.bar:destroy()
+  // hob.text_display:destroy()
+}
+
+fn update(hob *HealthOverlayBar, dt float) {
+  hob.current_lp = lerp(hob.lp, hob.current_lp, 0.7f)
+  //hob.bar:set_size(w * hob.current_lp / hob.max_lp, h)
+}
+
+fn add(hob *HealthOverlayBar, v float) {
+  hob.lp = clamp(hob.lp + v, 0.0f, hob.max_lp)
+  //hob.text_display:set_text(hob.lp .. '/' .. hob.max_lp)
+}

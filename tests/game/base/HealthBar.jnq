@@ -1,0 +1,63 @@
+
+use pow, rand_in, lerp, clamp from tests.game.math.util
+
+type HealthBar struct {
+  current_health float
+  health float
+  max_health float
+  changed_time float
+}
+
+fn NewHealthBar(max_health float) HealthBar {
+  return HealthBar{0.0f, max_health, max_health}
+
+  // hb.back = gfx.new_billboard()
+  // hb.back:set_color(rgb(4, 3, 34))
+  // hb.back:set_size(80, 10)
+  // hb.back:set_offset(-40, 0)
+  // hb.back:set_pixel_scale(true)
+  // hb.bar = hb.back:clone()
+  // hb.bar:set_color(rgb(224, 53, 34))
+  // hb.bar:set_offset(-40, 0, -0.1)
+}
+
+fn destroy(hb *HealthBar) {
+  // hb.bar.destroy()
+  // hb.back.destroy()
+}
+
+fn add_health(hb *HealthBar, v float) {
+  hb.health = clamp(hb.health + v, 0.0, hb.max_health)
+  if (v < 0.0f)
+    hb.changed_time = 0.25f
+}
+
+fn set_position(hb *HealthBar, x float, y float, z float) {
+  // hb.back:set_position(x, y, z)
+  // hb.bar:set_position(x, y, z)
+}
+
+fn change_intensitiy(hb *HealthBar) float {
+  return hb.changed_time / 0.25f
+}
+
+fn update(hb *HealthBar, dt float) bool {
+  if (hb.changed_time > 0.0f) 
+    hb.changed_time = hb.changed_time - dt
+  else
+    hb.changed_time = 0.0f
+
+  c := pow(hb.changed_time, 0.25) as float * 100.0f
+  // hb.back:set_color(rgb(4 + c, 3 + c, 34 + c))
+  // hb.bar:set_color(rgb(224 - c, 53 + c, 34 + c))
+
+  c = hb.change_intensitiy()
+  ox := rand_in(-15, 15) * c
+  oy := rand_in(-5, 15) * c
+  // hb.back:set_offset(-40 + ox, oy)
+  // hb.bar:set_offset(-40 + ox, oy, -0.1)
+
+  hb.current_health = lerp(hb.health, hb.current_health, 0.7)
+  //hb.bar:set_size(80 * hb.current_health / hb.max_health, 10)
+  return hb.current_health <= 0.25f
+}

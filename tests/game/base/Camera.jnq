@@ -1,0 +1,78 @@
+
+use Vec3 from tests.game.math.Vec3
+use Vec2 from tests.game.math.Vec2
+use lerp, random, clamp, cos, sin from tests.game.math.util
+
+type Graphics struct {}
+
+type Camera struct {
+  ry float,
+  t Vec3,
+  t_e Vec3,
+  dist float,
+  dist_e float,
+  shake_val float,
+}
+
+fn create() Camera {
+  return Camera{
+    ry: 0.0f,
+    t: Vec3{0, 0, 0},
+    t_e: Vec3{0, 0, 0},
+    dist: 0.4f,
+    dist_e: 0.4f,
+    shake_val: 0.0f,
+  }
+}
+
+fn eye(c *Camera) Vec3 {
+  a := 3.1457f * c.ry / 180.0f // math.pi 
+  d := 6.0f + c.dist * c.dist * c.dist * 20.0f
+  h := 4.0f + c.dist * c.dist * 30.0f
+  return Vec3{d * -sin(a) + c.t.x, h + c.t.y, d * cos(a) + c.t.z}
+}
+
+fn rotate_mouse(c *Camera, dx float) {
+  c.ry = c.ry + dx / 2.0f
+}
+
+fn move_mouse(c *Camera, d Vec2) {
+  d.x = d.x / -50.0f
+  d.y = d.y / -50.0f
+  a := 3.1457f * c.ry / 180.0f // math.pi
+  m := Vec3{d.x * cos(a) - d.y * sin(a), 0, d.x * sin(a) + d.y * cos(a)}
+  c.t_e = Vec3{c.t_e.x + m.x, c.t_e.y + m.y, c.t_e.z + m.z}
+}
+
+fn scale_mouse(c *Camera, sy float) {
+  c.dist_e = clamp(c.dist_e - sy * 0.1f, 0.0f, 1.0f)
+}
+
+fn shake(c *Camera, t float){
+  c.shake_val = t * t * 0.8f
+}
+
+fn move(c *Camera, m Vec3) {
+  c.t_e = c.t_e.add(m)
+}
+
+fn jump(c *Camera, m Vec3) {
+  c.t_e = m
+  c.t = m
+}
+
+fn apply(c *Camera, g *Graphics) {
+  e := c.eye()
+  s := Vec3{random() - 0.5f, random() - 0.5f, random() - 0.5f}
+  e = Vec3{e.x + c.shake_val * s.x, e.y + c.shake_val * s.y, e.z + c.shake_val * s.z}
+//  g.lookAt(e, c.t, Vec3{0, 1, 0})
+}
+
+fn update(c *Camera, dt float) {
+  t := 0.9f
+  c.t = Vec3{
+    lerp(c.t_e.x, c.t.x, t),
+    lerp(c.t_e.y, c.t.y, t),
+    lerp(c.t_e.z, c.t.z, t)}
+  c.dist = lerp(c.dist_e, c.dist, t)
+}
