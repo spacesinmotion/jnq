@@ -1,0 +1,41 @@
+
+use lerp from tests.game.math.util
+
+type Image struct {}
+
+type ItemItem struct {
+  name *char
+  usage float
+  img *Image
+}
+
+type Item struct {
+  item *ItemItem
+  count int
+  percent float
+  x float
+  fx float
+  y float
+  fy float
+  row int
+}
+
+fn update(it *Item, p int) {
+  it.fx = 200.0f + p as float * 64.0f
+  it.fy = 8.0f + it.row as float * 24.0f
+  it.x = lerp(it.fx, it.x, 0.9)
+  it.y = lerp(it.fy, it.y, 0.9)
+  // it.text:set_position(it.x + 24, it.y)
+  // if (it.img) 
+  //   it.img.set_position(it.x, it.y - 6)
+}
+
+fn add_count(it *Item, c int) {
+  it.count += c
+  // it.text:set_text('x' .. tostring(s.count))
+}
+
+fn add_percent(it *Item, c float) {
+  it.percent += c
+  // it.text:set_text(tostring(s.percent) .. '%')
+}

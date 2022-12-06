@@ -1,0 +1,109 @@
+
+use Item, ItemItem, Image from Item
+
+cfn strcmp(a *char, b *char) int
+
+type Inventory struct {
+  items [256]Item
+  item_count int
+  tools [256]Item
+  tool_count int
+}
+
+fn NewInventory() Inventory {
+  return Inventory{
+    item_count: 0,
+    tool_count: 0,
+  }
+}
+
+fn destroy(inv *Inventory) {
+  for (i := 0; i< inv.item_count; ++i ) {
+    m := &inv.items[i]
+    // m.text.destroy()
+    // if (m.img)
+    //   m.img.destroy() 
+  }
+}
+
+fn find_item(l *Item, len int, name *char) *Item {
+  for (i := 0; i < len; ++i ) 
+    if (strcmp(l[i].item.name, name) == 0)
+      return &l[i]
+  return null
+}
+
+fn init_item(it *Item, img *Image, pos int, row int) {
+  it.fx = it.x = 200.0f + pos as float * 64.0f 
+  it.fy = it.y = 10.0f
+  it.row = row
+  //s.text = gfx.new_overlay_text();
+  //s.text:set_color(0.9, 0.9, 0.9)
+  //s.img = gfx.new_overlay_billboard();
+  //s.img:set_size(16, 16)
+  //s.img:set_color(1, 1, 1)
+  //s.img:set_texture(img)
+}
+
+fn add_to(l *Item, c *int, n *char, img *Image, row int) *Item{
+  it := find_item(l, *c, n);
+  if (!it) {
+    it = &l[*c]
+    init_item(it, img, 0, row)
+    (*c)++
+  } 
+  return it
+}
+
+fn add_item(inv *Inventory, item *ItemItem) *Item {
+  s := add_to(inv.items, &inv.item_count, item.name, item.img, 0)
+  s.count++
+  // s.text:set_text('x' .. tostring(s.count))
+  // fn s:add_count(c) {
+  //   s.count = s.count + c
+  //   s.text:set_text('x' .. tostring(s.count))
+  // }
+  return s
+}
+
+fn add_tool(inv *Inventory, key *char, img *Image) {
+  s := add_to(inv.tools, &inv.tool_count, key, img, 1)
+  s.percent = 100.0f
+  // s.text:set_text(tostring(s.percent) .. '%')
+  // fn s:add_percent(c) {
+  //   s.percent = s.percent + c
+  //   s.text:set_text(tostring(s.percent) .. '%')
+  // }
+}
+
+fn count_thing(inv *Inventory, item *ItemItem) int {
+  it := find_item(inv.items, inv.item_count, item.name)
+  if (it)
+    return it.count
+  it = find_item(inv.tools, inv.tool_count, item.name);
+  if (it != null && it.percent > 0.0f) 
+    return 1
+
+  return 0
+}
+
+fn remove(inv *Inventory, depends *Item, count int) {
+  for (i:=0; i<count; ++i) {
+    d := &depends[i]
+    n := d.item.name
+    it := find_item(inv.items, inv.item_count, n);
+    if (it)
+      it.add_count(-d.count) 
+    it = find_item(inv.tools, inv.tool_count, n);
+    if (it)
+      it.add_percent(-d.item.usage) 
+  }
+}
+
+fn update(inv *Inventory, dt float) {
+  for (i := 0; i< inv.item_count; ++i ) 
+    inv.items[i].update(i);
+  for (i := 0; i< inv.tool_count; ++i ) 
+    inv.tools[i].update(i);
+}
+

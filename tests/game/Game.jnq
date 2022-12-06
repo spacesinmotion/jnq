@@ -4,6 +4,7 @@ use base.Object
 use base.Clock
 use base.HealthBar
 use base.HealthOverlayBar
+use base.Inventory
 
 type Game struct {
 
