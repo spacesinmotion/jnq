@@ -22,7 +22,51 @@ fn lerp(a float, b float, t float) float {
   return (1.0f-t) * a + t * b
 }
 
+fn min(a float, b float) float {
+  if (a < b)
+    return a
+  return b
+}
+
+fn max(a float, b float) float {
+  if (a > b)
+    return a
+  return b
+}
+
+fn mini(a int, b int) int {
+  if (a < b)
+    return a
+  return b
+}
+
+fn maxi(a int, b int) int {
+  if (a > b)
+    return a
+  return b
+}
+
+fn abs(a float) float {
+  if (a < 0.0f)
+    return -a
+  return a
+}
+
+fn absi(a int) int {
+  if (a < 0)
+    return -a
+  return a
+}
+
 fn clamp(a float, mi float, ma float) float {
+  if (a < mi)
+    return mi
+  else if (a > ma)
+    return ma
+  return a
+}
+
+fn clampi(a int, mi int, ma int) int {
   if (a < mi)
     return mi
   else if (a > ma)

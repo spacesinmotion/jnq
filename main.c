@@ -2887,8 +2887,8 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
       fprintf(stderr, "\n");
       lisp_expression(stderr, e->binop->o2);
       fprintf(stderr, "\n");
-      FATAL(&e->location, "Expect equal types for binary operation '%s' (%s, %s) (%d, %d)", e->binop->op->op, t1->name,
-            t2 ? t2->name : "<br>", t1 ? t1->kind : -1, t2 ? t2->kind : -1);
+      FATAL(&e->location, "Expect equal types for binary operation '%s' (%s, %s) (%d, %d)", e->binop->op->op,
+            t1 ? t1->name : "<br>", t2 ? t2->name : "<br>", t1 ? t1->kind : -1, t2 ? t2->kind : -1);
     }
     if (e->binop->op->returns_bool)
       return &Bool;

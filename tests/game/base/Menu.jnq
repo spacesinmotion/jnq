@@ -1,0 +1,254 @@
+
+use lerp, clampi, max, abs from tests.game.math.util
+
+use Image from Item
+
+type Entry struct {
+  key *char
+  x float
+  y float
+  a float
+  fx float
+  fy float
+  fa float
+  available bool
+}
+
+fn apply(e *Entry) {
+  // for (_, n in ipairs(e.needed)) 
+  //   n:move_alpha(e.x, e.y, e.a)
+
+  // e.text:set_position(e.x + 48, e.y + 8)
+  // e.img:set_position(e.x + 8, e.y + 8)
+  // e.back:set_position(e.x + 2, e.y + 2)
+  // e.back:set_color(0.1, 0.1, 0.1, e.a)
+  v := 0.2f
+  if (e.available)
+    v = 0.9f
+  //e.img:set_color(v, v, v, e.a)
+  //e.text:set_color(v, v, v, e.a)
+}
+
+fn updateEntry(e *Entry) {
+  e.x = lerp(e.fx, e.x, 0.9)
+  e.y = lerp(e.fy, e.y, 0.9)
+  e.a = lerp(e.fa, e.a, 0.9)
+  e.apply()
+}
+
+fn destroyEntry(e *Entry) {
+  // e.back:destroy()
+  // e.img:destroy()
+  // e.text:destroy()
+  // for _, n in ipairs(e.needed) do 
+  //   n:destroy() 
+}
+
+fn set_option(e *Entry, o int, g int, jump bool) {
+  e.fx = 240.0f + g as float * 188.0f 
+  e.fy = 240.0f + o as float * 48.0f
+  if (g == 0) 
+    e.fa = max(0.0f, 1.0f - abs(o as float) / 2.0f)
+  else
+    e.fa = 0.0f
+  
+  if (jump) { 
+    e.x = e.fx
+    e.y = e.fy
+    e.a = e.fa 
+  }
+}
+
+type Group struct {
+  entries [16]Entry
+  entry_len int
+
+  fa float
+  a float
+  name *char
+}
+
+fn updateGroup(g *Group, on bool) {
+  if (on)
+    g.fa = 1.0f
+  else  
+    g.fa = 0.0f
+  g.a = lerp(g.fa, g.a, 0.9)
+  //g.text:set_color(0.9, 0.9, 0.2, m.a)
+}
+
+fn destroyGroup(g *Group) {
+  //m.text:destroy()
+  for (i := 0; i<g.entry_len; ++i)
+    g.entries[i].destroyEntry()
+}
+
+type Menu struct {
+  groups [8]Group
+  group_len int
+
+  selected_group int
+  selected_entry int
+
+  marker_a float
+
+  done_init bool
+  dead bool
+}
+
+fn NewMenu() Menu {
+  return Menu{
+    group_len: 0,
+    selected_group: 0,
+    selected_entry: 0,
+    marker_a: 0.3f,
+    done_init: false,
+    dead: false,
+  }
+  // m.marker = gfx.new_overlay_billboard()
+  // m.marker:set_color(0.9, 0.87, 0.1)
+  // m.marker:set_position(240 - 3, 240 - 1)
+  // m.marker:set_size(186, 2 + 48)
+}
+
+fn destroy(m *Menu) {
+  // m.marker:destroy()
+  for (i := 0; i<m.group_len; ++i) 
+    m.groups[i].destroyGroup() 
+}
+
+fn group(m *Menu) *Group {
+  return &m.groups[m.selected_group]
+}
+
+fn entry(m *Menu) *Entry {
+  return &m.group().entries[m.selected_entry]
+}
+
+fn die(m *Menu) {
+  m.dead = true
+}
+
+fn confirm_choice(m *Menu) {
+  e := m.entry()
+  if (e.available
+   // && e.on_confirm
+   ) {
+    // e.on_confirm()
+    m.die()
+  }
+}
+
+fn update(m *Menu, dt float) {
+  // if (KEYS_DOWN.pressed("tab"))
+  //   return m.die()
+  // if (KEYS_DOWN.pressed("e")) 
+  //   return m.confirm_choice() 
+  // if (KEYS_DOWN.pressed("w"))
+  //   m.select(m.selected_group, m.selected_entry - 1)
+  // if (KEYS_DOWN.pressed("s"))
+  //   m.select(m.selected_group, m.selected_entry + 1)
+  // if (KEYS_DOWN.pressed("a"))
+  //   m.select(m.selected_group - 1, m.selected_entry)
+  // if (KEYS_DOWN.pressed("d")) 
+  //   m.select(m.selected_group + 1, m.selected_entry)
+  
+  for (j:=0; j<m.group_len; ++j) {
+    g := &m.groups[j]
+    g.updateGroup(m.selected_group == j)
+    for (i:=0; i<g.entry_len; ++i) {
+      e := &g.entries[i]
+      e.set_option(i - m.selected_entry, j - m.selected_group, !m.done_init)
+      e.updateEntry()
+    }
+  }
+  m.marker_a = lerp(0.9, m.marker_a, 0.93)
+  //m.marker.set_color(0.9, 0.87, 0.1, m.marker_a)
+  m.done_init = true
+}
+
+// local fn need_sub(pos, needed)
+//   local n = {
+//     pos = pos,
+//     img = gfx.new_overlay_billboard(),
+//     text = gfx.new_overlay_text(),
+//     available = needed.item:available(needed.count),
+//   }
+//   n.img:set_texture(needed.item.img)
+//   n.img:set_size(16, 16)
+//   n.text:set_text('x' .. needed.count)
+//   fn n:move_alpha(rx, ry, a)
+//     m.img:set_position(rx + 8 + m.pos * 40, ry + 40 - 16)
+//     m.text:set_position(rx + 24 + m.pos * 40, ry + 40 - 8)
+//     local v = m.available and 0.9 or 0.2
+//     n.img:set_color(0.9, 0.9, 0.9, a)
+//     n.text:set_color(0.9, v, v, a)
+//   end
+//   fn n:destroy()
+//     m.img:destroy()
+//     m.text:destroy()
+//   end
+//   return n
+// end
+
+fn new_group(m *Menu, name *char) {
+  m.selected_group = m.group_len
+  g := Group{ 
+    fa: 1.0f,
+    a: 1.0f,
+    name: name,
+  //  text: gfx.new_overlay_text() 
+  }
+  // g.text:set_text(name)
+  // g.text:set_color(0.9, 0.9, 0.9)
+  // g.text:set_position(240 - 8 * (2 + #name), 248)
+  
+  m.groups[m.group_len++] = g
+}
+
+fn select(m *Menu, g int, e int, jump bool) {
+  m.selected_group = clampi(g, 0, m.group_len - 1)
+  m.selected_entry = clampi(e, 0, m.group().entry_len)
+  if (jump)
+    m.marker_a = 1.0f
+  else 
+    m.marker_a = 0.1f
+}
+
+fn add_entry(m *Menu, img *Image, text *char, needed []*Entry
+  //, on_confirm, avail
+  ) *Entry {
+  e := Entry{
+    //back = gfx.new_overlay_billboard(),
+    //img = gfx.new_overlay_billboard(),
+    //text = gfx.new_overlay_text(),
+    key: text,
+    x: 0.0f,
+    y: 0.0f,
+    a: 0.0f,
+    fx: 0.0f,
+    fy: 0.0f,
+    fa: 0.0f,
+    available: true,
+    //on_confirm: on_confirm,
+    // needed: [1]*Entry{},
+  }
+  // e.back:set_color(0.1, 0.1, 0.1)
+  // e.back:set_size(180 - 2, 48 - 4)
+  // e.img:set_texture(img)
+  // e.img:set_color(1, 1, 1)
+  // e.img:set_size(32, 32)
+  // e.text:set_text(text)
+  // e.text:set_color(0.9, 0.9, 0.9)
+  // if avail then e.available = avail() end
+  // for (i, n in ipairs(needed or {})) {
+  //   x := need_sub(i, n)
+  //   e.available = e.available and x.available
+  //   e.needed[#e.needed + 1] = x
+  // }
+  e.apply()
+  g := m.group()
+  g.entries[g.entry_len++] = e
+  return &g.entries[g.entry_len-1]
+}
+
