@@ -1790,7 +1790,7 @@ Statement *Program_parse_statement(Program *p, Module *m, State *st, Statement *
       FATAL(&st->location, "Missing do while conditon");
   } else if (check_word(st, "switch")) {
     statement = Program_new_Statement(p, Switch, next);
-    if ((temp_e = Program_parse_expression(p, m, st)))
+    if ((temp_e = Program_brace_expression(p, m, st)))
       statement->switchS->condition = temp_e;
     else
       FATAL(&st->location, "Missing switch expression");
@@ -2557,8 +2557,9 @@ void c_statements(FILE *f, Statement *s, int indent) {
     fprintf(f, ");\n");
     break;
   case Switch:
-    fprintf(f, "switch ");
+    fprintf(f, "switch (");
     c_expression(f, s->switchS->condition);
+    fprintf(f, ") ");
     c_scope_as_body(f, s->doWhileS->body, indent);
     break;
   }
