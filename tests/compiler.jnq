@@ -2,6 +2,7 @@
 use src.State
 use src.Type
 use src.Statement
+use src.Program
 
 fn main() int {
   printf("compiler...\n")

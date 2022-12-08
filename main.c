@@ -619,7 +619,7 @@ Type *Module_find_type(Module *m, const char *b, const char *e) {
 
 Type *Program_add_type(Program *p, TypeKind k, const char *name, Module *m);
 
-Type *Module_temp_type(Program *p, Module *m, const char *b, const char *e) {
+Type *Module_type_or_placeholder(Program *p, Module *m, const char *b, const char *e) {
   Type *t = Module_find_type(m, b, e);
   if (t)
     return t;
@@ -1056,7 +1056,7 @@ bool Program_parse_use_path(Program *p, Module *m, State *st) {
     u->type_len = imp_len;
     u->type = Program_alloc(p, imp_len * sizeof(Type *));
     for (int i = 0; i < imp_len; ++i) {
-      u->type[i] = Module_temp_type(p, use, imp[i].text, imp[i].text + imp[i].size);
+      u->type[i] = Module_type_or_placeholder(p, use, imp[i].text, imp[i].text + imp[i].size);
       if (!u->type[i])
         FATALX("Did not found type '%*.s' in '%s'", imp[i].size, imp[i].text, name);
     }
@@ -1132,14 +1132,14 @@ Type *Program_parse_declared_type(Program *p, Module *m, State *st) {
   }
 
   if (check_identifier(st)) {
-    Type *t = Module_temp_type(p, m, old.c, st->c);
+    Type *t = Module_type_or_placeholder(p, m, old.c, st->c);
     if (t) {
       old = *st;
       if (t->kind == UseT && check_op(st, ".")) {
         skip_whitespace(st);
         const char *s = st->c;
         if (check_identifier(st)) {
-          if ((t = Module_temp_type(p, t->useT->module, s, st->c)))
+          if ((t = Module_type_or_placeholder(p, t->useT->module, s, st->c)))
             return t;
         }
       }

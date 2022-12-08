@@ -1,6 +1,8 @@
 
 use Game from tests.game.Game
 
+use Program from tests.src.Program
+
 fn main() int
 {
   printf("main\n")

@@ -207,7 +207,7 @@ fn new_Statement(p *Program , t StatementType , n *Statement)*Statement {
 fn parse_sub_file(p *Program, path *char, parent *Module) *Module {
   tempPath := [256]char{}
   strcpy(tempPath, parent->path);
-  l int = strlen(tempPath) - 1;
+  l := strlen(tempPath) - 1;
   while (l >= 0) {
     if (tempPath[l] == '.') {
       tempPath[l + 1] = '\0';
@@ -227,13 +227,13 @@ fn parse_file(p *Program, path *char) *Module {
   if (m)
     return m;
 
-  tempPath = [512]char{}
+  tempPath := [512]char{}
   strcpy(tempPath, path);
   for (t := &tempPath[0]; *t; ++t)
     if (*t == '.')
       *t = '/';
   strcat(tempPath, ".jnq");
-  code = *char{} //= readFile(tempPath);
+  code := null as *char //= readFile(tempPath);
   if (!code)
     return null;
 
