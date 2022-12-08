@@ -6,24 +6,24 @@ fn main() int {
 
   switch (3) {
     case 1:
-      ASSERT(0)
+      ASSERT(false)
     case 3:
       a = 42
     case 5:
-      ASSERT(0)
+      ASSERT(false)
     default:
-      ASSERT(0)
+      ASSERT(false)
   }
 
   ASSERT(a == 42)
 
   switch (9898) {
     case 1:
-      ASSERT(0)
+      ASSERT(false)
     case 3:
-      ASSERT(0)
+      ASSERT(false)
     case 5:
-      ASSERT(0)
+      ASSERT(false)
     default:
       a = 63
   }

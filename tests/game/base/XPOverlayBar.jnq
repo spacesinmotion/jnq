@@ -49,7 +49,7 @@ fn destroy(xpo *XPOverlayBar) {
 }
 
 fn update(xpo *XPOverlayBar, dt float) bool {
-  xpo.current_xp = lerp(xpo.xp, xpo.current_xp, 0.7)
+  xpo.current_xp = lerp(xpo.xp, xpo.current_xp, 0.7f)
   // xpo.bar:set_size(w * xpo.current_xp / xpo.max_xp, h)
   if (xpo.current_xp >= xpo.max_xp) {
     xpo.xp = xpo.xp - xpo.max_xp

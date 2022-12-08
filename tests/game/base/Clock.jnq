@@ -32,6 +32,6 @@ fn update(cl *Clock, dt double){
     cl.minute = floor(cl.time / 60.0) as int
     //cl.display.set_text(string.format('%02d:%02d', cl.minute, cl.second))
   }
-  t := 0.8 - 0.25 * pow(cl.time - s as double, 2 / 3)
+  t := 0.8 - 0.25 * pow(cl.time - s as double, 2.0 / 3.0)
   //cl.display:set_color(t, t, t)
 }

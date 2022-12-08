@@ -30,9 +30,9 @@ fn apply(e *Entry) {
 }
 
 fn updateEntry(e *Entry) {
-  e.x = lerp(e.fx, e.x, 0.9)
-  e.y = lerp(e.fy, e.y, 0.9)
-  e.a = lerp(e.fa, e.a, 0.9)
+  e.x = lerp(e.fx, e.x, 0.9f)
+  e.y = lerp(e.fy, e.y, 0.9f)
+  e.a = lerp(e.fa, e.a, 0.9f)
   e.apply()
 }
 
@@ -73,7 +73,7 @@ fn updateGroup(g *Group, on bool) {
     g.fa = 1.0f
   else  
     g.fa = 0.0f
-  g.a = lerp(g.fa, g.a, 0.9)
+  g.a = lerp(g.fa, g.a, 0.9f)
   //g.text:set_color(0.9, 0.9, 0.2, m.a)
 }
 
@@ -162,7 +162,7 @@ fn update(m *Menu, dt float) {
       e.updateEntry()
     }
   }
-  m.marker_a = lerp(0.9, m.marker_a, 0.93)
+  m.marker_a = lerp(0.9f, m.marker_a, 0.93f)
   //m.marker.set_color(0.9, 0.87, 0.1, m.marker_a)
   m.done_init = true
 }

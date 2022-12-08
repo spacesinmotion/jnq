@@ -13,7 +13,7 @@ fn simple() {
 
   d := []int{10,20,30}
   for (i := 0; i < 3; ++i) 
-    ASSERT(d[i] = (i+1)*10)
+    ASSERT(d[i] == (i+1)*10)
 }
 
 fn multidimension() {
