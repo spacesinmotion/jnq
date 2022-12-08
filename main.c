@@ -2826,21 +2826,12 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
     for (int i = 0; i < e->call->p.len; ++i)
       c_Expression_make_variables_typed(s, p, m, e->call->p.p[i].p);
 
-    Parameter *pa = e->call->p.len > 0 ? e->call->p.p : NULL;
-    Variable *va = t->fnT->parameter.len > 0 ? t->fnT->parameter.v : NULL;
-    while (pa && va) {
-      pa = ((pa + 1) < (e->call->p.p + e->call->p.len)) ? (pa + 1) : NULL;
-      va = ((va + 1) < (t->fnT->parameter.v + t->fnT->parameter.len)) ? (va + 1) : NULL;
-    }
-    if (va && !pa && e->call->o->type == MemberAccessE) {
-      if (!e->call->o->member->o_type)
-        FATAL(&e->call->o->location, "Missing type on member access");
-      va = ((va + 1) < (t->fnT->parameter.v + t->fnT->parameter.len)) ? (va + 1) : NULL;
-      // compare pa->type with e->call->o->member->o_type
-    }
-    if (pa && (t->fnT->parameter.len == 0 || t->fnT->parameter.v[t->fnT->parameter.len - 1].type != &Ellipsis))
+    int p_len = e->call->p.len;
+    if (e->call->o->type == MemberAccessE && e->call->o->member->o_type->kind != UseT)
+      ++p_len;
+    if (p_len > t->fnT->parameter.len && t->fnT->parameter.v[t->fnT->parameter.len - 1].type != &Ellipsis)
       FATAL(&e->location, "To much parameter for function call");
-    if (va && (t->fnT->parameter.len == 0 || t->fnT->parameter.v[t->fnT->parameter.len - 1].type != &Ellipsis))
+    if (p_len < t->fnT->parameter.len && t->fnT->parameter.v[t->fnT->parameter.len - 1].type != &Ellipsis)
       FATAL(&e->location, "Missing parameter for function call");
     return t->fnT->returnType;
   }

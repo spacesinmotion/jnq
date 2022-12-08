@@ -8,7 +8,7 @@ use tests.sub.util
 fn main() int
 {
   printf("main\n")
-
+  
   dx := 3.0
   f := dx * dx;
 
