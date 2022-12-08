@@ -2782,8 +2782,10 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
     return &String;
 
   case IdentifierA: {
-    if (e->id->type)
+    if (e->id->type) {
+      FATALX("allready defined?");
       return e->id->type;
+    }
     if ((e->id->type = VariableStack_find(s, e->id->name)))
       return e->id->type;
     if ((e->id->type = Module_find_type(m, e->id->name, e->id->name + strlen(e->id->name))))
