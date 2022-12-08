@@ -435,6 +435,7 @@ typedef struct Type {
     Enum *enumT;
     Union *unionT;
     Function *fnT;
+    Module *placeholerModule;
     Use *useT;
     int array_count;
   };
@@ -453,11 +454,19 @@ Module *Type_defined_module(Type *t) {
     return t->unionT->module;
   case FnT:
     return t->fnT->module;
-  case UseT:
   case ArrayT:
-  case PointerT:
+  case PointerT: {
+    if (!t->child)
+      FATALX("missing base type for pointer or array.");
+    while (t->child)
+      t = t->child;
+    return Type_defined_module(t);
+  }
   case PlaceHolder:
-    FATALX("invalid type for getting defined module.");
+    return t->placeholerModule;
+    break;
+  case UseT:
+    FATALX("Can't get defined module for use-type.");
     break;
   }
   return NULL;
@@ -628,19 +637,13 @@ Type *Module_type_or_placeholder(Program *p, Module *m, const char *b, const cha
 }
 
 bool TypeDeclare_equal(Type *t1, Type *t2) {
-  if (!t1 && !t2)
-    return false;
+  if (!t1 || !t2)
+    FATALX("there should be no null type pointer?!");
   if (t1 == &Null)
     return t2 == &Null || t2->kind == PointerT;
   if (t2 == &Null)
     return t1 == &Null || t1->kind == PointerT;
-  if ((!t1 && t2) || (t1 && !t2))
-    return false;
-  if (t1 == t2)
-    return true;
-  if (t1->kind != t2->kind)
-    return false;
-  return TypeDeclare_equal(t1->child, t2->child);
+  return t1 == t2;
 }
 
 Module *Program_add_module(Program *p, const char *pathc) {
@@ -662,9 +665,13 @@ Module *Program_add_module(Program *p, const char *pathc) {
 }
 
 Type *Program_add_type(Program *p, TypeKind k, const char *name, Module *m) {
-  Type *tt = Module_find_type(m, name, name + strlen(name));
-  if (tt && tt->kind != PlaceHolder)
-    FATALX("Type '%s' allready defined!", name);
+
+  Type *tt = NULL;
+  if (name && name[0] != '\0') {
+    tt = Module_find_type(m, name, name + strlen(name));
+    if (tt && tt->kind != PlaceHolder)
+      FATALX("Type '%s' allready defined!", name);
+  }
   bool was_placeholder = tt && tt->kind == PlaceHolder;
   if (!tt)
     tt = (Type *)Program_alloc(p, sizeof(Type));
@@ -702,12 +709,12 @@ Type *Program_add_type(Program *p, TypeKind k, const char *name, Module *m) {
     tt->fnT->module = m;
     break;
   case PlaceHolder:
+    tt->placeholerModule = m;
     break;
   case ArrayT:
     tt->array_count = 0;
-    // fallthrough
+    break;
   case PointerT:
-    FATALX("Only base types are implemented to add types");
     break;
   }
   if (was_placeholder) {
@@ -1100,6 +1107,20 @@ bool Program_parse_check_declared_type(Program *p, State *st) {
   return false;
 }
 
+Type *Module_find_pointer_type(Module *m, Type *child) {
+  for (TypeList *tl = m->types; tl; tl = tl->next)
+    if (tl->type->kind == PointerT && tl->type->child == child)
+      return tl->type;
+  return NULL;
+}
+
+Type *Module_find_array_type(Module *m, int count, Type *child) {
+  for (TypeList *tl = m->types; tl; tl = tl->next)
+    if (tl->type->kind == ArrayT && tl->type->array_count == count && tl->type->child == child)
+      return tl->type;
+  return NULL;
+}
+
 Type *Program_parse_declared_type(Program *p, Module *m, State *st) {
   skip_whitespace(st);
   State old = *st;
@@ -1107,9 +1128,14 @@ Type *Program_parse_declared_type(Program *p, Module *m, State *st) {
   if (check_op(st, "*")) {
     Type *c = Program_parse_declared_type(p, m, st);
     if (c) {
-      Type *td = (Type *)Program_alloc(p, sizeof(Type));
-      td->kind = PointerT;
-      td->child = c;
+      Module *cm = Type_defined_module(c);
+      if (!cm)
+        FATALX("internal problem finding module for type");
+      Type *td = Module_find_pointer_type(cm, c);
+      if (!td) {
+        td = Program_add_type(p, PointerT, "", cm);
+        td->child = c;
+      }
       return td;
     }
     *st = old;
@@ -1121,10 +1147,15 @@ Type *Program_parse_declared_type(Program *p, Module *m, State *st) {
     if (check_op(st, "]")) {
       Type *c = Program_parse_declared_type(p, m, st);
       if (c) {
-        Type *td = (Type *)Program_alloc(p, sizeof(Type));
-        td->kind = ArrayT;
-        td->array_count = count;
-        td->child = c;
+        Module *cm = Type_defined_module(c);
+        if (!cm)
+          FATALX("internal problem finding module for type");
+        Type *td = Module_find_array_type(cm, count, c);
+        if (!td) {
+          td = Program_add_type(p, ArrayT, "", cm);
+          td->array_count = count;
+          td->child = c;
+        }
         return td;
       }
     }
@@ -2064,6 +2095,7 @@ void c_type(FILE *f, const char *module_name, TypeList *t) {
     break;
   case ArrayT:
   case PointerT:
+    break;
   case PlaceHolder:
     FATALX("Type declaration not implemented for that kind");
     break;
@@ -2596,7 +2628,6 @@ void c_type_forward(FILE *f, const char *module_name, TypeList *t) {
     break;
   case ArrayT:
   case PointerT:
-    FATALX("unexpect type in forward declaration!");
     break;
   }
 }
@@ -2864,9 +2895,14 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
   case UnaryPrefixE: {
     Type *st = c_Expression_make_variables_typed(s, p, m, e->unpost->o);
     if (strcmp(e->unpre->op, "&") == 0) {
-      Type *td = (Type *)Program_alloc(p, sizeof(Type));
-      td->kind = PointerT;
-      td->child = st;
+      Module *cm = Type_defined_module(st);
+      if (!cm)
+        FATALX("internal problem finding module for type");
+      Type *td = Module_find_pointer_type(cm, st);
+      if (!td) {
+        td = Program_add_type(p, PointerT, "", cm);
+        td->child = st;
+      }
       return td;
     } else if (strcmp(e->unpre->op, "*") == 0) {
       if (st->kind != PointerT)

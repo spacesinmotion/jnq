@@ -3,6 +3,8 @@ use Game from tests.game.Game
 
 use Program from tests.src.Program
 
+use tests.sub.util
+
 fn main() int
 {
   printf("main\n")
