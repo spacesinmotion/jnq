@@ -1639,6 +1639,21 @@ void ShuntYard_shunt(ShuntYard *y) {
   y->val_stack[y->val_stack_size - 1] = pop;
 }
 
+Expression *Program_brace_expression(Program *p, Module *m, State *st) {
+  skip_whitespace(st);
+  State old = *st;
+
+  if (check_op(st, "(")) {
+    Expression *e = Program_parse_expression(p, m, st);
+    if (!check_op(st, ")"))
+      FATAL(&old.location, "missing closing ')'");
+    return e;
+  }
+
+  *st = old;
+  return NULL;
+}
+
 Expression *Program_parse_expression(Program *p, Module *m, State *st) {
   Expression *ev = Program_parse_unary_operand(p, m, st);
   if (!ev)
@@ -1727,7 +1742,7 @@ Statement *Program_parse_statement(Program *p, Module *m, State *st, Statement *
     statement = Program_new_Statement(p, Continue, next);
   else if (check_word(st, "if")) {
     statement = Program_new_Statement(p, If, next);
-    if ((temp_e = Program_parse_expression(p, m, st)))
+    if ((temp_e = Program_brace_expression(p, m, st)))
       statement->ifS->condition = temp_e;
     else
       FATAL(&st->location, "Missing if conditon");
@@ -1757,7 +1772,7 @@ Statement *Program_parse_statement(Program *p, Module *m, State *st, Statement *
       FATAL(&st->location, "Missing for block");
   } else if (check_word(st, "while")) {
     statement = Program_new_Statement(p, While, next);
-    if ((temp_e = Program_parse_expression(p, m, st)))
+    if ((temp_e = Program_brace_expression(p, m, st)))
       statement->whileS->condition = temp_e;
     else
       FATAL(&st->location, "Missing while conditon");
@@ -1769,7 +1784,7 @@ Statement *Program_parse_statement(Program *p, Module *m, State *st, Statement *
     statement->doWhileS->body = Program_parse_scope_block(p, m, st);
     if (!check_word(st, "while"))
       FATAL(&st->location, "Missing 'while' for do block");
-    if ((temp_e = Program_parse_expression(p, m, st)))
+    if ((temp_e = Program_brace_expression(p, m, st)))
       statement->doWhileS->condition = temp_e;
     else
       FATAL(&st->location, "Missing do while conditon");
@@ -2496,8 +2511,9 @@ void c_statements(FILE *f, Statement *s, int indent) {
     fprintf(f, "%.*s}\n", indent, SPACE);
     break;
   case If:
-    fprintf(f, "if ");
+    fprintf(f, "if (");
     c_expression(f, s->ifS->condition);
+    fprintf(f, ") ");
     c_scope_as_body(f, s->ifS->ifBody, indent);
     if (s->ifS->elseBody) {
       fprintf(f, "%.*s", (s->ifS->ifBody->type == Scope ? 1 : indent), SPACE);
@@ -2525,8 +2541,9 @@ void c_statements(FILE *f, Statement *s, int indent) {
       fprintf(f, "\n");
     break;
   case While:
-    fprintf(f, "while ");
+    fprintf(f, "while (");
     c_expression(f, s->whileS->condition);
+    fprintf(f, ") ");
     c_scope_as_body(f, s->whileS->body, indent);
     if (s->whileS->body->type == Scope)
       fprintf(f, "\n");
@@ -2535,9 +2552,9 @@ void c_statements(FILE *f, Statement *s, int indent) {
     fprintf(f, "do");
     c_scope_as_body(f, s->doWhileS->body, indent);
     fprintf(f, "%.*s", (s->doWhileS->body->type == Scope ? 1 : indent), SPACE);
-    fprintf(f, "while ");
+    fprintf(f, "while (");
     c_expression(f, s->doWhileS->condition);
-    fprintf(f, ";\n");
+    fprintf(f, ");\n");
     break;
   case Switch:
     fprintf(f, "switch ");
