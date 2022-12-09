@@ -17,8 +17,8 @@ type Camera struct {
 fn create() Camera {
   return Camera{
     ry: 0.0f,
-    t: Vec3{0, 0, 0},
-    t_e: Vec3{0, 0, 0},
+    t: Vec3{0.0f, 0.0f, 0.0f},
+    t_e: Vec3{0.0f, 0.0f, 0.0f},
     dist: 0.4f,
     dist_e: 0.4f,
     shake_val: 0.0f,
@@ -40,7 +40,7 @@ fn move_mouse(c *Camera, d Vec2) {
   d.x = d.x / -50.0f
   d.y = d.y / -50.0f
   a := 3.1457f * c.ry / 180.0f // math.pi
-  m := Vec3{d.x * cos(a) - d.y * sin(a), 0, d.x * sin(a) + d.y * cos(a)}
+  m := Vec3{d.x * cos(a) - d.y * sin(a), 0.0f, d.x * sin(a) + d.y * cos(a)}
   c.t_e = Vec3{c.t_e.x + m.x, c.t_e.y + m.y, c.t_e.z + m.z}
 }
 

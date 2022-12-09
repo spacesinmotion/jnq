@@ -2916,7 +2916,8 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
         FATAL(&e->location, "type '%s' not supported by '%s'", pt->name, e->construct->type->name);
       e->construct->p.p[0].v = (Identifier *)ua; // unsafe
     } else if (e->construct->type->kind == StructT || e->construct->type->kind == UnionT) {
-      for (Parameter *pa = e->construct->p.p; pa < e->construct->p.p + e->construct->p.len; ++pa) {
+      for (int i = 0; i < e->construct->p.len; ++i) {
+        Parameter *pa = &e->construct->p.p[i];
         Type *pt = c_Expression_make_variables_typed(s, p, m, pa->p);
         if (pa->v) {
           if (e->construct->type->kind != StructT && e->construct->type->kind != UnionT)
@@ -2925,10 +2926,16 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
           if (!vt)
             FATAL(&pa->p->location, "Type '%s' has no member '%s'!", e->construct->type->name, pa->v->name);
           if (!Type_equal(pt, vt))
-            FATAL(&pa->p->location, "Type missmatch for member '%s' of '%s'!", pa->v->name, e->construct->type->name);
+            FATAL(&pa->p->location, "Type missmatch for member '%s' of '%s'!\n  expect '%s', got '%s' ", pa->v->name,
+                  Type_name(e->construct->type).s, Type_name(vt).s, Type_name(pt).s);
           pa->v->type = pt;
         } else {
-          ; // ToDo check type in order
+          if (i >= e->construct->type->structT->member.len)
+            FATAL(&e->location, "Too many initializer for type '%s'", Type_name(e->construct->type).s);
+          Variable *ma = &e->construct->type->structT->member.v[i];
+          if (!Type_equal(pt, ma->type))
+            FATAL(&pa->p->location, "Type missmatch for member '%s' of '%s'!\n  expect '%s', got '%s' ", ma->name,
+                  Type_name(e->construct->type).s, Type_name(ma->type).s, Type_name(pt).s);
         }
       }
     } else {
