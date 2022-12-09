@@ -2896,6 +2896,8 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
   }
   case ConstructE: {
     if (e->construct->type->kind == ArrayT) {
+      if (e->construct->type->array_count > 0 && e->construct->p.len > e->construct->type->array_count)
+        FATAL(&e->location, "Too many initializer for array of '%s'!", Type_name(e->construct->type).s);
       for (Parameter *pa = e->construct->p.p; pa < e->construct->p.p + e->construct->p.len; ++pa) {
         Type *pt = c_Expression_make_variables_typed(s, p, m, pa->p);
         Type *et = e->construct->type->child;
