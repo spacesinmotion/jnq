@@ -216,7 +216,7 @@ typedef struct AutoTypeDeclaration {
 
 typedef struct Parameter {
   Expression *p;
-  Identifier *v;
+  const char *name;
 } Parameter;
 
 typedef struct ParameterList {
@@ -1435,7 +1435,7 @@ ParameterList Program_parse_parameter_list(Program *p, Module *m, State *st) {
       FATALX("out of local memory for parameter list");
     Parameter *pp = &param[param_len++];
     pp->p = e;
-    pp->v = NULL;
+    pp->name = NULL;
     if (!check_op(st, ","))
       break;
   }
@@ -1472,9 +1472,7 @@ ParameterList Program_parse_named_parameter_list(Program *p, Module *m, State *s
       FATALX("out of local memory for parameter list");
     Parameter *pp = &param[param_len++];
     pp->p = e;
-    pp->v = (Identifier *)Program_alloc(p, sizeof(Identifier));
-    pp->v->name = Program_copy_string(p, old.c, id_end - old.c);
-    pp->v->type = NULL;
+    pp->name = Program_copy_string(p, old.c, id_end - old.c);
     if (!check_op(st, ","))
       break;
   }
@@ -2316,8 +2314,8 @@ void c_parameter(FILE *f, ParameterList *pl) {
   for (int i = 0; i < pl->len; ++i) {
     if (i > 0)
       fprintf(f, ", ");
-    if (pl->p[i].v)
-      fprintf(f, ".%s = ", pl->p[i].v->name);
+    if (pl->p[i].name)
+      fprintf(f, ".%s = ", pl->p[i].name);
     c_expression(f, pl->p[i].p);
   }
 }
@@ -2397,9 +2395,9 @@ void c_expression(FILE *f, Expression *e) {
   case ConstructE: {
     if (e->construct->type->kind == UnionTypeT) {
       fprintf(f, "(%s%s){", Type_defined_module(e->construct->type)->c_name, e->construct->type->name);
-      if (e->construct->p.len == 0 || !e->construct->p.p[0].v)
+      if (e->construct->p.len == 0 || !e->construct->p.p[0].name)
         FATAL(&e->location, "internal error: no union entry selected");
-      UnionTypeEntry *ua = (UnionTypeEntry *)e->construct->p.p[0].v;
+      UnionTypeEntry *ua = (UnionTypeEntry *)e->construct->p.p[0].name;
       fprintf(f, "._u%d = ", ua->index);
       c_expression(f, e->construct->p.p[0].p);
       fprintf(f, ", .type = %s_%s_u%d_t}", Type_defined_module(e->construct->type)->c_name, e->construct->type->name,
@@ -2765,11 +2763,11 @@ Type *VariableStack_find(VariableStack *s, const char *n) {
   return NULL;
 }
 
-bool is_member_fn_for(Type *ot, Type *ft, Identifier *member) {
+bool is_member_fn_for(Type *ot, Type *ft, const char *name) {
   if (ft->kind != FnT)
     return false;
   Function *f = ft->fnT;
-  if (f->parameter.len == 0 || strcmp(ft->name, member->name) != 0)
+  if (f->parameter.len == 0 || strcmp(ft->name, name) != 0)
     return false;
 
   Variable *first = &f->parameter.v[0];
@@ -2782,19 +2780,19 @@ bool is_member_fn_for(Type *ot, Type *ft, Identifier *member) {
   return false;
 }
 
-Type *Module_find_member(Type *t, Identifier *member) {
+Type *Module_find_member(Type *t, const char *name) {
   switch (t->kind) {
   case UnionT:
   case StructT: {
     for (Variable *v = t->structT->member.v; v < t->structT->member.v + t->structT->member.len; ++v)
-      if (strcmp(v->name, member->name) == 0) {
+      if (strcmp(v->name, name) == 0) {
         return v->type;
       }
     break;
   }
   case EnumT: {
     for (EnumEntry *ee = t->enumT->entries; ee; ee = ee->next)
-      if (strcmp(ee->name, member->name) == 0)
+      if (strcmp(ee->name, name) == 0)
         return t;
     break;
   }
@@ -2802,7 +2800,7 @@ Type *Module_find_member(Type *t, Identifier *member) {
     // union?? -> some build in ()
     break;
   case UseT:
-    return Module_find_type(t->useT->module, member->name, member->name + strlen(member->name));
+    return Module_find_type(t->useT->module, name, name + strlen(name));
 
   case ArrayT:
   case PointerT:
@@ -2814,7 +2812,7 @@ Type *Module_find_member(Type *t, Identifier *member) {
   Module *m = Type_defined_module(t);
   if (m) {
     for (TypeList *tl = m->types; tl; tl = tl->next) {
-      if (is_member_fn_for(t, tl->type, member))
+      if (is_member_fn_for(t, tl->type, name))
         return tl->type;
     }
   }
@@ -2895,6 +2893,12 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
     return t->fnT->returnType;
   }
   case ConstructE: {
+    if (e->construct->type->kind != StructT && e->construct->type->kind != UnionT)
+      for (int i = 0; i < e->construct->p.len; ++i) {
+        Parameter *pa = &e->construct->p.p[i];
+        if (pa->name)
+          FATAL(&pa->p->location, "Named construction '%s' for none struct type!", pa->name);
+      }
     if (e->construct->type->kind == ArrayT) {
       if (e->construct->type->array_count > 0 && e->construct->p.len > e->construct->type->array_count)
         FATAL(&e->location, "Too many initializer for array of '%s'!", Type_name(e->construct->type).s);
@@ -2907,7 +2911,7 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
     } else if (e->construct->type->kind == UnionTypeT) {
       if (e->construct->p.len != 1)
         FATAL(&e->location, "A union type could be only of one kind");
-      if (e->construct->p.p[0].v)
+      if (e->construct->p.p[0].name)
         FATAL(&e->location, "Named initialisation of a union das not work");
       Type *pt = c_Expression_make_variables_typed(s, p, m, e->construct->p.p[0].p);
       UnionTypeEntry *ua = e->construct->type->unionT->member;
@@ -2916,28 +2920,51 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
           break;
       if (!ua)
         FATAL(&e->location, "type '%s' not supported by '%s'", pt->name, e->construct->type->name);
-      e->construct->p.p[0].v = (Identifier *)ua; // unsafe
-    } else if (e->construct->type->kind == StructT || e->construct->type->kind == UnionT) {
+      e->construct->p.p[0].name = (const char *)ua; // unsafe
+    } else if (e->construct->type->kind == StructT) {
       for (int i = 0; i < e->construct->p.len; ++i) {
         Parameter *pa = &e->construct->p.p[i];
         Type *pt = c_Expression_make_variables_typed(s, p, m, pa->p);
-        if (pa->v) {
-          if (e->construct->type->kind != StructT && e->construct->type->kind != UnionT)
-            FATAL(&pa->p->location, "Named construction '%s' for none struct type!", pa->v->name);
-          Type *vt = Module_find_member(e->construct->type, pa->v);
+        if (pa->name) {
+          Type *vt = Module_find_member(e->construct->type, pa->name);
           if (!vt)
-            FATAL(&pa->p->location, "Type '%s' has no member '%s'!", e->construct->type->name, pa->v->name);
+            FATAL(&pa->p->location, "Type '%s' has no member '%s'!", e->construct->type->name, pa->name);
           if (!Type_equal(pt, vt))
-            FATAL(&pa->p->location, "Type missmatch for member '%s' of '%s'!\n  expect '%s', got '%s' ", pa->v->name,
+            FATAL(&pa->p->location, "Type missmatch for member '%s' of '%s'!\n  expect '%s', got '%s' ", pa->name,
                   Type_name(e->construct->type).s, Type_name(vt).s, Type_name(pt).s);
-          pa->v->type = pt;
         } else {
           if (i >= e->construct->type->structT->member.len)
-            FATAL(&e->location, "Too many initializer for type '%s'", Type_name(e->construct->type).s);
+            FATAL(&e->location, "Too many initializer for struct '%s'", Type_name(e->construct->type).s);
           Variable *ma = &e->construct->type->structT->member.v[i];
           if (!Type_equal(pt, ma->type))
             FATAL(&pa->p->location, "Type missmatch for member '%s' of '%s'!\n  expect '%s', got '%s' ", ma->name,
                   Type_name(e->construct->type).s, Type_name(ma->type).s, Type_name(pt).s);
+        }
+      }
+    } else if (e->construct->type->kind == UnionT) {
+      if (e->construct->p.len > 1)
+        FATAL(&e->location, "Too many initializer for union '%s'!", Type_name(e->construct->type).s);
+      if (e->construct->p.len > 0) {
+        Parameter *pa = &e->construct->p.p[0];
+        Type *pt = c_Expression_make_variables_typed(s, p, m, pa->p);
+        if (pa->name) {
+          Type *vt = Module_find_member(e->construct->type, pa->name);
+          if (!vt)
+            FATAL(&pa->p->location, "Type '%s' has no member '%s'!", e->construct->type->name, pa->name);
+          if (!Type_equal(pt, vt))
+            FATAL(&pa->p->location, "Type missmatch for member '%s' of '%s'!\n  expect '%s', got '%s' ", pa->name,
+                  Type_name(e->construct->type).s, Type_name(vt).s, Type_name(pt).s);
+        } else {
+          bool any_type_fit = false;
+          for (int i = 0; !any_type_fit && i < e->construct->type->structT->member.len; ++i) {
+            Variable *v = &e->construct->type->structT->member.v[i];
+            any_type_fit = Type_equal(pt, v->type);
+            if (any_type_fit)
+              pa->name = v->name;
+          }
+          if (!any_type_fit)
+            FATAL(&pa->p->location, "Type missmatch for union '%s'!\n  '%s' is not a valid member type",
+                  Type_name(e->construct->type).s, Type_name(pt).s);
         }
       }
     } else {
@@ -2962,7 +2989,7 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
     }
     if (t->kind != StructT && t->kind != UnionT && t->kind != EnumT && t->kind != UnionTypeT && t->kind != UseT)
       FATAL(&e->location, "Expect non pointer type for member access");
-    if (!(e->member->member->type = Module_find_member(t, e->member->member)))
+    if (!(e->member->member->type = Module_find_member(t, e->member->member->name)))
       FATAL(&e->location, "unknown member '%s' for '%s'", e->member->member->name, t->name);
     e->member->o_type = t;
     return e->member->member->type;
