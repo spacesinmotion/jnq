@@ -3252,9 +3252,6 @@ int main(int argc, char *argv[]) {
   int percent = (int)(100.0 * (double)p.arena.len / (double)p.arena.cap);
   printf("-------------------------------------\n");
   printf("       memory usage %3d%% (%zu/%zu)\n", percent, p.arena.len, p.arena.cap);
-  printf("  size of Statement %zu\n", sizeof(Statement));
-  printf(" size of Expression %zu\n", sizeof(Expression));
-  printf("   size of Location %zu\n", sizeof(Location));
 
   return error;
 }
