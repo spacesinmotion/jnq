@@ -770,7 +770,7 @@ Type *Program_add_type(Program *p, TypeKind k, const char *name, Module *m) {
         return tt;
       }
     }
-    FATALX("did not find place holder type '%s'", tt->name);
+    FATALX("did not find place holder type '%s'", Type_name(tt).s);
     return tt;
   }
 
@@ -2196,30 +2196,8 @@ void lisp_expression(FILE *f, Expression *e) {
     fprintf(f, "%s", e->id->name);
     break;
   case AutoTypeE:
-    fprintf(f, "(:: %s ", e->autotype->name);
-    for (Type *t = e->autotype->type; t; t = t->child) {
-      switch (t->kind) {
-      case ArrayT:
-        fprintf(f, "[%d]", t->array_count);
-        break;
-      case PointerT:
-        fprintf(f, "*");
-        break;
-      case UseT:
-      case StructT:
-      case UnionT:
-      case EnumT:
-      case UnionTypeT:
-        fprintf(f, "%s", t->name);
-        break;
-      case FnT:
-        fprintf(f, "(*())");
-        break;
-      case PlaceHolder:
-        fprintf(f, "**%s**", t->name);
-        break;
-      }
-    }
+    fprintf(f, "(:: %s %s ", e->autotype->name, Type_name(e->autotype->type).s);
+    lisp_expression(f, e->autotype->e);
     fprintf(f, ")");
     break;
   case BraceE:
@@ -2236,31 +2214,8 @@ void lisp_expression(FILE *f, Expression *e) {
     fprintf(f, ")");
     break;
   case ConstructE:
-    fprintf(f, "(## ");
-    for (Type *t = e->construct->type; t; t = t->child) {
-      switch (t->kind) {
-      case PlaceHolder:
-        fprintf(f, "**%s**", t->name);
-        break;
-      case ArrayT:
-        fprintf(f, "[%d]", t->array_count);
-        break;
-      case PointerT:
-        fprintf(f, "*");
-        break;
-      case UseT:
-      case StructT:
-      case UnionT:
-      case EnumT:
-      case UnionTypeT:
-        fprintf(f, "%s", t->name);
-        break;
-      case FnT:
-        FATALX("Construction from Function type not implemented!");
-        break;
-      }
-    }
-    if (e->call->p.len > 0)
+    fprintf(f, "(## %s", Type_name(e->construct->type).s);
+    if (e->construct->p.len > 0)
       fprintf(f, " ");
     lisp_parameter(f, &e->construct->p);
     fprintf(f, ")");
@@ -2446,7 +2401,7 @@ void c_expression(FILE *f, Expression *e) {
       FATAL(&e->location, "unknown type for member '%s'", e->member->member->name);
     switch (e->member->member->type->kind) {
     case PlaceHolder:
-      FATAL(&e->location, "Use of unknow type '%s'", e->member->member->type->name);
+      FATAL(&e->location, "Use of unknow type '%s'", Type_name(e->member->member->type).s);
       break;
     case EnumT:
     case UseT:
@@ -2864,8 +2819,6 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
     Type *t = c_Expression_make_variables_typed(s, p, m, e->call->o);
     if (!t || t->kind != FnT)
       FATAL(&e->location, "Need a function to be called!");
-    // for (int i = 0; i < e->call->p.len; ++i)
-    //   c_Expression_make_variables_typed(s, p, m, e->call->p.p[i].p);
 
     int p_len = e->call->p.len;
     int test_start = 0;
@@ -2881,11 +2834,9 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
     int i = 0;
     for (int j = test_start; i < e->call->p.len && j < t->fnT->parameter.len; ++i, ++j) {
       Type *pt = c_Expression_make_variables_typed(s, p, m, e->call->p.p[i].p);
-      if (!Type_equal(pt, t->fnT->parameter.v[j].type)) {
-        BuffString n1 = Type_name(pt);
-        BuffString n2 = Type_name(t->fnT->parameter.v[j].type);
-        FATAL(&e->call->p.p[i].p->location, "Type missmatch got '%s', expect '%s'", n1.s, n2.s);
-      }
+      if (!Type_equal(pt, t->fnT->parameter.v[j].type))
+        FATAL(&e->call->p.p[i].p->location, "Type missmatch got '%s', expect '%s'", Type_name(pt).s,
+              Type_name(t->fnT->parameter.v[j].type).s);
     }
     for (; i < e->call->p.len; ++i)
       c_Expression_make_variables_typed(s, p, m, e->call->p.p[i].p);
@@ -2897,7 +2848,8 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
       for (int i = 0; i < e->construct->p.len; ++i) {
         Parameter *pa = &e->construct->p.p[i];
         if (pa->name)
-          FATAL(&pa->p->location, "Named construction '%s' for none struct type!", pa->name);
+          FATAL(&pa->p->location, "Named construction '%s' for none struct type '%s'!", pa->name,
+                Type_name(e->construct->type).s);
       }
     if (e->construct->type->kind == ArrayT) {
       if (e->construct->type->array_count > 0 && e->construct->p.len > e->construct->type->array_count)
@@ -2906,7 +2858,7 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
         Type *pt = c_Expression_make_variables_typed(s, p, m, pa->p);
         Type *et = e->construct->type->child;
         if (!Type_equal(pt, et))
-          FATAL(&e->location, "Type missmatch for array element of '%s'!", e->construct->type->child->name);
+          FATAL(&e->location, "Type missmatch for array element of '%s'!", Type_name(e->construct->type->child).s);
       }
     } else if (e->construct->type->kind == UnionTypeT) {
       if (e->construct->p.len != 1)
@@ -2919,7 +2871,7 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
         if (Type_equal(pt, ua->type))
           break;
       if (!ua)
-        FATAL(&e->location, "type '%s' not supported by '%s'", pt->name, e->construct->type->name);
+        FATAL(&e->location, "type '%s' not supported by '%s'", Type_name(pt).s, Type_name(e->construct->type).s);
       e->construct->p.p[0].name = (const char *)ua; // unsafe
     } else if (e->construct->type->kind == StructT) {
       for (int i = 0; i < e->construct->p.len; ++i) {
@@ -2928,7 +2880,7 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
         if (pa->name) {
           Type *vt = Module_find_member(e->construct->type, pa->name);
           if (!vt)
-            FATAL(&pa->p->location, "Type '%s' has no member '%s'!", e->construct->type->name, pa->name);
+            FATAL(&pa->p->location, "Type '%s' has no member '%s'!", Type_name(e->construct->type).s, pa->name);
           if (!Type_equal(pt, vt))
             FATAL(&pa->p->location, "Type missmatch for member '%s' of '%s'!\n  expect '%s', got '%s' ", pa->name,
                   Type_name(e->construct->type).s, Type_name(vt).s, Type_name(pt).s);
@@ -2950,7 +2902,7 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
         if (pa->name) {
           Type *vt = Module_find_member(e->construct->type, pa->name);
           if (!vt)
-            FATAL(&pa->p->location, "Type '%s' has no member '%s'!", e->construct->type->name, pa->name);
+            FATAL(&pa->p->location, "Type '%s' has no member '%s'!", Type_name(e->construct->type).s, pa->name);
           if (!Type_equal(pt, vt))
             FATAL(&pa->p->location, "Type missmatch for member '%s' of '%s'!\n  expect '%s', got '%s' ", pa->name,
                   Type_name(e->construct->type).s, Type_name(vt).s, Type_name(pt).s);
@@ -2968,17 +2920,17 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
         }
       }
     } else {
-      FATAL(&e->location, "construction not possible (or not implemented)");
+      FATAL(&e->location, "construction not possible (or not implemented) for '%s'", Type_name(e->construct->type).s);
     }
     return e->construct->type;
   }
   case AccessE: {
     Type *subt = c_Expression_make_variables_typed(s, p, m, e->access->p);
     if (subt != &Int)
-      FATAL(&e->access->p->location, "Expect integral type for array subscription");
+      FATAL(&e->access->p->location, "Expect integral type for array subscription, got '%s'", Type_name(subt).s);
     Type *t = c_Expression_make_variables_typed(s, p, m, e->access->o);
     if (t->kind != ArrayT && t->kind != PointerT)
-      FATAL(&e->location, "Expect array/pointer type for access");
+      FATAL(&e->location, "Expect array/pointer type for access got '%s'", Type_name(t).s);
     return t->child;
   }
   case MemberAccessE: {
@@ -2988,9 +2940,9 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
       e->member->pointer = true;
     }
     if (t->kind != StructT && t->kind != UnionT && t->kind != EnumT && t->kind != UnionTypeT && t->kind != UseT)
-      FATAL(&e->location, "Expect non pointer type for member access");
+      FATAL(&e->location, "Expect non pointer type for member access got '%s'", Type_name(t).s);
     if (!(e->member->member->type = Module_find_member(t, e->member->member->name)))
-      FATAL(&e->location, "unknown member '%s' for '%s'", e->member->member->name, t->name);
+      FATAL(&e->location, "unknown member '%s' for '%s'", e->member->member->name, Type_name(t).s);
     e->member->o_type = t;
     return e->member->member->type;
   }
@@ -3030,7 +2982,7 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
       lisp_expression(stderr, e->binop->o2);
       fprintf(stderr, "\n");
       FATAL(&e->location, "Expect equal types for binary operation '%s' (%s, %s) (%d, %d)", e->binop->op->op,
-            t1 ? t1->name : "<br>", t2 ? t2->name : "<br>", t1 ? t1->kind : -1, t2 ? t2->kind : -1);
+            Type_name(t1).s, Type_name(t2).s, t1 ? t1->kind : -1, t2 ? t2->kind : -1);
     }
     if (e->binop->op->returns_bool)
       return &Bool;
@@ -3152,7 +3104,7 @@ void c_check_types(Module *m) {
   m->finished = true;
   for (TypeList *tl = m->types; tl; tl = tl->next) {
     if (tl->type->kind == PlaceHolder)
-      FATALX("undefined type '%s' in module '%s'", tl->type->name, m->path);
+      FATALX("undefined type '%s' in module '%s'", Type_name(tl->type).s, m->path);
     else if (tl->type->kind == UseT)
       c_check_types(tl->type->useT->module);
   }
