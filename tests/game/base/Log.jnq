@@ -1,0 +1,97 @@
+
+use Image from Item
+use lerp, sqrt from tests.game.math.util
+
+type TextDisplay struct {}
+
+type Message struct {
+  text *TextDisplay
+  img *Image
+  
+  mes *char
+  x float
+  y float
+  fx float
+  fy float
+  time float
+  dead bool
+}
+
+fn set_position(m *Message, xx float, yy float){
+  // m.text.set_position(m.x + 24, m.y)
+  // if (m.img)
+  //   m.img.set_position(m.x, m.y - 6.0f)
+}
+
+fn set_alpha(m *Message, a float) {
+  // m.text.set_color(0.9f, 0.9f, 0.9f, a)
+  // if (m.img)
+  //   m.img.set_color(1.0f, 1.0f, 1.0f, a)
+}
+
+type Log struct {
+  messages vec[]Message
+}
+
+fn NewLog() Log {
+  return Log{}
+}
+
+fn destroy(l *Log) {
+  for (i:=0; i<l.messages.len; ++i) {
+    m := &l.messages[i]
+    // m.text.destroy()
+    // if (m.img)
+    //   m.img.destroy()
+  }
+}
+
+fn add_message(l *Log, message *char, img *Image) {
+  i := l.messages.len + 1
+  m := Message{ 
+    mes: message,
+    // text: gfx.new_overlay_text(), 
+    time: 1.25f,
+    x: 10.0f, 
+    y: 100.0f + i as float * 24.0f
+  }
+  // m.text.set_text(message)
+  // m.text.set_color(0.9f, 0.9f, 0.9f, 1.0f)
+  m.fx = m.x
+  m.fy = m.y
+
+  if (img) {
+    // m.img = gfx.new_overlay_billboard()
+    // m.img.set_color(1, 1, 1)
+    // m.img.set_size(16, 16)
+    // m.img.set_texture(img)
+  }
+  
+  l.messages.push(m)
+}
+
+fn update(l *Log, dt float) {
+  for (i := l.messages.len - 1; i>=0; --i) {
+    m := &l.messages[i]
+    if (m.dead) {
+      // l.messages[i].text.destroy()
+      if (l.messages[i].img) {
+         // l.messages[i].img.destroy() 
+      }
+      // table.remove(l.messages, i)
+    }
+  }
+  all := l.messages.len
+  for (i:=0; i<l.messages.len; ++i) {
+    m := &l.messages[i]
+    m.time -= dt
+    m.fx = 10.0f
+    m.fy = 100.0f + (all - i) as float * 24.0f
+    m.x = lerp(m.fx, m.x, 0.9f)
+    m.y = lerp(m.fy, m.y, 0.9f)
+    m.set_position(m.x, m.y)
+    if (m.time < 1.0f) 
+      m.set_alpha(sqrt(m.time))
+    m.dead = m.time < 0.0f
+  }
+}

@@ -3425,8 +3425,8 @@ int main(int argc, char *argv[]) {
     FATALX("input path too long '%s' (sorry)\n", argv[1]);
   strncpy(main_mod, argv[1], jnq_len - 4);
 
-  char buffer[2048 * 128];
-  Program p = Program_new(buffer, 2048 * 128);
+  char buffer[2048 * 256];
+  Program p = Program_new(buffer, 2048 * 256);
   Program_add_defaults(&p);
 
   Module *m = Program_parse_file(&p, main_mod);
