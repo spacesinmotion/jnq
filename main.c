@@ -2853,7 +2853,16 @@ bool is_member_fn_for(Type *ot, Type *ft, const char *name) {
   if (ft->kind != FnT)
     return false;
   Function *f = ft->fnT;
-  if (f->parameter.len == 0 || strcmp(ft->name, name) != 0)
+
+  if (f->parameter.len == 0)
+    return false;
+
+  const size_t ol = strlen(ot->name);
+  const size_t nl = strlen(name);
+  if (ol + nl == strlen(ft->name) && strncmp(ft->name, ot->name, ol) == 0) {
+    if (strcmp(name, ft->name + ol) != 0)
+      return false;
+  } else if (strcmp(ft->name, name) != 0)
     return false;
 
   Variable *first = &f->parameter.v[0];
@@ -3086,6 +3095,8 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
     if (!(e->member->member->type = Module_find_member(t, e->member->member->name)))
       FATAL(&e->location, "unknown member '%s' for '%s'", e->member->member->name, Type_name(t).s);
     e->member->o_type = t;
+    if (e->member->member->type->kind == FnT)
+      e->member->member->name = e->member->member->type->name;
     return e->member->member->type;
   }
   case AsCast:
@@ -3285,7 +3296,9 @@ void c_build_vec_types(Program *p) {
       vec_pointer_type->child = tl->type;
 
       {
-        Function *push = Program_add_type(p, FnT, "push", m)->fnT;
+        BuffString fn_name = vec_name;
+        strcat(fn_name.s, "push");
+        Function *push = Program_add_type(p, FnT, Program_copy_string(p, fn_name.s, strlen(fn_name.s)), m)->fnT;
         push->returnType = NULL; // value_type;
         push->return_type_location = null_location;
         push->is_extern_c = false;
@@ -3305,7 +3318,9 @@ void c_build_vec_types(Program *p) {
         push->body = Program_parse_scope(p, m, &(State){pushfn.s, null_location});
       }
       {
-        Function *pop = Program_add_type(p, FnT, "pop", m)->fnT;
+        BuffString fn_name = vec_name;
+        strcat(fn_name.s, "pop");
+        Function *pop = Program_add_type(p, FnT, Program_copy_string(p, fn_name.s, strlen(fn_name.s)), m)->fnT;
         pop->returnType = value_type;
         pop->return_type_location = null_location;
         pop->is_extern_c = false;

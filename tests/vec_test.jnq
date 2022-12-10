@@ -45,11 +45,28 @@ fn vec_Point()
   ASSERT(6 == v[0].y)
 }
 
+fn vec_float_int()
+{
+  printf(" .vec_float_int\n")
+
+  vi := vec[32]int{}
+  vi.push(32)
+  vf := vec[]float{}
+  vf.push(12.0f)
+
+  ASSERT(vi[0] == 32)
+  ASSERT(vf[0] == 12.0f)
+
+  ASSERT(vi.cap == 32)
+  ASSERT(vf.cap == 16)
+}
+
 fn main() int
 {
   printf("vec_test\n")
   int_vec()
   vec_Point()
+  vec_float_int()
   printf(" ...ok\n")
   return 0
 }
