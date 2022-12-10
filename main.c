@@ -3265,6 +3265,21 @@ void c_check_types(Module *m) {
 
 void c_build_vec_types(Program *p) {
   for (Module *m = p->modules; m; m = m->next) {
+    TypeList *allVec = NULL;
+    for (TypeList *tl = m->types; tl; tl = tl->next) {
+      if (!tl->next) {
+        tl->next = allVec;
+        break;
+      }
+      if (!tl->next || tl->next->type->kind != VecT)
+        continue;
+
+      TypeList *vecT = tl->next;
+      tl->next = vecT->next;
+
+      vecT->next = allVec;
+      allVec = vecT;
+    }
     for (TypeList *tl = m->types; tl; tl = tl->next) {
       if (tl->type->kind != VecT)
         continue;

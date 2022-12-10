@@ -1,14 +1,25 @@
 
-use Game from tests.game.Game
+// use Game from tests.game.Game
 
-use Program from tests.src.Program
+// use Program from tests.src.Program
 
-use tests.sub.util 
+// use tests.sub.util 
+
+type L struct {
+  aa int,
+  bb int
+}
+
+type K struct {
+  h vec[]L,
+  j int
+}
 
 fn main() int
 {
   printf("main\n")
 
+  gs := vec[]K{}
 
   printf("ok\n")
   return 0
