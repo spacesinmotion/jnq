@@ -61,12 +61,32 @@ fn vec_float_int()
   ASSERT(vf.cap == 16)
 }
 
+fn vec_of_pointer()
+{
+  printf(" .vec_of_pointer\n")
+
+  i := 42;
+  vi := vec[32]*int{}
+  vi.push(&i);
+
+  ASSERT(vi.len == 1)
+  ASSERT(*vi[0] == 42)
+
+  i = 21
+  ASSERT(*vi[0] == 21)
+
+  *vi[0] = 54321
+  ASSERT(*vi[0] == 54321)
+  ASSERT(i == 54321)
+}
+
 fn main() int
 {
   printf("vec_test\n")
   int_vec()
   vec_Point()
   vec_float_int()
+  vec_of_pointer()
   printf(" ...ok\n")
   return 0
 }

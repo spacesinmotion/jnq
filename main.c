@@ -3325,11 +3325,11 @@ void c_build_vec_types(Program *p) {
         snprintf(pushfn.s, sizeof(pushfn.s),
                  "if(v.len >= v.cap){\n"
                  "v.cap+=%d\n"
-                 "v.__d=realloc(v.__d as *char, v.cap*sizeof(%s)) as %s\n"
+                 "v.__d=realloc(v.__d as *char, v.cap*sizeof(val)) as %s\n"
                  "}\n"
                  "v.__d[v.len++]=val\n"
                  "}",
-                 count, Type_name(value_type).s, Type_name(value_type_pointer).s);
+                 count, Type_name(value_type_pointer).s);
         push->body = Program_parse_scope(p, m, &(State){pushfn.s, null_location});
       }
       {
