@@ -3,6 +3,29 @@ use lerp, clampi, max, abs from tests.game.math.util
 
 use Image from Item
 
+type Depend struct {
+  img *Image,
+  // text *OverlayText,
+  pos int,
+  available bool
+}
+
+fn move_alpha(e *Depend, rx float, ry float, a float){
+  // e.img:set_position(rx + 8 + e.pos * 40, ry + 40 - 16)
+  // e.text:set_position(rx + 24 + e.pos * 40, ry + 40 - 8)
+  v := 0.2f
+  if (e.available)
+    v = 0.9f
+  // n.img:set_color(0.9, 0.9, 0.9, a)
+  // n.text:set_color(0.9, v, v, a)
+}
+
+fn destroyDepend(e *Depend) {
+  // e.img.destroy()
+  // e.text.destroy()
+}
+
+
 type Entry struct {
   key *char
   x float
@@ -12,11 +35,13 @@ type Entry struct {
   fy float
   fa float
   available bool
+  needed vec[]Depend
 }
 
+
 fn apply(e *Entry) {
-  // for (_, n in ipairs(e.needed)) 
-  //   n:move_alpha(e.x, e.y, e.a)
+  for (i:=0; i<e.needed.len; ++i) 
+    e.needed[i].move_alpha(e.x, e.y, e.a)
 
   // e.text:set_position(e.x + 48, e.y + 8)
   // e.img:set_position(e.x + 8, e.y + 8)
@@ -40,8 +65,8 @@ fn destroyEntry(e *Entry) {
   // e.back:destroy()
   // e.img:destroy()
   // e.text:destroy()
-  // for _, n in ipairs(e.needed) do 
-  //   n:destroy() 
+  for (i:=0; i<e.needed.len; ++i) 
+    e.needed[i].destroyDepend() 
 }
 
 fn set_option(e *Entry, o int, g int, jump bool) {
@@ -212,7 +237,7 @@ fn select(m *Menu, g int, e int, jump bool) {
     m.marker_a = 0.1f
 }
 
-fn add_entry(m *Menu, img *Image, text *char, needed []*Entry
+fn add_entry(m *Menu, img *Image, text *char, needed vec[]Depend
   //, on_confirm, avail
   ) *Entry {
   e := Entry{
@@ -228,7 +253,7 @@ fn add_entry(m *Menu, img *Image, text *char, needed []*Entry
     fa: 0.0f,
     available: true,
     //on_confirm: on_confirm,
-    // needed: [1]*Entry{},
+    needed: needed,
   }
   // e.back:set_color(0.1, 0.1, 0.1)
   // e.back:set_size(180 - 2, 48 - 4)
