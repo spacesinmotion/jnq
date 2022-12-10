@@ -1,19 +1,43 @@
 
-use Game from tests.game.Game
+// use Game from tests.game.Game
 
-use Program from tests.src.Program
+// use Program from tests.src.Program
 
-use tests.sub.util
+// use tests.sub.util 
 
 fn main() int
 {
-  printf("main\n")
+  // printf("main\n")
+
+  v := vec[]int{}
+  ASSERT(0 == v.len)
+  ASSERT(0 == v.cap)
+  v.push(42)
+  ASSERT(1 == v.len)
+  ASSERT(16 == v.cap)
+  ASSERT(42 == v[0])
+
+  v[0] = 21
+  ASSERT(21 == v[0])
+
+  x := v.pop()
+  ASSERT(0 == v.len)
+  ASSERT(16 == v.cap)
+  ASSERT(21 == x)
+
+  for (i:=0; i<100; ++i)
+    v.push(i + 1)
   
-  dx := 3.0
-  f := dx * dx;
+  ASSERT(100 == v.len)
+  ASSERT(16*7 == v.cap)
+  ASSERT(1 == v[0])
+  ASSERT(33 == v[32])
 
-  g := Game{}
+  // dx := 3.0
+  // f := dx * dx;
 
-  printf("ok\n")
+  // g := Game{}
+
+  // printf("ok\n")
   return 0
 }

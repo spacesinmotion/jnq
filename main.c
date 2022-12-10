@@ -241,6 +241,7 @@ typedef struct Construct {
 typedef struct Access {
   Expression *o;
   Expression *p;
+  const char *delegate;
 } Access;
 
 typedef struct MemberAccess {
@@ -426,7 +427,7 @@ typedef struct Use {
   bool take_all;
 } Use;
 
-typedef enum TypeKind { UseT, StructT, UnionT, EnumT, UnionTypeT, ArrayT, PointerT, FnT, PlaceHolder } TypeKind;
+typedef enum TypeKind { UseT, StructT, UnionT, EnumT, UnionTypeT, ArrayT, PointerT, VecT, FnT, PlaceHolder } TypeKind;
 
 typedef struct Type {
   const char *name;
@@ -454,6 +455,7 @@ Module *Type_defined_module(Type *t) {
     return t->unionT->module;
   case FnT:
     return t->fnT->module;
+  case VecT:
   case ArrayT:
   case PointerT: {
     if (!t->child)
@@ -502,12 +504,14 @@ typedef struct Program {
   CBlock *cblocks;
 } Program;
 
+Module global = (Module){"", "", NULL, true, NULL};
+
 Program Program_new(char *buffer, size_t cap) {
   Program p;
   p.arena.buffer = buffer;
   p.arena.len = 0;
   p.arena.cap = cap;
-  p.modules = NULL;
+  p.modules = &global;
   p.cblocks = NULL;
   return p;
 }
@@ -555,6 +559,7 @@ Module *Program_find_module(Program *p, const char *path) {
 }
 
 void Program_reset_module_finished(Program *p) {
+  global.finished = false;
   for (Module *m = p->modules; m; m = m->next)
     m->finished = false;
 }
@@ -564,7 +569,6 @@ bool Type_is_import_type(Type *t) {
          t->kind == PlaceHolder;
 }
 
-Module global = (Module){"", "", NULL, true, NULL};
 Type Null = (Type){"null_t", .structT = &(Struct){{}, &global}, StructT, NULL};
 Type Bool = (Type){"bool", .structT = &(Struct){{}, &global}, StructT, NULL};
 Type Char = (Type){"char", .structT = &(Struct){{}, &global}, StructT, NULL};
@@ -577,8 +581,8 @@ Type Ellipsis = (Type){"...", .structT = &(Struct){{}, &global}, StructT, NULL};
 
 Variable print_param[] = {{null_location, "format", &String}, {null_location, "...", &Ellipsis}};
 Function print = (Function){(VariableList){print_param, 2}, NULL, null_location, NULL, &global, true};
-
 Type Printf = (Type){"printf", .fnT = &print, FnT, NULL};
+
 Function assert =
     (Function){(VariableList){&(Variable){null_location, "cond", &Bool}, 1}, NULL, null_location, NULL, &global, true};
 Type Assert = (Type){"ASSERT", .fnT = &assert, FnT, NULL};
@@ -623,6 +627,9 @@ Type *Module_find_type(Module *m, const char *b, const char *e) {
       return tl->type;
     }
   }
+  for (TypeList *tl = global.types; tl; tl = tl->next)
+    if (strlen(tl->type->name) == (size_t)(e - b) && strncmp(tl->type->name, b, e - b) == 0)
+      return tl->type;
   return NULL;
 }
 
@@ -662,7 +669,7 @@ bool Type_equal(Type *t1, Type *t2) {
 }
 
 typedef struct BufString {
-  char s[128];
+  char s[256];
 } BuffString;
 
 BuffString Type_name(Type *t) {
@@ -673,14 +680,33 @@ BuffString Type_name(Type *t) {
   char *ss = s.s;
   int i = 0;
   while (t->child) {
-    if (t->kind == PointerT)
+    switch (t->kind) {
+    case ArrayT:
+      if (t->array_count > 0)
+        i += snprintf(ss + i, sizeof(s.s) - i, "[%d]", t->array_count);
+      else
+        i += snprintf(ss + i, sizeof(s.s) - i, "[]");
+      break;
+    case PointerT:
       i += snprintf(ss + i, sizeof(s.s) - i, "*");
-    else if (t->kind == ArrayT && t->array_count > 0)
-      i += snprintf(ss + i, sizeof(s.s) - i, "[%d]", t->array_count);
-    else if (t->kind == ArrayT)
-      i += snprintf(ss + i, sizeof(s.s) - i, "[]");
-    else
+      break;
+
+    case VecT:
+      if (t->array_count > 0)
+        i += snprintf(ss + i, sizeof(s.s) - i, "vec[%d]", t->array_count);
+      else
+        i += snprintf(ss + i, sizeof(s.s) - i, "vec[]");
+      break;
+    case UseT:
+    case StructT:
+    case UnionT:
+    case EnumT:
+    case UnionTypeT:
+    case FnT:
+    case PlaceHolder:
       i += snprintf(ss + i, sizeof(s.s) - i, "<>");
+      break;
+    }
     t = t->child;
   }
   i += snprintf(ss + i, sizeof(s.s) - i, "%s", t->name);
@@ -752,6 +778,7 @@ Type *Program_add_type(Program *p, TypeKind k, const char *name, Module *m) {
   case PlaceHolder:
     tt->placeholerModule = m;
     break;
+  case VecT:
   case ArrayT:
     tt->array_count = 0;
     break;
@@ -859,6 +886,9 @@ Expression *Program_new_Expression(Program *p, ExpressionType t, Location l) {
     break;
   case AccessE:
     e->access = (Access *)Program_alloc(p, sizeof(Access));
+    e->access->o = NULL;
+    e->access->p = NULL;
+    e->access->delegate = NULL;
     break;
   case MemberAccessE:
     e->member = (MemberAccess *)Program_alloc(p, sizeof(MemberAccess));
@@ -961,6 +991,8 @@ bool check_key_word(const char *b, const char *e) {
   if ((e - b) == 3 && strncmp(b, "cfn", 3) == 0)
     return true;
   if ((e - b) == 3 && strncmp(b, "for", 3) == 0)
+    return true;
+  if ((e - b) == 3 && strncmp(b, "vec", 3) == 0)
     return true;
   if ((e - b) == 3 && strncmp(b, "use", 3) == 0)
     return true;
@@ -1113,12 +1145,20 @@ bool Program_parse_use_path(Program *p, Module *m, State *st) {
   return true;
 }
 
-bool Program_parse_check_declared_type(Program *p, State *st) {
+bool Program_check_declared_type(Program *p, State *st) {
   skip_whitespace(st);
   State old = *st;
 
   if (check_op(st, "*")) {
-    if (Program_parse_check_declared_type(p, st))
+    if (Program_check_declared_type(p, st))
+      return true;
+    *st = old;
+  }
+
+  if (check_word(st, "vec") && check_op(st, "[")) {
+    int dummy;
+    read_int(st, &dummy);
+    if (check_op(st, "]") && Program_check_declared_type(p, st))
       return true;
     *st = old;
   }
@@ -1127,7 +1167,7 @@ bool Program_parse_check_declared_type(Program *p, State *st) {
     int count = -1;
     read_int(st, &count);
     if (check_op(st, "]")) {
-      if (Program_parse_check_declared_type(p, st))
+      if (Program_check_declared_type(p, st))
         return true;
     }
     *st = old;
@@ -1162,6 +1202,13 @@ Type *Module_find_array_type(Module *m, int count, Type *child) {
   return NULL;
 }
 
+Type *Module_find_vec_type(Module *m, int count, Type *child) {
+  for (TypeList *tl = m->types; tl; tl = tl->next)
+    if (tl->type->kind == VecT && tl->type->array_count == count && tl->type->child == child)
+      return tl->type;
+  return NULL;
+}
+
 Type *Program_parse_declared_type(Program *p, Module *m, State *st) {
   skip_whitespace(st);
   State old = *st;
@@ -1178,6 +1225,29 @@ Type *Program_parse_declared_type(Program *p, Module *m, State *st) {
         td->child = c;
       }
       return td;
+    }
+    *st = old;
+  }
+
+  if (check_word(st, "vec")) {
+    if (check_op(st, "[")) {
+      int count = 0;
+      read_int(st, &count);
+      if (check_op(st, "]")) {
+        Type *c = Program_parse_declared_type(p, m, st);
+        if (c) {
+          Module *cm = Type_defined_module(c);
+          if (!cm)
+            FATALX("internal problem finding module for type");
+          Type *td = Module_find_vec_type(cm, count, c);
+          if (!td) {
+            td = Program_add_type(p, VecT, "", cm);
+            td->array_count = count;
+            td->child = c;
+          }
+          return td;
+        }
+      }
     }
     *st = old;
   }
@@ -1489,7 +1559,7 @@ Expression *Program_parse_construction(Program *p, Module *m, State *st) {
   skip_whitespace(st);
   State old = *st;
 
-  if (Program_parse_check_declared_type(p, st) && check_op(st, "{")) {
+  if (Program_check_declared_type(p, st) && check_op(st, "{")) {
     *st = old;
     Type *type = Program_parse_declared_type(p, m, st);
     if (type && check_op(st, "{")) {
@@ -1979,14 +2049,56 @@ void c_use(FILE *f, TypeList *tl, ModuleFileCB cb) {
     cb(f, tl->type->useT->module);
 }
 
+BuffString Type_special_cname(Type *t) {
+  if (!t)
+    return (BuffString){{0}};
+
+  BuffString s;
+  char *ss = s.s;
+  int i = 0;
+  while (t->child) {
+    switch (t->kind) {
+    case ArrayT:
+      if (t->array_count > 0)
+        i += snprintf(ss + i, sizeof(s.s) - i, "_%d_", t->array_count);
+      else
+        i += snprintf(ss + i, sizeof(s.s) - i, "__");
+      break;
+    case PointerT:
+      i += snprintf(ss + i, sizeof(s.s) - i, "p");
+      break;
+
+    case VecT:
+      if (t->array_count > 0)
+        i += snprintf(ss + i, sizeof(s.s) - i, "_vec_%d_", t->array_count);
+      else
+        i += snprintf(ss + i, sizeof(s.s) - i, "_vec__");
+      break;
+    case UseT:
+    case StructT:
+    case UnionT:
+    case EnumT:
+    case UnionTypeT:
+    case FnT:
+    case PlaceHolder:
+      i += snprintf(ss + i, sizeof(s.s) - i, "<>");
+      break;
+    }
+    t = t->child;
+  }
+  i += snprintf(ss + i, sizeof(s.s) - i, "%s", t->name);
+  return s;
+}
+
 bool c_type_declare(FILE *f, Type *t, Location *l, const char *var) {
   if (!t)
     return false;
 
+  bool hasVarWritten = false;
   Type *tt = t->child;
   while (tt && tt->kind == ArrayT)
     tt = tt->child;
-  bool hasVarWritten = c_type_declare(f, tt, l, var);
+  hasVarWritten = c_type_declare(f, tt, l, var);
   switch (t->kind) {
   case ArrayT:
     fprintf(f, " %s", var);
@@ -2001,8 +2113,11 @@ bool c_type_declare(FILE *f, Type *t, Location *l, const char *var) {
   case PointerT:
     fprintf(f, "*");
     break;
+  case VecT:
+    FATAL(l, "Internal error vec '%s' should be replaced!", Type_name(t).s);
+    break;
   case UseT:
-    FATAL(l, "Can't use module '%s' as type!", t->name);
+    FATAL(l, "Can't use module '%s' as type!", Type_name(t).s);
     // fprintf(f, "%s", t->name);
     break;
   case StructT:
@@ -2146,6 +2261,9 @@ void c_type(FILE *f, const char *module_name, TypeList *t) {
     break;
   case FnT:
     // todo!??
+    break;
+  case VecT:
+    FATALX("vec should be replaced here that kind");
     break;
   case ArrayT:
   case PointerT:
@@ -2357,6 +2475,8 @@ void c_expression(FILE *f, Expression *e) {
       c_expression(f, e->construct->p.p[0].p);
       fprintf(f, ", .type = %s_%s_u%d_t}", Type_defined_module(e->construct->type)->c_name, e->construct->type->name,
               ua->index);
+    } else if (e->construct->type->kind == VecT) {
+      FATAL(&e->construct->p.p[0].p->location, "vec type should be replaced!");
     } else {
       if (e->construct->type->kind == StructT || e->construct->type->kind == UnionT)
         fprintf(f, "(%s%s){", Type_defined_module(e->construct->type)->c_name, e->construct->type->name);
@@ -2371,6 +2491,8 @@ void c_expression(FILE *f, Expression *e) {
   }
   case AccessE:
     c_expression(f, e->access->o);
+    if (e->access->delegate)
+      fprintf(f, ".%s", e->access->delegate);
     fprintf(f, "[");
     c_expression(f, e->access->p);
     fprintf(f, "]");
@@ -2412,6 +2534,10 @@ void c_expression(FILE *f, Expression *e) {
     case ArrayT:
       c_expression(f, e->member->o);
       fprintf(f, "%s%s", (e->member->pointer ? "->" : "."), e->member->member->name);
+      break;
+
+    case VecT:
+      FATAL(&e->location, "vec type should be  for '%s'!", Type_name(e->member->member->type).s);
       break;
 
     case FnT: {
@@ -2634,6 +2760,11 @@ void c_type_forward(FILE *f, const char *module_name, TypeList *t) {
   case UnionTypeT:
     c_union_forward(f, module_name, t->type->name, t->type->unionT->member);
     break;
+
+  case VecT:
+    FATALX("vec type should be replaced here!");
+    break;
+
   case UseT:
     break;
   case PlaceHolder:
@@ -2757,6 +2888,10 @@ Type *Module_find_member(Type *t, const char *name) {
   case UseT:
     return Module_find_type(t->useT->module, name, name + strlen(name));
 
+  case VecT:
+    FATALX("missing find member implementation for '%s'!", Type_name(t).s);
+    break;
+
   case ArrayT:
   case PointerT:
   case FnT:
@@ -2851,7 +2986,7 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
           FATAL(&pa->p->location, "Named construction '%s' for none struct type '%s'!", pa->name,
                 Type_name(e->construct->type).s);
       }
-    if (e->construct->type->kind == ArrayT) {
+    if (e->construct->type->kind == ArrayT || e->construct->type->kind == VecT) {
       if (e->construct->type->array_count > 0 && e->construct->p.len > e->construct->type->array_count)
         FATAL(&e->location, "Too many initializer for array of '%s'!", Type_name(e->construct->type).s);
       for (Parameter *pa = e->construct->p.p; pa < e->construct->p.p + e->construct->p.len; ++pa) {
@@ -2929,6 +3064,13 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
     if (subt != &Int)
       FATAL(&e->access->p->location, "Expect integral type for array subscription, got '%s'", Type_name(subt).s);
     Type *t = c_Expression_make_variables_typed(s, p, m, e->access->o);
+    if (t->kind == StructT) {
+      Variable *delegateV = &t->structT->member.v[0];
+      if (delegateV->type->kind == PointerT && strcmp(delegateV->name, "__d") == 0) {
+        e->access->delegate = delegateV->name;
+        return delegateV->type->child;
+      }
+    }
     if (t->kind != ArrayT && t->kind != PointerT)
       FATAL(&e->location, "Expect array/pointer type for access got '%s'", Type_name(t).s);
     return t->child;
@@ -3110,9 +3252,83 @@ void c_check_types(Module *m) {
   }
 }
 
+void c_build_vec_types(Program *p) {
+  for (Module *m = p->modules; m; m = m->next) {
+    for (TypeList *tl = m->types; tl; tl = tl->next) {
+      if (tl->type->kind != VecT)
+        continue;
+
+      BuffString vec_name = Type_special_cname(tl->type);
+      int count = tl->type->array_count;
+      if (count <= 0)
+        count = 16;
+
+      Type *value_type = tl->type->child;
+      Type *value_type_pointer = Module_find_pointer_type(m, value_type);
+      if (!value_type_pointer) {
+        value_type_pointer = Program_add_type(p, PointerT, "", m);
+        value_type_pointer->child = value_type;
+      }
+
+      Struct *vecS = (Struct *)Program_alloc(p, sizeof(Struct));
+      vecS->module = m;
+      vecS->member = (VariableList){(Variable *)Program_alloc(p, sizeof(Variable) * 3), 3};
+      vecS->member.v[0] = (Variable){null_location, "__d", value_type_pointer};
+      vecS->member.v[1] = (Variable){null_location, "len", &Int};
+      vecS->member.v[2] = (Variable){null_location, "cap", &Int};
+
+      tl->type->structT = vecS;
+      tl->type->kind = StructT;
+      tl->type->child = NULL;
+      tl->type->name = Program_copy_string(p, vec_name.s, strlen(vec_name.s));
+      Type *vec_pointer_type = Program_add_type(p, PointerT, "", m);
+      vec_pointer_type->child = tl->type;
+
+      {
+        Function *push = Program_add_type(p, FnT, "push", m)->fnT;
+        push->returnType = NULL; // value_type;
+        push->return_type_location = null_location;
+        push->is_extern_c = false;
+        push->parameter = (VariableList){(Variable *)Program_alloc(p, 2 * sizeof(Variable)), 2};
+        push->parameter.v[0] = (Variable){null_location, "v", vec_pointer_type};
+        push->parameter.v[1] = (Variable){null_location, "val", value_type};
+
+        BuffString pushfn;
+        snprintf(pushfn.s, sizeof(pushfn.s),
+                 "if(v.len >= v.cap){\n"
+                 "v.cap+=%d\n"
+                 "v.__d=realloc(v.__d as *char, v.cap*sizeof(%s)) as %s\n"
+                 "}\n"
+                 "v.__d[v.len++]=val\n"
+                 "}",
+                 count, Type_name(value_type).s, Type_name(value_type_pointer).s);
+        push->body = Program_parse_scope(p, m, &(State){pushfn.s, null_location});
+      }
+      {
+        Function *pop = Program_add_type(p, FnT, "pop", m)->fnT;
+        pop->returnType = value_type;
+        pop->return_type_location = null_location;
+        pop->is_extern_c = false;
+        pop->parameter = (VariableList){(Variable *)Program_alloc(p, 1 * sizeof(Variable)), 1};
+        pop->parameter.v[0] = (Variable){null_location, "v", vec_pointer_type};
+
+        pop->body = Program_parse_scope(p, m,
+                                        &(State){"v.len--\n"
+                                                 "return v.__d[v.len]\n"
+                                                 "}",
+                                                 null_location});
+      }
+    }
+  }
+}
+
 void c_Program(FILE *f, Program *p, Module *m) {
   Program_reset_module_finished(p);
+  c_check_types(&global);
   c_check_types(m);
+
+  Program_reset_module_finished(p);
+  c_build_vec_types(p);
 
   fputs("#include <ctype.h>\n", f);
   fputs("#include <stdarg.h>\n", f);
@@ -3137,24 +3353,33 @@ void c_Program(FILE *f, Program *p, Module *m) {
     fputs(cb->block, f);
 
   Program_reset_module_finished(p);
+  c_Module_make_variables_typed(p, &global);
   c_Module_make_variables_typed(p, m);
 
   Program_reset_module_finished(p);
+  c_Module_forward_types(f, &global);
   c_Module_forward_types(f, m);
 
   Program_reset_module_finished(p);
+  c_Module_types(f, &global);
   c_Module_types(f, m);
 
   Program_reset_module_finished(p);
+  c_Module_forward_fn(f, &global);
   c_Module_forward_fn(f, m);
 
   Program_reset_module_finished(p);
+  c_Module_fn(f, &global);
   c_Module_fn(f, m);
 
   fputs("\n", f);
   fputs("int main() {\n", f);
   fprintf(f, "  return %smain();\n", m->c_name);
   fputs("}\n", f);
+}
+
+void Program_add_defaults(Program *p) {
+  Program_parse_fn(p, &global, &(State){"realloc(d *char, s int) *char\n", null_location}, true);
 }
 
 int main(int argc, char *argv[]) {
@@ -3172,6 +3397,7 @@ int main(int argc, char *argv[]) {
 
   char buffer[2048 * 128];
   Program p = Program_new(buffer, 2048 * 128);
+  Program_add_defaults(&p);
 
   Module *m = Program_parse_file(&p, main_mod);
   if (!m)

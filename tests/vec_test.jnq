@@ -1,0 +1,55 @@
+
+use Point from sub.util
+
+fn int_vec()
+{
+  printf(" .int_vec\n")
+
+  v := vec[]int{}
+  ASSERT(0 == v.len)
+  ASSERT(0 == v.cap)
+  v.push(42)
+  ASSERT(1 == v.len)
+  ASSERT(16 == v.cap)
+  ASSERT(42 == v[0])
+
+  v[0] = 21
+  ASSERT(21 == v[0])
+
+  x := v.pop()
+  ASSERT(0 == v.len)
+  ASSERT(16 == v.cap)
+  ASSERT(21 == x)
+
+  for (i:=0; i<100; ++i)
+    v.push(i + 1)
+  
+  ASSERT(100 == v.len)
+  ASSERT(16*7 == v.cap)
+  ASSERT(1 == v[0])
+  ASSERT(33 == v[32])
+}
+
+fn vec_Point()
+{
+  printf(" .vec_Point\n")
+
+  v := vec[128]Point{}
+  ASSERT(0 == v.len)
+  ASSERT(0 == v.cap)
+
+  v.push(Point{3,6})
+  ASSERT(1 == v.len)
+  ASSERT(128 == v.cap)
+  ASSERT(3 == v[0].x)
+  ASSERT(6 == v[0].y)
+}
+
+fn main() int
+{
+  printf("vec_test\n")
+  int_vec()
+  vec_Point()
+  printf(" ...ok\n")
+  return 0
+}
