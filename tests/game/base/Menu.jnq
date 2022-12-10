@@ -60,8 +60,7 @@ fn set_option(e *Entry, o int, g int, jump bool) {
 }
 
 type Group struct {
-  entries [16]Entry
-  entry_len int
+  entries vec[]Entry
 
   fa float
   a float
@@ -79,13 +78,12 @@ fn updateGroup(g *Group, on bool) {
 
 fn destroyGroup(g *Group) {
   //m.text:destroy()
-  for (i := 0; i<g.entry_len; ++i)
+  for (i := 0; i<g.entries.len; ++i)
     g.entries[i].destroyEntry()
 }
 
 type Menu struct {
-  groups [8]Group
-  group_len int
+  groups vec[]Group
 
   selected_group int
   selected_entry int
@@ -98,7 +96,6 @@ type Menu struct {
 
 fn NewMenu() Menu {
   return Menu{
-    group_len: 0,
     selected_group: 0,
     selected_entry: 0,
     marker_a: 0.3f,
@@ -113,7 +110,7 @@ fn NewMenu() Menu {
 
 fn destroy(m *Menu) {
   // m.marker:destroy()
-  for (i := 0; i<m.group_len; ++i) 
+  for (i := 0; i<m.groups.len; ++i) 
     m.groups[i].destroyGroup() 
 }
 
@@ -153,10 +150,10 @@ fn update(m *Menu, dt float) {
   // if (KEYS_DOWN.pressed("d")) 
   //   m.select(m.selected_group + 1, m.selected_entry)
   
-  for (j:=0; j<m.group_len; ++j) {
+  for (j:=0; j<m.groups.len; ++j) {
     g := &m.groups[j]
     g.updateGroup(m.selected_group == j)
-    for (i:=0; i<g.entry_len; ++i) {
+    for (i:=0; i<g.entries.len; ++i) {
       e := &g.entries[i]
       e.set_option(i - m.selected_entry, j - m.selected_group, !m.done_init)
       e.updateEntry()
@@ -192,7 +189,7 @@ fn update(m *Menu, dt float) {
 // end
 
 fn new_group(m *Menu, name *char) {
-  m.selected_group = m.group_len
+  m.selected_group = m.groups.len
   g := Group{ 
     fa: 1.0f,
     a: 1.0f,
@@ -203,12 +200,12 @@ fn new_group(m *Menu, name *char) {
   // g.text:set_color(0.9, 0.9, 0.9)
   // g.text:set_position(240 - 8 * (2 + #name), 248)
   
-  m.groups[m.group_len++] = g
+  m.groups.push(g)
 }
 
 fn select(m *Menu, g int, e int, jump bool) {
-  m.selected_group = clampi(g, 0, m.group_len - 1)
-  m.selected_entry = clampi(e, 0, m.group().entry_len)
+  m.selected_group = clampi(g, 0, m.groups.len - 1)
+  m.selected_entry = clampi(e, 0, m.group().entries.len - 1)
   if (jump)
     m.marker_a = 1.0f
   else 
@@ -248,7 +245,7 @@ fn add_entry(m *Menu, img *Image, text *char, needed []*Entry
   // }
   e.apply()
   g := m.group()
-  g.entries[g.entry_len++] = e
-  return &g.entries[g.entry_len-1]
+  g.entries.push(e)
+  return &g.entries[g.entries.len-1]
 }
 
