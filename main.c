@@ -2492,7 +2492,7 @@ void c_expression(FILE *f, Expression *e) {
   case AccessE:
     c_expression(f, e->access->o);
     if (e->access->delegate)
-      fprintf(f, ".%s", e->access->delegate);
+      fprintf(f, "%s", e->access->delegate);
     fprintf(f, "[");
     c_expression(f, e->access->p);
     fprintf(f, "]");
@@ -3073,10 +3073,21 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
     if (subt != &Int)
       FATAL(&e->access->p->location, "Expect integral type for array subscription, got '%s'", Type_name(subt).s);
     Type *t = c_Expression_make_variables_typed(s, p, m, e->access->o);
-    if (t->kind == StructT) {
+    if (t->kind == StructT && t->structT->member.len > 0) {
       Variable *delegateV = &t->structT->member.v[0];
       if (delegateV->type->kind == PointerT && strcmp(delegateV->name, "__d") == 0) {
-        e->access->delegate = delegateV->name;
+        BuffString bf;
+        int len = snprintf(bf.s, sizeof(bf.s), ".%s", delegateV->name);
+        e->access->delegate = Program_copy_string(p, bf.s, len);
+        return delegateV->type->child;
+      }
+    }
+    if (t->kind == PointerT && t->child->kind == StructT && t->child->structT->member.len > 0) {
+      Variable *delegateV = &t->child->structT->member.v[0];
+      if (delegateV->type->kind == PointerT && strcmp(delegateV->name, "__d") == 0) {
+        BuffString bf;
+        int len = snprintf(bf.s, sizeof(bf.s), "->%s", delegateV->name);
+        e->access->delegate = Program_copy_string(p, bf.s, len);
         return delegateV->type->child;
       }
     }

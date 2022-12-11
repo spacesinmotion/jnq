@@ -33,8 +33,8 @@ fn destroy(inv *Inventory) {
 
 fn find_item(l *vec[]Item, name *char) *Item {
   for (i := 0; i < l.len; ++i ) 
-    if (strcmp(l.__d[i].item.name, name) == 0)
-      return &l.__d[i]
+    if (strcmp(l[i].item.name, name) == 0)
+      return &l[i]
   return null
 }
 
