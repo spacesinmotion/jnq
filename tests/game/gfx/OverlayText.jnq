@@ -28,3 +28,8 @@ fn set_color(ot *OverlayText, r float, g float, b float, a float) {
   ot.rgb = Vec3{r, g, b}
   ot.a = a
 }
+
+fn set_color_rgb(ot *OverlayText, r int, g int, b int) {
+  ot.rgb = Vec3{r as float / 255.0f, g as float / 255.0f, b as float / 255.0f}
+  ot.a = 1.0f
+}
