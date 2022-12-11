@@ -3348,6 +3348,20 @@ void c_build_vec_types(Program *p) {
                                                  "}",
                                                  null_location});
       }
+      {
+        BuffString fn_name = vec_name;
+        strcat(fn_name.s, "free");
+        Function *free = Program_add_type(p, FnT, Program_copy_string(p, fn_name.s, strlen(fn_name.s)), m)->fnT;
+        free->returnType = NULL;
+        free->return_type_location = null_location;
+        free->is_extern_c = false;
+        free->parameter = (VariableList){(Variable *)Program_alloc(p, 1 * sizeof(Variable)), 1};
+        free->parameter.v[0] = (Variable){null_location, "v", vec_pointer_type};
+        free->body = Program_parse_scope(p, m,
+                                         &(State){"free (v.__d as *char)\n"
+                                                  "}",
+                                                  null_location});
+      }
     }
   }
 }
@@ -3410,6 +3424,7 @@ void c_Program(FILE *f, Program *p, Module *m) {
 
 void Program_add_defaults(Program *p) {
   Program_parse_fn(p, &global, &(State){"realloc(d *char, s int) *char\n", null_location}, true);
+  Program_parse_fn(p, &global, &(State){"free(d *char)\n", null_location}, true);
 }
 
 int main(int argc, char *argv[]) {

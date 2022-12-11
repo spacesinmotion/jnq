@@ -28,6 +28,8 @@ fn int_vec()
   ASSERT(16*7 == v.cap)
   ASSERT(1 == v[0])
   ASSERT(33 == v[32])
+
+  v.free()
 }
 
 fn vec_Point()
@@ -43,6 +45,8 @@ fn vec_Point()
   ASSERT(128 == v.cap)
   ASSERT(3 == v[0].x)
   ASSERT(6 == v[0].y)
+
+  v.free()
 }
 
 fn vec_float_int()
@@ -59,6 +63,9 @@ fn vec_float_int()
 
   ASSERT(vi.cap == 32)
   ASSERT(vf.cap == 16)
+
+  vi.free()
+  vf.free()
 }
 
 fn vec_of_pointer()
@@ -78,6 +85,8 @@ fn vec_of_pointer()
   *vi[0] = 54321
   ASSERT(*vi[0] == 54321)
   ASSERT(i == 54321)
+
+  vi.free()
 }
 
 fn main() int

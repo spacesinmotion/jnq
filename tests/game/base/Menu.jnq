@@ -46,6 +46,14 @@ type Entry struct {
   needed vec[]Depend
 }
 
+fn destroyEntry(e *Entry) {
+  e.back.destroy()
+  e.img.destroy()
+  e.text.destroy()
+  for (i:=0; i<e.needed.len; ++i) 
+    e.needed[i].destroyDepend() 
+  e.needed.free()
+}
 
 fn apply(e *Entry) {
   for (i:=0; i<e.needed.len; ++i) 
@@ -69,13 +77,7 @@ fn updateEntry(e *Entry) {
   e.apply()
 }
 
-fn destroyEntry(e *Entry) {
-  e.back.destroy()
-  e.img.destroy()
-  e.text.destroy()
-  for (i:=0; i<e.needed.len; ++i) 
-    e.needed[i].destroyDepend() 
-}
+
 
 fn set_option(e *Entry, o int, g int, jump bool) {
   e.fx = 240.0f + g as float * 188.0f 
@@ -101,6 +103,14 @@ type Group struct {
   name *char
 }
 
+fn destroyGroup(g *Group) {
+  g.text.destroy()
+  for (i := 0; i<g.entries.len; ++i)
+    g.entries[i].destroyEntry()
+  g.entries.free()
+}
+
+
 fn updateGroup(g *Group, on bool) {
   if (on)
     g.fa = 1.0f
@@ -108,12 +118,6 @@ fn updateGroup(g *Group, on bool) {
     g.fa = 0.0f
   g.a = lerp(g.fa, g.a, 0.9f)
   g.text.set_color(0.9f, 0.9f, 0.2f, g.a)
-}
-
-fn destroyGroup(g *Group) {
-  g.text.destroy()
-  for (i := 0; i<g.entries.len; ++i)
-    g.entries[i].destroyEntry()
 }
 
 type Menu struct {
@@ -148,6 +152,7 @@ fn destroy(m *Menu) {
   m.marker.destroy()
   for (i := 0; i<m.groups.len; ++i) 
     m.groups[i].destroyGroup() 
+  m.groups.free()
 }
 
 fn group(m *Menu) *Group {

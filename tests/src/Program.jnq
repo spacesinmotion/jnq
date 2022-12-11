@@ -9,7 +9,6 @@ cfn strcpy(d *char, s *char) *char
 cfn strcat(d *char, s *char)
 cfn strcmp(a *char, b *char) int
 cfn strlen(a *char) int
-cfn free(a *char) int
 
 type MemoryArena struct {
   buffer *char

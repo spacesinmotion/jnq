@@ -44,6 +44,7 @@ fn destroy(l *Log) {
     // if (m.img)
     //   m.img.destroy()
   }
+  l.messages.free()
 }
 
 fn add_message(l *Log, message *char, img *Image) {
