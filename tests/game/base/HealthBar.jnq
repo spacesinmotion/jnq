@@ -1,7 +1,11 @@
 
+use BillboardImage from tests.game.gfx.BillboardImage
 use pow, rand_in, lerp, clamp from tests.game.math.util
 
 type HealthBar struct {
+  bar *BillboardImage
+  back *BillboardImage
+
   current_health float
   health float
   max_health float
@@ -9,21 +13,21 @@ type HealthBar struct {
 }
 
 fn NewHealthBar(max_health float) HealthBar {
-  return HealthBar{0.0f, max_health, max_health}
+  back := null as *BillboardImage // gfx.new_overlay_billboard()
+  back.set_color_rgb(4, 3, 34)
+  back.set_size(80.0f, 10.0f)
+  back.set_offset(-40.0f, 0.0f, 0.0f)
+  back.set_pixel_scale(true)
+  bar := back.clone()
+  bar.set_color_rgb(224, 53, 34)
+  bar.set_offset(-40.0f, 0.0f, -0.1f)
 
-  // hb.back = gfx.new_billboard()
-  // hb.back:set_color(rgb(4, 3, 34))
-  // hb.back:set_size(80, 10)
-  // hb.back:set_offset(-40, 0)
-  // hb.back:set_pixel_scale(true)
-  // hb.bar = hb.back:clone()
-  // hb.bar:set_color(rgb(224, 53, 34))
-  // hb.bar:set_offset(-40, 0, -0.1)
+  return HealthBar{back, bar, 0.0f, max_health, max_health}
 }
 
 fn destroy(hb *HealthBar) {
-  // hb.bar.destroy()
-  // hb.back.destroy()
+  hb.bar.destroy()
+  hb.back.destroy()
 }
 
 fn add_health(hb *HealthBar, v float) {
@@ -33,8 +37,8 @@ fn add_health(hb *HealthBar, v float) {
 }
 
 fn set_position(hb *HealthBar, x float, y float, z float) {
-  // hb.back:set_position(x, y, z)
-  // hb.bar:set_position(x, y, z)
+  hb.back.set_position(x, y, z)
+  hb.bar.set_position(x, y, z)
 }
 
 fn change_intensitiy(hb *HealthBar) float {
@@ -48,16 +52,17 @@ fn update(hb *HealthBar, dt float) bool {
     hb.changed_time = 0.0f
 
   c := pow(hb.changed_time as double, 0.25) as float * 100.0f
-  // hb.back:set_color(rgb(4 + c, 3 + c, 34 + c))
-  // hb.bar:set_color(rgb(224 - c, 53 + c, 34 + c))
+  ci := c as int
+  hb.back.set_color_rgb(4 + ci, 3 + ci, 34 + ci)
+  hb.bar.set_color_rgb(224 - ci, 53 + ci, 34 + ci)
 
   c = hb.change_intensitiy()
   ox := rand_in(-15.0f, 15.0f) * c
   oy := rand_in(-5.0f, 15.0f) * c
-  // hb.back:set_offset(-40 + ox, oy)
-  // hb.bar:set_offset(-40 + ox, oy, -0.1)
+  hb.back.set_offset(-40.0f + ox, oy, 0.0f)
+  hb.bar.set_offset(-40.0f + ox, oy, -0.1f)
 
   hb.current_health = lerp(hb.health, hb.current_health, 0.7f)
-  //hb.bar:set_size(80 * hb.current_health / hb.max_health, 10)
+  hb.bar.set_size(80.0f * hb.current_health / hb.max_health, 10.0f)
   return hb.current_health <= 0.25f
 }

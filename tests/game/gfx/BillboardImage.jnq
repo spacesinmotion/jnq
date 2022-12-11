@@ -1,0 +1,51 @@
+
+use Vec2 from tests.game.math.Vec2 
+use Vec3 from tests.game.math.Vec3 
+
+use Image from Image
+
+type BillboardImage struct {
+  img *Image
+  pos Vec3
+  size Vec2
+  offset Vec3
+  rgb Vec3
+  a float
+  pixel_scale bool
+}
+
+fn destroy(bi *BillboardImage) {}
+
+fn clone(bi *BillboardImage) *BillboardImage {
+  return null as *BillboardImage
+}
+
+fn set_image(bi *BillboardImage, img *Image) {
+  bi.img = img
+}
+
+fn set_position(bi *BillboardImage, x float, y float, z float) {
+  bi.pos = Vec3{x, y}
+}
+
+fn set_color(bi *BillboardImage, r float, g float, b float, a float) {
+  bi.rgb = Vec3{r, g, b}
+  bi.a = a
+}
+
+fn set_color_rgb(bi *BillboardImage, r int, g int, b int) {
+  bi.rgb = Vec3{r as float / 255.0f, g as float / 255.0f, b as float / 255.0f}
+  bi.a = 1.0f
+}
+
+fn set_size(bi *BillboardImage, w float, h float) {
+  bi.size = Vec2{w, h}
+}
+
+fn set_offset(bi *BillboardImage, x float, y float, z float) {
+  bi.offset = Vec3{x, y, z}
+}
+
+fn set_pixel_scale(bi *BillboardImage, ps bool) {
+  bi.pixel_scale = ps
+}

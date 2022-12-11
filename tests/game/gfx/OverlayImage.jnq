@@ -14,6 +14,10 @@ type OverlayImage struct {
 
 fn destroy(oi *OverlayImage) {}
 
+fn clone(oi *OverlayImage) *OverlayImage {
+  return null as *OverlayImage
+}
+
 fn set_image(oi *OverlayImage, img *Image) {
   oi.img = img
 }
@@ -27,6 +31,12 @@ fn set_color(oi *OverlayImage, r float, g float, b float, a float) {
   oi.a = a
 }
 
+fn set_color_rgb(oi *OverlayImage, r int, g int, b int) {
+  oi.rgb = Vec3{r as float / 255.0f, g as float / 255.0f, b as float / 255.0f}
+  oi.a = 1.0f
+}
+
 fn set_size(oi *OverlayImage, w float, h float) {
   oi.size = Vec2{w, h}
 }
+
