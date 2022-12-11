@@ -2979,8 +2979,8 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
     for (int j = test_start; i < e->call->p.len && j < t->fnT->parameter.len; ++i, ++j) {
       Type *pt = c_Expression_make_variables_typed(s, p, m, e->call->p.p[i].p);
       if (!Type_equal(pt, t->fnT->parameter.v[j].type))
-        FATAL(&e->call->p.p[i].p->location, "Type missmatch got '%s', expect '%s'", Type_name(pt).s,
-              Type_name(t->fnT->parameter.v[j].type).s);
+        FATAL(&e->call->p.p[i].p->location, "Type missmatch got '%s' (%p), expect '%s' (%p)", Type_name(pt).s, pt,
+              Type_name(t->fnT->parameter.v[j].type).s, t->fnT->parameter.v[j].type);
     }
     for (; i < e->call->p.len; ++i)
       c_Expression_make_variables_typed(s, p, m, e->call->p.p[i].p);
@@ -3307,8 +3307,11 @@ void c_build_vec_types(Program *p) {
       tl->type->kind = StructT;
       tl->type->child = NULL;
       tl->type->name = Program_copy_string(p, vec_name.s, strlen(vec_name.s));
-      Type *vec_pointer_type = Program_add_type(p, PointerT, "", m);
-      vec_pointer_type->child = tl->type;
+      Type *vec_pointer_type = Module_find_pointer_type(m, tl->type);
+      if (!vec_pointer_type) {
+        vec_pointer_type = Program_add_type(p, PointerT, "", m);
+        vec_pointer_type->child = tl->type;
+      }
 
       {
         BuffString fn_name = vec_name;

@@ -1,36 +1,40 @@
 
 use Item, ItemItem from Item
 use Image from tests.game.gfx.Image 
+use OverlayText from tests.game.gfx.OverlayText
 
 cfn strcmp(a *char, b *char) int
 
 type Inventory struct {
-  items [256]Item
-  item_count int
-  tools [256]Item
-  tool_count int
+  items vec[]Item
+  tools vec[]Item
 }
 
 fn NewInventory() Inventory {
-  return Inventory{
-    item_count: 0,
-    tool_count: 0,
-  }
+  return Inventory{}
 }
 
 fn destroy(inv *Inventory) {
-  for (i := 0; i< inv.item_count; ++i ) {
+  for (i := 0; i< inv.items.len; ++i ) {
     m := &inv.items[i]
-    // m.text.destroy()
-    // if (m.img)
-    //   m.img.destroy() 
+    m.text.destroy()
+    if (m.img)
+      m.img.destroy() 
   }
+  for (i := 0; i< inv.tools.len; ++i ) {
+    m := &inv.tools[i]
+    m.text.destroy()
+    if (m.img)
+      m.img.destroy() 
+  }
+  inv.items.free()
+  inv.tools.free()
 }
 
-fn find_item(l *Item, len int, name *char) *Item {
-  for (i := 0; i < len; ++i ) 
-    if (strcmp(l[i].item.name, name) == 0)
-      return &l[i]
+fn find_item(l *vec[]Item, name *char) *Item {
+  for (i := 0; i < l.len; ++i ) 
+    if (strcmp(l.__d[i].item.name, name) == 0)
+      return &l.__d[i]
   return null
 }
 
@@ -46,18 +50,19 @@ fn init_item(it *Item, img *Image, pos int, row int) {
   //s.img:set_texture(img)
 }
 
-fn add_to(l *Item, c *int, n *char, img *Image, row int) *Item{
-  it := find_item(l, *c, n);
+fn add_to(l *vec[]Item, n *char, img *Image, row int) *Item{
+  it := find_item(l, n);
   if (!it) {
-    it = &l[*c]
-    init_item(it, img, 0, row)
-    (*c)++
+    nitem := Item{}
+    init_item(&nitem, img, 0, row)
+    l.push(nitem)
+    it := &l[l.len-1];
   } 
   return it
 }
 
 fn add_item(inv *Inventory, item *ItemItem) *Item {
-  s := add_to(inv.items, &inv.item_count, item.name, item.img, 0)
+  s := add_to(&inv.items, item.name, item.img, 0)
   s.count++
   // s.text:set_text('x' .. tostring(s.count))
   // fn s:add_count(c) {
@@ -68,7 +73,7 @@ fn add_item(inv *Inventory, item *ItemItem) *Item {
 }
 
 fn add_tool(inv *Inventory, key *char, img *Image) {
-  s := add_to(inv.tools, &inv.tool_count, key, img, 1)
+  s := add_to(&inv.tools, key, img, 1)
   s.percent = 100.0f
   // s.text:set_text(tostring(s.percent) .. '%')
   // fn s:add_percent(c) {
@@ -78,10 +83,10 @@ fn add_tool(inv *Inventory, key *char, img *Image) {
 }
 
 fn count_thing(inv *Inventory, item *ItemItem) int {
-  it := find_item(inv.items, inv.item_count, item.name)
+  it := find_item(&inv.items, item.name)
   if (it)
     return it.count
-  it = find_item(inv.tools, inv.tool_count, item.name);
+  it = find_item(&inv.tools, item.name);
   if (it != null && it.percent > 0.0f) 
     return 1
 
@@ -92,19 +97,19 @@ fn remove(inv *Inventory, depends *Item, count int) {
   for (i:=0; i<count; ++i) {
     d := &depends[i]
     n := d.item.name
-    it := find_item(inv.items, inv.item_count, n);
+    it := find_item(&inv.items, n);
     if (it)
       it.add_count(-d.count) 
-    it = find_item(inv.tools, inv.tool_count, n);
+    it = find_item(&inv.tools, n);
     if (it)
       it.add_percent(-d.item.usage) 
   }
 }
 
 fn update(inv *Inventory, dt float) {
-  for (i := 0; i< inv.item_count; ++i ) 
+  for (i := 0; i< inv.items.len; ++i ) 
     inv.items[i].update(i);
-  for (i := 0; i< inv.tool_count; ++i ) 
+  for (i := 0; i< inv.tools.len; ++i ) 
     inv.tools[i].update(i);
 }
 
