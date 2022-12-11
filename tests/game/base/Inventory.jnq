@@ -1,5 +1,5 @@
 
-use Item, ItemItem from Item
+use Item, ItemItem, NewItem from Item
 use Image from tests.game.gfx.Image 
 use OverlayText from tests.game.gfx.OverlayText
 
@@ -38,48 +38,26 @@ fn find_item(l *vec[]Item, name *char) *Item {
   return null
 }
 
-fn init_item(it *Item, img *Image, pos int, row int) {
-  it.fx = it.x = 200.0f + pos as float * 64.0f 
-  it.fy = it.y = 10.0f
-  it.row = row
-  //s.text = gfx.new_overlay_text();
-  //s.text:set_color(0.9, 0.9, 0.9)
-  //s.img = gfx.new_overlay_billboard();
-  //s.img:set_size(16, 16)
-  //s.img:set_color(1, 1, 1)
-  //s.img:set_texture(img)
-}
-
-fn add_to(l *vec[]Item, n *char, img *Image, row int) *Item{
-  it := find_item(l, n);
+fn add_to(l *vec[]Item, itit *ItemItem, row int) *Item{
+  it := find_item(l, itit.name);
   if (!it) {
-    nitem := Item{}
-    init_item(&nitem, img, 0, row)
-    l.push(nitem)
+    l.push(NewItem(0, row, itit))
     it := &l[l.len-1];
   } 
   return it
 }
 
-fn add_item(inv *Inventory, item *ItemItem) *Item {
-  s := add_to(&inv.items, item.name, item.img, 0)
+fn add_item(inv *Inventory, itit *ItemItem) *Item {
+  s := add_to(&inv.items, itit, 0)
   s.count++
-  // s.text:set_text('x' .. tostring(s.count))
-  // fn s:add_count(c) {
-  //   s.count = s.count + c
-  //   s.text:set_text('x' .. tostring(s.count))
-  // }
+  // s.text.set_text('x' .. tostring(s.count))
   return s
 }
 
-fn add_tool(inv *Inventory, key *char, img *Image) {
-  s := add_to(&inv.tools, key, img, 1)
+fn add_tool(inv *Inventory, itit *ItemItem) {
+  s := add_to(&inv.tools, itit, 1)
   s.percent = 100.0f
-  // s.text:set_text(tostring(s.percent) .. '%')
-  // fn s:add_percent(c) {
-  //   s.percent = s.percent + c
-  //   s.text:set_text(tostring(s.percent) .. '%')
-  // }
+  // s.text.set_text(tostring(s.percent) .. '%')
 }
 
 fn count_thing(inv *Inventory, item *ItemItem) int {

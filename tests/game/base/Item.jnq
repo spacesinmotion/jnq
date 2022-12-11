@@ -24,22 +24,43 @@ type Item struct {
   row int
 }
 
+fn NewItem(pos int, row int, it *ItemItem) Item {
+  text := null as *OverlayText // gfx.new_overlay_text();
+  text.set_color(0.9f, 0.9f, 0.9f, 1.0f)
+
+  imgd := null as *OverlayImage // gfx.new_overlay_billboard();
+  imgd.set_size(16.0f, 16.0f)
+  imgd.set_color(1.0f, 1.0f, 1.0f, 1.0f)
+  imgd.set_image(it.img)
+
+  x := 200.0f + pos as float * 64.0f 
+  y := 10.0f
+  return Item {
+    text: text,
+    img: imgd,
+
+    x: x, y: y,
+    fx: x, fy: y,
+    row: row
+  }
+}
+
 fn update(it *Item, p int) {
   it.fx = 200.0f + p as float * 64.0f
   it.fy = 8.0f + it.row as float * 24.0f
   it.x = lerp(it.fx, it.x, 0.9f)
   it.y = lerp(it.fy, it.y, 0.9f)
-  // it.text:set_position(it.x + 24, it.y)
-  // if (it.img) 
-  //   it.img.set_position(it.x, it.y - 6)
+  it.text.set_position(it.x + 24.0f, it.y)
+  if (it.img) 
+    it.img.set_position(it.x, it.y - 6.0f)
 }
 
 fn add_count(it *Item, c int) {
   it.count += c
-  // it.text:set_text('x' .. tostring(s.count))
+  // it.text.set_text('x' .. tostring(s.count))
 }
 
 fn add_percent(it *Item, c float) {
   it.percent += c
-  // it.text:set_text(tostring(s.percent) .. '%')
+  // it.text.set_text(tostring(s.percent) .. '%')
 }
