@@ -1,7 +1,14 @@
 
+use OverlayImage from tests.game.gfx.OverlayImage
+use OverlayText from tests.game.gfx.OverlayText
 use lerp from tests.game.math.util
 
 type XPOverlayBar struct {
+  bar *OverlayImage
+  back *OverlayImage
+  level_text *OverlayText
+  xp_text *OverlayText
+
   current_xp float
   xp float
   max_xp float
@@ -10,53 +17,63 @@ type XPOverlayBar struct {
   all_xp float
 }
 
-// local w, h = 320, 16
 
 fn NewXPOverlayBar(max_xp float) XPOverlayBar {
+  w := 320.0f
+  h := 16.0f
+
+  back := null as *OverlayImage // gfx.new_overlay_billboard()
+  back.set_position(64.0f, 16.0f + 8.0f + 16.0f)
+  back.set_color_rgb(4, 3, 34)
+  back.set_size(w, h)
+  
+  bar := back.clone()
+  bar.set_color_rgb(240, 233, 26)
+
+  level_text := null as *OverlayText // gfx.new_overlay_text()
+  level_text.set_position(8.0f, 24.0f)
+  level_text.set_scale(3.0f, 3.0f)
+  level_text.set_color_rgb(240, 233, 26)
+  level_text.set_text("01")
+
+  xp_text := null as *OverlayText // gfx.new_overlay_text()
+  xp_text.set_position(64.0f + w + 8.0f, 16.0f + 8.0f + 17.0f)
+  xp_text.set_scale(2.0f, 2.0f)
+  xp_text.set_color_rgb(240, 233, 26)
+  // xp_text.set_text("0/" .. xpo.max_xp)
+
   return XPOverlayBar{
+    bar: bar,
+    back: back,
+    level_text: level_text,
+    xp_text: xp_text,
     current_xp: 0.0f,
     xp: max_xp,
     max_xp: max_xp,
     level: 1,
     all_xp: 0.0f
   }
-
-  // xpo.back = gfx.new_overlay_billboard()
-  // xpo.back:set_position(64, 16 + 8 + 16)
-  // xpo.back:set_color(rgb(4, 3, 34))
-  // xpo.back:set_size(w, h)
-  // xpo.bar = xpo.back:clone()
-  // xpo.bar:set_color(rgb(240, 233, 26))
-
-  // xpo.level_text = gfx.new_overlay_text()
-  // xpo.level_text:set_position(8, 24)
-  // xpo.level_text:set_scale(3, 3)
-  // xpo.level_text:set_color(rgb(240, 233, 26))
-  // xpo.level_text:set_text('01')
-
-  // xpo.xp_text = gfx.new_overlay_text()
-  // xpo.xp_text:set_position(64 + w + 8, 16 + 8 + 17)
-  // xpo.xp_text:set_scale(2, 2)
-  // xpo.xp_text:set_color(rgb(240, 233, 26))
-  // xpo.xp_text:set_text('0/' .. xpo.max_xp)
 }
 
 fn destroy(xpo *XPOverlayBar) {
-  // xpo.back:destroy()
-  // xpo.bar:destroy()
-  // xpo.level_text:destroy()
-  // xpo.xp_text:destroy()
+  xpo.back.destroy()
+  xpo.bar.destroy()
+  xpo.level_text.destroy()
+  xpo.xp_text.destroy()
 }
 
 fn update(xpo *XPOverlayBar, dt float) bool {
+  w := 320.0f
+  h := 16.0f
+
   xpo.current_xp = lerp(xpo.xp, xpo.current_xp, 0.7f)
-  // xpo.bar:set_size(w * xpo.current_xp / xpo.max_xp, h)
+  xpo.bar.set_size(w * xpo.current_xp / xpo.max_xp, h)
   if (xpo.current_xp >= xpo.max_xp) {
     xpo.xp = xpo.xp - xpo.max_xp
     xpo.max_xp = xpo.max_xp * 2.0f
     xpo.level = xpo.level + 1
-    // xpo.level_text:set_text(string.format('%02d', xpo.level))
-    // xpo.xp_text:set_text(xpo.xp .. '/' .. xpo.max_xp)
+    // xpo.level_text.set_text(string.format("%02d", xpo.level))
+    // xpo.xp_text.set_text(xpo.xp .. '/' .. xpo.max_xp)
     return true
   }
   return false
@@ -65,6 +82,6 @@ fn update(xpo *XPOverlayBar, dt float) bool {
 fn add(xpo *XPOverlayBar, v float) {
   xpo.xp = xpo.xp + v
   xpo.all_xp = xpo.all_xp + v
-  // xpo.xp_text:set_text(xpo.xp .. '/' .. xpo.max_xp)
+  // xpo.xp_text.set_text(xpo.xp .. '/' .. xpo.max_xp)
 }
 
