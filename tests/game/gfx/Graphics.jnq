@@ -1,0 +1,24 @@
+
+
+use Vec3 from tests.game.math.Vec3
+use OverlayText from OverlayText
+use OverlayImage from OverlayImage
+use BillboardImage from BillboardImage
+
+type Graphics struct {}
+
+fn look_at(gfx *Graphics, eye Vec3, target Vec3, up Vec3) {
+  
+}
+
+fn new_overlay_text(gfx *Graphics) *OverlayText {
+  return null as *OverlayText
+}
+
+fn new_overlay_image(gfx *Graphics) *OverlayImage {
+  return null as *OverlayImage
+}
+
+fn new_billboeard(gfx *Graphics) *BillboardImage {
+  return null as *BillboardImage
+}

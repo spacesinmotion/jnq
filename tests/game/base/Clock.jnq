@@ -1,5 +1,6 @@
 
 use OverlayText from tests.game.gfx.OverlayText 
+use Graphics from tests.game.gfx.Graphics
 use floor, pow from tests.game.math.util
 
 type Clock struct {
@@ -9,9 +10,9 @@ type Clock struct {
   second int 
 }
 
-fn NewClock(W int) Clock {
+fn NewClock(gfx *Graphics, W int) Clock {
   cl := Clock{
-    // display: gfx.new_overlay_text(),
+    display: gfx.new_overlay_text(),
     time: 0.0f,
     minute: 0,
     second: 0

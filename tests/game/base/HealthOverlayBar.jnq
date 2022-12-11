@@ -1,4 +1,5 @@
 
+use Graphics from tests.game.gfx.Graphics
 use OverlayImage from tests.game.gfx.OverlayImage
 use OverlayText from tests.game.gfx.OverlayText
 use lerp, clamp from tests.game.math.util
@@ -14,16 +15,16 @@ type HealthOverlayBar struct {
 }
 
 
-fn NewHealthOverlayBar(max_lp float) HealthOverlayBar {
+fn NewHealthOverlayBar(gfx *Graphics, max_lp float) HealthOverlayBar {
   w := 320.0f
   h := 16.0f // constants ?
-  back := null as *OverlayImage // gfx.new_overlay_billboard()
+  back := gfx.new_overlay_image()
   back.set_position(64.0f, 16.0f)
   back.set_color_rgb(4, 3, 34)
   back.set_size(w, h)
   bar := back.clone()
   bar.set_color_rgb(224, 53, 34)
-  text := null as *OverlayText //gfx.new_overlay_text()
+  text := gfx.new_overlay_text()
   text.set_position(64.0f + w + 8.0f, 17.0f)
   text.set_scale(2.0f, 2.0f)
   text.set_color_rgb(224, 53, 34)

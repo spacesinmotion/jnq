@@ -2,6 +2,7 @@
 use Item, ItemItem, NewItem from Item
 use Image from tests.game.gfx.Image 
 use OverlayText from tests.game.gfx.OverlayText
+use Graphics from tests.game.gfx.Graphics
 
 cfn strcmp(a *char, b *char) int
 
@@ -41,7 +42,7 @@ fn find_item(l *vec[]Item, name *char) *Item {
 fn add_to(l *vec[]Item, itit *ItemItem, row int) *Item{
   it := find_item(l, itit.name);
   if (!it) {
-    l.push(NewItem(0, row, itit))
+    l.push(NewItem(null as *Graphics, 0, row, itit))
     it := &l[l.len-1];
   } 
   return it

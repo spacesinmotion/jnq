@@ -1,4 +1,5 @@
 
+use Graphics from tests.game.gfx.Graphics 
 use Image from tests.game.gfx.Image
 use OverlayText from tests.game.gfx.OverlayText 
 use OverlayImage from tests.game.gfx.OverlayImage 
@@ -30,11 +31,13 @@ fn set_alpha(m *Message, a float) {
 }
 
 type Log struct {
+  gfx *Graphics
+
   messages vec[]Message
 }
 
-fn NewLog() Log {
-  return Log{}
+fn NewLog(gfx *Graphics) Log {
+  return Log{gfx: gfx}
 }
 
 fn destroy(l *Log) {
@@ -51,7 +54,7 @@ fn add_message(l *Log, message *char, img *Image) {
   i := l.messages.len + 1
   m := Message{ 
     mes: message,
-    // text: gfx.new_overlay_text(), 
+    text: l.gfx.new_overlay_text(), 
     time: 1.25f,
     x: 10.0f, 
     y: 100.0f + i as float * 24.0f
@@ -62,7 +65,7 @@ fn add_message(l *Log, message *char, img *Image) {
   m.fy = m.y
 
   if (img) {
-    // m.img = gfx.new_overlay_billboard()
+    m.img = l.gfx.new_overlay_image()
     m.img.set_color(1.0f, 1.0f, 1.0f, 1.0f)
     m.img.set_size(16.0f, 16.0f)
     m.img.set_image(img)

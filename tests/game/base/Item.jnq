@@ -1,5 +1,6 @@
 
 use Image from tests.game.gfx.Image
+use Graphics from tests.game.gfx.Graphics
 use OverlayImage from tests.game.gfx.OverlayImage
 use OverlayText from tests.game.gfx.OverlayText
 use lerp from tests.game.math.util
@@ -24,11 +25,11 @@ type Item struct {
   row int
 }
 
-fn NewItem(pos int, row int, it *ItemItem) Item {
-  text := null as *OverlayText // gfx.new_overlay_text();
+fn NewItem(gfx *Graphics, pos int, row int, it *ItemItem) Item {
+  text := gfx.new_overlay_text();
   text.set_color(0.9f, 0.9f, 0.9f, 1.0f)
 
-  imgd := null as *OverlayImage // gfx.new_overlay_billboard();
+  imgd := gfx.new_overlay_image();
   imgd.set_size(16.0f, 16.0f)
   imgd.set_color(1.0f, 1.0f, 1.0f, 1.0f)
   imgd.set_image(it.img)

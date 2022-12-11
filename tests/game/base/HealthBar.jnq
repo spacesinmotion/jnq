@@ -1,4 +1,5 @@
 
+use Graphics from tests.game.gfx.Graphics
 use BillboardImage from tests.game.gfx.BillboardImage
 use pow, rand_in, lerp, clamp from tests.game.math.util
 
@@ -12,8 +13,8 @@ type HealthBar struct {
   changed_time float
 }
 
-fn NewHealthBar(max_health float) HealthBar {
-  back := null as *BillboardImage // gfx.new_overlay_billboard()
+fn NewHealthBar(gfx *Graphics, max_health float) HealthBar {
+  back := gfx.new_billboeard()
   back.set_color_rgb(4, 3, 34)
   back.set_size(80.0f, 10.0f)
   back.set_offset(-40.0f, 0.0f, 0.0f)

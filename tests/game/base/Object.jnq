@@ -1,8 +1,7 @@
 
 use Vec2 from tests.game.math.Vec2
 use Matrix4x4, translate from tests.game.math.Matrix4x4
-
-type Graphics struct {}
+use Graphics from tests.game.gfx.Graphics
 
 type Object struct {
   c Vec2

@@ -1,4 +1,5 @@
 
+use Graphics from tests.game.gfx.Graphics
 use Image from tests.game.gfx.Image
 use OverlayImage from tests.game.gfx.OverlayImage
 use OverlayText from tests.game.gfx.OverlayText
@@ -133,11 +134,11 @@ type Menu struct {
   dead bool
 }
 
-fn NewMenu() Menu {
+fn NewMenu(gfx *Graphics) Menu {
   m := Menu{
     selected_group: 0,
     selected_entry: 0,
-    // marker: gfx.new_overlay_billboard(),
+    marker: gfx.new_overlay_image(),
     marker_a: 0.3f,
     done_init: false,
     dead: false,
@@ -212,7 +213,7 @@ type NEED struct {
 fn need_sub(pos int, needed *NEED) Depend {
   n := Depend{
     pos: pos,
-    // img: gfx.new_overlay_billboard(),
+    // img: gfx.new_overlay_image(),
     // text: gfx.new_overlay_text(),
     // available: needed.item.available(needed.count),
   }
@@ -250,8 +251,8 @@ fn add_entry(m *Menu, img *Image, text *char, needed vec[]NEED
   //, on_confirm, avail
   ) *Entry {
   e := Entry{
-    //back: gfx.new_overlay_billboard(),
-    //img: gfx.new_overlay_billboard(),
+    //back: gfx.new_overlay_image(),
+    //img: gfx.new_overlay_image(),
     //text: gfx.new_overlay_text(),
     key: text,
     x: 0.0f,

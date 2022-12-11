@@ -1,9 +1,8 @@
 
 use Vec3 from tests.game.math.Vec3
 use Vec2 from tests.game.math.Vec2
+use Graphics from tests.game.gfx.Graphics
 use lerp, random, clamp, cos, sin from tests.game.math.util
-
-type Graphics struct {}
 
 type Camera struct {
   ry float,
@@ -65,7 +64,7 @@ fn apply(c *Camera, g *Graphics) {
   e := c.eye()
   s := Vec3{random() - 0.5f, random() - 0.5f, random() - 0.5f}
   e = Vec3{e.x + c.shake_val * s.x, e.y + c.shake_val * s.y, e.z + c.shake_val * s.z}
-//  g.lookAt(e, c.t, Vec3{0, 1, 0})
+  g.look_at(e, c.t, Vec3{0.0f, 1.0f, 0.0f})
 }
 
 fn update(c *Camera, dt float) {

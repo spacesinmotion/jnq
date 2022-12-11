@@ -1,4 +1,5 @@
 
+use Graphics from tests.game.gfx.Graphics
 use OverlayImage from tests.game.gfx.OverlayImage
 use OverlayText from tests.game.gfx.OverlayText
 use lerp from tests.game.math.util
@@ -17,12 +18,11 @@ type XPOverlayBar struct {
   all_xp float
 }
 
-
-fn NewXPOverlayBar(max_xp float) XPOverlayBar {
+fn NewXPOverlayBar(gfx *Graphics, max_xp float) XPOverlayBar {
   w := 320.0f
   h := 16.0f
 
-  back := null as *OverlayImage // gfx.new_overlay_billboard()
+  back := gfx.new_overlay_image()
   back.set_position(64.0f, 16.0f + 8.0f + 16.0f)
   back.set_color_rgb(4, 3, 34)
   back.set_size(w, h)
@@ -30,13 +30,13 @@ fn NewXPOverlayBar(max_xp float) XPOverlayBar {
   bar := back.clone()
   bar.set_color_rgb(240, 233, 26)
 
-  level_text := null as *OverlayText // gfx.new_overlay_text()
+  level_text := gfx.new_overlay_text()
   level_text.set_position(8.0f, 24.0f)
   level_text.set_scale(3.0f, 3.0f)
   level_text.set_color_rgb(240, 233, 26)
   level_text.set_text("01")
 
-  xp_text := null as *OverlayText // gfx.new_overlay_text()
+  xp_text := gfx.new_overlay_text()
   xp_text.set_position(64.0f + w + 8.0f, 16.0f + 8.0f + 17.0f)
   xp_text.set_scale(2.0f, 2.0f)
   xp_text.set_color_rgb(240, 233, 26)
