@@ -1,5 +1,6 @@
 
-use Item, ItemItem, Image from Item
+use Item, ItemItem from Item
+use Image from tests.game.gfx.Image 
 
 cfn strcmp(a *char, b *char) int
 

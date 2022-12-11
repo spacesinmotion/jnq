@@ -1,37 +1,40 @@
 
+use OverlayText from tests.game.gfx.OverlayText 
 use floor, pow from tests.game.math.util
 
 type Clock struct {
-  time double
+  display *OverlayText
+  time float
   minute int
   second int 
 }
 
-fn NewClock() Clock {
-  return Clock{
-    time: 0.0,
+fn NewClock(W int) Clock {
+  cl := Clock{
+    // display: gfx.new_overlay_text(),
+    time: 0.0f,
     minute: 0,
     second: 0
   }
-  // cl.display = gfx.new_overlay_text()
-  // cl.display:set_scale(3, 3)
-  // cl.display:set_position(W - 6 * 24, 8)
-  // cl.display:set_color(rgb(224, 53, 34))
-  // cl.display:set_text('00:00')
-}
-  
-fn destroy(cl *Clock) {
-  // cl.display.destroy()
+  cl.display.set_scale(3.0f, 3.0f)
+  cl.display.set_position((W - 6 * 24) as float, 8.0f)
+  cl.display.set_color(224.0f/255.0f, 53.0f/255.0f, 34.0f/255.0f, 1.0f)
+  cl.display.set_text("00:00")
+  return cl
 }
 
-fn update(cl *Clock, dt double){
+fn destroy(cl *Clock) {
+  cl.display.destroy()
+}
+
+fn update(cl *Clock, dt float){
   cl.time += dt
-  s := floor(cl.time) as int
-  if (s != cl.second) {
-    cl.second = s % 60
-    cl.minute = floor(cl.time / 60.0) as int
-    //cl.display.set_text(string.format('%02d:%02d', cl.minute, cl.second))
+  s := floor(cl.time as double) as float
+  if (s as int != cl.second) {
+    cl.second = s as int % 60
+    cl.minute = floor(cl.time as double / 60.0) as int
+    // cl.display.set_text(string.format('%02d:%02d', cl.minute, cl.second))
   }
-  t := 0.8 - 0.25 * pow(cl.time - s as double, 2.0 / 3.0)
-  //cl.display:set_color(t, t, t)
+  t := (0.8 - 0.25 * pow((cl.time - s)as double, 2.0 / 3.0)) as float
+  cl.display.set_color(t, t, t, 1.0f)
 }

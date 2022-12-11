@@ -1,0 +1,32 @@
+
+use Vec2 from tests.game.math.Vec2 
+use Vec3 from tests.game.math.Vec3 
+
+use Image from Image
+
+type OverlayImage struct {
+  img *Image
+  pos Vec2
+  size Vec2
+  rgb Vec3
+  a float
+}
+
+fn destroy(oi *OverlayImage) {}
+
+fn set_image(oi *OverlayImage, img *Image) {
+  oi.img = img
+}
+
+fn set_position(oi *OverlayImage, x float, y float) {
+  oi.pos = Vec2{x, y}
+}
+
+fn set_color(oi *OverlayImage, r float, g float, b float, a float) {
+  oi.rgb = Vec3{r, g, b}
+  oi.a = a
+}
+
+fn set_size(oi *OverlayImage, w float, h float) {
+  oi.size = Vec2{w, h}
+}

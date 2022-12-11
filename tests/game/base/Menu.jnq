@@ -1,32 +1,40 @@
 
+use Image from tests.game.gfx.Image
+use OverlayImage from tests.game.gfx.OverlayImage
+use OverlayText from tests.game.gfx.OverlayText
 use lerp, clampi, max, abs from tests.game.math.util
 
-use Image from Item
+use ItemItem from Item
+
+cfn strlen(t *char) int
 
 type Depend struct {
-  img *Image,
-  // text *OverlayText,
+  img *OverlayImage,
+  text *OverlayText,
   pos int,
   available bool
 }
 
 fn move_alpha(e *Depend, rx float, ry float, a float){
-  // e.img:set_position(rx + 8 + e.pos * 40, ry + 40 - 16)
-  // e.text:set_position(rx + 24 + e.pos * 40, ry + 40 - 8)
+  e.img.set_position(rx + 8.0f + e.pos as float * 40.0f, ry + 40.0f - 16.0f)
+  e.text.set_position(rx + 24.0f + e.pos as float * 40.0f, ry + 40.0f - 8.0f)
   v := 0.2f
   if (e.available)
     v = 0.9f
-  // n.img:set_color(0.9, 0.9, 0.9, a)
-  // n.text:set_color(0.9, v, v, a)
+  e.img.set_color(0.9f, 0.9f, 0.9f, a)
+  e.text.set_color(0.9f, v, v, a)
 }
 
 fn destroyDepend(e *Depend) {
-  // e.img.destroy()
-  // e.text.destroy()
+  e.img.destroy()
+  e.text.destroy()
 }
 
-
 type Entry struct {
+  text *OverlayText
+  img *OverlayImage
+  back *OverlayImage
+
   key *char
   x float
   y float
@@ -43,15 +51,15 @@ fn apply(e *Entry) {
   for (i:=0; i<e.needed.len; ++i) 
     e.needed[i].move_alpha(e.x, e.y, e.a)
 
-  // e.text:set_position(e.x + 48, e.y + 8)
-  // e.img:set_position(e.x + 8, e.y + 8)
-  // e.back:set_position(e.x + 2, e.y + 2)
-  // e.back:set_color(0.1, 0.1, 0.1, e.a)
+  e.text.set_position(e.x + 48.0f, e.y + 8.0f)
+  e.img.set_position(e.x + 8.0f, e.y + 8.0f)
+  e.back.set_position(e.x + 2.0f, e.y + 2.0f)
+  e.back.set_color(0.1f, 0.1f, 0.1f, e.a)
   v := 0.2f
   if (e.available)
     v = 0.9f
-  //e.img:set_color(v, v, v, e.a)
-  //e.text:set_color(v, v, v, e.a)
+  e.text.set_color(v, v, v, e.a)
+  e.img.set_color(v, v, v, e.a)
 }
 
 fn updateEntry(e *Entry) {
@@ -62,9 +70,9 @@ fn updateEntry(e *Entry) {
 }
 
 fn destroyEntry(e *Entry) {
-  // e.back:destroy()
-  // e.img:destroy()
-  // e.text:destroy()
+  e.back.destroy()
+  e.img.destroy()
+  e.text.destroy()
   for (i:=0; i<e.needed.len; ++i) 
     e.needed[i].destroyDepend() 
 }
@@ -85,6 +93,7 @@ fn set_option(e *Entry, o int, g int, jump bool) {
 }
 
 type Group struct {
+  text *OverlayText
   entries vec[]Entry
 
   fa float
@@ -98,11 +107,11 @@ fn updateGroup(g *Group, on bool) {
   else  
     g.fa = 0.0f
   g.a = lerp(g.fa, g.a, 0.9f)
-  //g.text:set_color(0.9, 0.9, 0.2, m.a)
+  g.text.set_color(0.9f, 0.9f, 0.2f, g.a)
 }
 
 fn destroyGroup(g *Group) {
-  //m.text:destroy()
+  g.text.destroy()
   for (i := 0; i<g.entries.len; ++i)
     g.entries[i].destroyEntry()
 }
@@ -113,6 +122,7 @@ type Menu struct {
   selected_group int
   selected_entry int
 
+  marker *OverlayImage
   marker_a float
 
   done_init bool
@@ -120,21 +130,22 @@ type Menu struct {
 }
 
 fn NewMenu() Menu {
-  return Menu{
+  m := Menu{
     selected_group: 0,
     selected_entry: 0,
+    // marker: gfx.new_overlay_billboard(),
     marker_a: 0.3f,
     done_init: false,
     dead: false,
   }
-  // m.marker = gfx.new_overlay_billboard()
-  // m.marker:set_color(0.9, 0.87, 0.1)
-  // m.marker:set_position(240 - 3, 240 - 1)
-  // m.marker:set_size(186, 2 + 48)
+  m.marker.set_color(0.9f, 0.87f, 0.1f, 1.0f)
+  m.marker.set_position(240.0f - 3.0f, 240.0f - 1.0f)
+  m.marker.set_size(186.0f, 2.0f + 48.0f)
+  return m
 }
 
 fn destroy(m *Menu) {
-  // m.marker:destroy()
+  m.marker.destroy()
   for (i := 0; i<m.groups.len; ++i) 
     m.groups[i].destroyGroup() 
 }
@@ -185,33 +196,26 @@ fn update(m *Menu, dt float) {
     }
   }
   m.marker_a = lerp(0.9f, m.marker_a, 0.93f)
-  //m.marker.set_color(0.9, 0.87, 0.1, m.marker_a)
+  m.marker.set_color(0.9f, 0.87f, 0.1f, m.marker_a)
   m.done_init = true
 }
 
-// local fn need_sub(pos, needed)
-//   local n = {
-//     pos = pos,
-//     img = gfx.new_overlay_billboard(),
-//     text = gfx.new_overlay_text(),
-//     available = needed.item:available(needed.count),
-//   }
-//   n.img:set_texture(needed.item.img)
-//   n.img:set_size(16, 16)
-//   n.text:set_text('x' .. needed.count)
-//   fn n:move_alpha(rx, ry, a)
-//     m.img:set_position(rx + 8 + m.pos * 40, ry + 40 - 16)
-//     m.text:set_position(rx + 24 + m.pos * 40, ry + 40 - 8)
-//     local v = m.available and 0.9 or 0.2
-//     n.img:set_color(0.9, 0.9, 0.9, a)
-//     n.text:set_color(0.9, v, v, a)
-//   end
-//   fn n:destroy()
-//     m.img:destroy()
-//     m.text:destroy()
-//   end
-//   return n
-// end
+type NEED struct {
+  item *ItemItem
+}
+
+fn need_sub(pos int, needed *NEED) Depend {
+  n := Depend{
+    pos: pos,
+    // img: gfx.new_overlay_billboard(),
+    // text: gfx.new_overlay_text(),
+    // available: needed.item.available(needed.count),
+  }
+  n.img.set_image(needed.item.img)
+  n.img.set_size(16.0f, 16.0f)
+  // n.text.set_text('x' .. needed.count)
+  return n
+}
 
 fn new_group(m *Menu, name *char) {
   m.selected_group = m.groups.len
@@ -219,11 +223,11 @@ fn new_group(m *Menu, name *char) {
     fa: 1.0f,
     a: 1.0f,
     name: name,
-  //  text: gfx.new_overlay_text() 
+    // text: gfx.new_overlay_text() 
   }
-  // g.text:set_text(name)
-  // g.text:set_color(0.9, 0.9, 0.9)
-  // g.text:set_position(240 - 8 * (2 + #name), 248)
+  g.text.set_text(name)
+  g.text.set_color(0.9f, 0.9f, 0.9f, 1.0f)
+  g.text.set_position(240.0f - 8.0f * (2 + strlen(name)) as float, 248.0f)
   
   m.groups.push(g)
 }
@@ -237,13 +241,13 @@ fn select(m *Menu, g int, e int, jump bool) {
     m.marker_a = 0.1f
 }
 
-fn add_entry(m *Menu, img *Image, text *char, needed vec[]Depend
+fn add_entry(m *Menu, img *Image, text *char, needed vec[]NEED
   //, on_confirm, avail
   ) *Entry {
   e := Entry{
-    //back = gfx.new_overlay_billboard(),
-    //img = gfx.new_overlay_billboard(),
-    //text = gfx.new_overlay_text(),
+    //back: gfx.new_overlay_billboard(),
+    //img: gfx.new_overlay_billboard(),
+    //text: gfx.new_overlay_text(),
     key: text,
     x: 0.0f,
     y: 0.0f,
@@ -253,21 +257,22 @@ fn add_entry(m *Menu, img *Image, text *char, needed vec[]Depend
     fa: 0.0f,
     available: true,
     //on_confirm: on_confirm,
-    needed: needed,
+    //needed: needed,
   }
-  // e.back:set_color(0.1, 0.1, 0.1)
-  // e.back:set_size(180 - 2, 48 - 4)
-  // e.img:set_texture(img)
-  // e.img:set_color(1, 1, 1)
-  // e.img:set_size(32, 32)
-  // e.text:set_text(text)
-  // e.text:set_color(0.9, 0.9, 0.9)
+  e.back.set_color(0.1f, 0.1f, 0.1f, 1.0f)
+  e.back.set_size(180.0f - 2.0f, 48.0f - 4.0f)
+  e.img.set_image(img)
+  e.img.set_color(1.0f, 1.0f, 1.0f, 1.0f)
+  e.img.set_size(32.0f, 32.0f)
+  e.text.set_text(text)
+  e.text.set_color(0.9f, 0.9f, 0.9f, 1.0f)
   // if avail then e.available = avail() end
-  // for (i, n in ipairs(needed or {})) {
-  //   x := need_sub(i, n)
-  //   e.available = e.available and x.available
-  //   e.needed[#e.needed + 1] = x
-  // }
+  for (i:=0; i<needed.len; ++i) {
+    n := &needed[i]
+    x := need_sub(i, n)
+    e.available = e.available && x.available
+    e.needed.push(x)
+  }
   e.apply()
   g := m.group()
   g.entries.push(e)

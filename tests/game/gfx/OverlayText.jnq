@@ -1,0 +1,30 @@
+
+use Vec2 from tests.game.math.Vec2 
+use Vec3 from tests.game.math.Vec3 
+
+type OverlayText struct {
+  text *char
+  pos Vec2
+  scale Vec2
+  rgb Vec3
+  a float
+}
+
+fn destroy(ot *OverlayText) {}
+
+fn set_text(ot *OverlayText, t *char) {
+  ot.text = t
+}
+
+fn set_position(ot *OverlayText, x float, y float) {
+  ot.pos = Vec2{x, y}
+}
+
+fn set_scale(ot *OverlayText, w float, h float) {
+  ot.scale = Vec2{w, h}
+}
+
+fn set_color(ot *OverlayText, r float, g float, b float, a float) {
+  ot.rgb = Vec3{r, g, b}
+  ot.a = a
+}

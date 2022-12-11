@@ -1,12 +1,12 @@
 
-use Image from Item
+use Image from tests.game.gfx.Image
+use OverlayText from tests.game.gfx.OverlayText 
+use OverlayImage from tests.game.gfx.OverlayImage 
 use lerp, sqrt from tests.game.math.util
 
-type TextDisplay struct {}
-
 type Message struct {
-  text *TextDisplay
-  img *Image
+  text *OverlayText
+  img *OverlayImage
   
   mes *char
   x float

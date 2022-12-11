@@ -1,7 +1,6 @@
 
+use Image from tests.game.gfx.Image
 use lerp from tests.game.math.util
-
-type Image struct {}
 
 type ItemItem struct {
   name *char
