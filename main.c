@@ -236,6 +236,7 @@ typedef struct Call {
 typedef struct Construct {
   Type *type;
   ParameterList p;
+  bool pointer;
 } Construct;
 
 typedef struct Access {
@@ -385,6 +386,25 @@ typedef struct Struct {
   Module *module;
 } Struct;
 
+typedef struct FunctionDecl {
+  VariableList parameter;
+  Type *returnType;
+  Location return_type_location;
+} FunctionDecl;
+
+typedef struct FnVec {
+  Type *fns;
+  int len;
+} FnVec;
+
+typedef struct TypeList TypeList;
+
+typedef struct Interface {
+  FnVec methods;
+  Module *module;
+  TypeList *used_types;
+} Interface;
+
 typedef struct EnumEntry {
   const char *name;
   EnumEntry *next;
@@ -411,15 +431,12 @@ typedef struct Union {
 } Union;
 
 typedef struct Function {
-  VariableList parameter;
-  Type *returnType;
-  Location return_type_location;
+  FunctionDecl d;
   Statement *body;
   Module *module;
   bool is_extern_c;
 } Function;
 
-typedef struct TypeList TypeList;
 typedef struct Use {
   Module *module;
   Type **type;
@@ -427,7 +444,19 @@ typedef struct Use {
   bool take_all;
 } Use;
 
-typedef enum TypeKind { UseT, StructT, UnionT, EnumT, UnionTypeT, ArrayT, PointerT, VecT, FnT, PlaceHolder } TypeKind;
+typedef enum TypeKind {
+  UseT,
+  StructT,
+  UnionT,
+  EnumT,
+  InterfaceT,
+  UnionTypeT,
+  ArrayT,
+  PointerT,
+  VecT,
+  FnT,
+  PlaceHolder
+} TypeKind;
 
 typedef struct Type {
   const char *name;
@@ -435,6 +464,7 @@ typedef struct Type {
     Struct *structT;
     Enum *enumT;
     Union *unionT;
+    Interface *interfaceT;
     Function *fnT;
     Module *placeholerModule;
     Use *useT;
@@ -453,6 +483,8 @@ Module *Type_defined_module(Type *t) {
     return t->enumT->module;
   case UnionTypeT:
     return t->unionT->module;
+  case InterfaceT:
+    return t->interfaceT->module;
   case FnT:
     return t->fnT->module;
   case VecT:
@@ -580,14 +612,14 @@ Type String = (Type){"string", .structT = &(Struct){{}, &global}, StructT, NULL}
 Type Ellipsis = (Type){"...", .structT = &(Struct){{}, &global}, StructT, NULL};
 
 Variable print_param[] = {{null_location, "format", &String}, {null_location, "...", &Ellipsis}};
-Function print = (Function){(VariableList){print_param, 2}, NULL, null_location, NULL, &global, true};
+Function print = (Function){{(VariableList){print_param, 2}, NULL, null_location}, NULL, &global, true};
 Type Printf = (Type){"printf", .fnT = &print, FnT, NULL};
 
-Function assert =
-    (Function){(VariableList){&(Variable){null_location, "cond", &Bool}, 1}, NULL, null_location, NULL, &global, true};
+Function assert = (Function){
+    {(VariableList){&(Variable){null_location, "cond", &Bool}, 1}, NULL, null_location}, NULL, &global, true};
 Type Assert = (Type){"ASSERT", .fnT = &assert, FnT, NULL};
 Function SizeOfFn = (Function){
-    (VariableList){&(Variable){null_location, "...", &Ellipsis}, 1}, &Int, null_location, NULL, &global, true};
+    {(VariableList){&(Variable){null_location, "...", &Ellipsis}, 1}, &Int, null_location}, NULL, &global, true};
 Type SizeOf = (Type){"sizeof", .fnT = &SizeOfFn, FnT, NULL};
 
 Type *Module_find_type(Module *m, const char *b, const char *e) {
@@ -699,6 +731,7 @@ BuffString Type_name(Type *t) {
       break;
     case UseT:
     case StructT:
+    case InterfaceT:
     case UnionT:
     case EnumT:
     case UnionTypeT:
@@ -768,6 +801,12 @@ Type *Program_add_type(Program *p, TypeKind k, const char *name, Module *m) {
     tt->unionT = (Union *)Program_alloc(p, sizeof(Union));
     tt->unionT->member = NULL;
     tt->unionT->module = m;
+    break;
+  case InterfaceT:
+    tt->interfaceT = (Interface *)Program_alloc(p, sizeof(Interface));
+    tt->interfaceT->methods = (FnVec){NULL, 0};
+    tt->interfaceT->module = m;
+    tt->interfaceT->used_types = NULL;
     break;
   case FnT:
     tt->fnT = (Function *)Program_alloc(p, sizeof(Function));
@@ -883,6 +922,7 @@ Expression *Program_new_Expression(Program *p, ExpressionType t, Location l) {
     break;
   case ConstructE:
     e->construct = (Construct *)Program_alloc(p, sizeof(Construct));
+    e->construct->pointer = false;
     break;
   case AccessE:
     e->access = (Access *)Program_alloc(p, sizeof(Access));
@@ -1388,6 +1428,63 @@ UnionTypeEntry *Program_parse_union_entry_list(Program *p, Module *m, State *st)
   FATAL(&st->location, "Missing closing '}' for enum");
   return NULL;
 }
+
+bool Program_parse_fn_decl(Program *p, Module *m, FunctionDecl *fnd, State *st) {
+  skip_whitespace(st);
+  State old = *st;
+
+  if (check_op(st, "(")) {
+    fnd->parameter = Program_parse_variable_declaration_list(p, m, st, ")");
+    skip_whitespace(st);
+    fnd->return_type_location = st->location;
+    fnd->returnType = Program_parse_declared_type(p, m, st);
+    return true;
+  }
+
+  *st = old;
+  return false;
+}
+
+FnVec Program_parse_interface_fns(Program *p, Module *m, Type *in, State *st) {
+  skip_whitespace(st);
+
+  Type tt[32];
+  int tt_len = 0;
+
+  while (*st->c) {
+    if (check_op(st, "}")) {
+      FnVec tv = {Program_alloc(p, tt_len * sizeof(Type)), tt_len};
+      for (int i = 0; i < tt_len; ++i)
+        tv.fns[i] = tt[i];
+      return tv;
+    }
+
+    if (tt_len >= 32)
+      FATALX("Out of internal memory for function list!");
+
+    if (!check_word(st, "fn"))
+      FATAL(&st->location, "expect a function declaration!");
+    skip_whitespace(st);
+    State old = *st;
+    if (!check_identifier(st))
+      FATAL(&st->location, "missing function name!");
+    BuffString sn;
+    int l = snprintf(sn.s, sizeof(sn.s), "%s%.*s", in->name, (int)(st->c - old.c), old.c);
+    tt[tt_len].name = Program_copy_string(p, sn.s, l);
+    tt[tt_len].kind = FnT;
+    tt[tt_len].fnT = (Function *)Program_alloc(p, sizeof(Function));
+    tt[tt_len].fnT->module = m;
+    tt[tt_len].fnT->body = NULL;
+    tt[tt_len].fnT->is_extern_c = false;
+    if (!Program_parse_fn_decl(p, m, &tt[tt_len].fnT->d, st))
+      FATAL(&st->location, "missing function declaration!");
+    tt_len++;
+    check_op(st, ",");
+  }
+  FATAL(&st->location, "Missing closing '}' for interface declaration");
+  return (FnVec){};
+}
+
 void Program_parse_type(Program *p, Module *m, State *st) {
   skip_whitespace(st);
   State old = *st;
@@ -1404,6 +1501,9 @@ void Program_parse_type(Program *p, Module *m, State *st) {
     } else if (check_word(st, "uniontype") && check_op(st, "{")) {
       Union *u = Program_add_type(p, UnionTypeT, name, m)->unionT;
       u->member = Program_parse_union_entry_list(p, m, st);
+    } else if (check_word(st, "interface") && check_op(st, "{")) {
+      Type *in = Program_add_type(p, InterfaceT, name, m);
+      in->interfaceT->methods = Program_parse_interface_fns(p, m, in, st);
     } else
       FATAL(&st->location, "Missing type declaration");
   } else
@@ -1944,20 +2044,15 @@ void Program_parse_fn(Program *p, Module *m, State *st, bool extc) {
   if (check_identifier(st)) {
     const char *name = Program_copy_string(p, b, st->c - b);
     Function *fn = Program_add_type(p, FnT, name, m)->fnT;
-    if (check_op(st, "(")) {
-      fn->parameter = Program_parse_variable_declaration_list(p, m, st, ")");
-      skip_whitespace(st);
-      fn->return_type_location = st->location;
-      fn->returnType = Program_parse_declared_type(p, m, st);
-      fn->is_extern_c = extc;
-      if (!extc) {
-        if (check_op(st, "{"))
-          fn->body = Program_parse_scope(p, m, st);
-        else
-          FATAL(&st->location, "Missing function body");
-      }
-    } else
+    if (!Program_parse_fn_decl(p, m, &fn->d, st))
       FATAL(&st->location, "Missing parameterlist");
+    fn->is_extern_c = extc;
+    if (!extc) {
+      if (check_op(st, "{"))
+        fn->body = Program_parse_scope(p, m, st);
+      else
+        FATAL(&st->location, "Missing function body");
+    }
   } else
     FATAL(&st->location, "Missing type name");
 }
@@ -2076,6 +2171,7 @@ BuffString Type_special_cname(Type *t) {
       break;
     case UseT:
     case StructT:
+    case InterfaceT:
     case UnionT:
     case EnumT:
     case UnionTypeT:
@@ -2121,13 +2217,14 @@ bool c_type_declare(FILE *f, Type *t, Location *l, const char *var) {
     // fprintf(f, "%s", t->name);
     break;
   case StructT:
+  case InterfaceT:
   case UnionT:
   case EnumT:
   case UnionTypeT:
     fprintf(f, "%s%s", Type_defined_module(t)->c_name, t->name);
     break;
   case FnT:
-    if (c_type_declare(f, t->fnT->returnType, l, ""))
+    if (c_type_declare(f, t->fnT->d.returnType, l, ""))
       FATAL(l, "I don't know right now how to handle array function pointer stuff!");
     fprintf(f, "(*())");
     break;
@@ -2184,6 +2281,86 @@ void c_struct(FILE *f, const char *module_name, const char *name, bool is_union,
   c_var_list(f, vl, ";\n  ");
   fprintf(f, "");
   fprintf(f, ";\n} %s%s;\n\n", module_name, name);
+}
+
+void c_fn_decl(FILE *f, const char *module_name, Type *tfn);
+
+typedef struct main_SomeAbleTable {
+  int (*SomeAbleid)(int *s, int f);
+} main_SomeAbleTable;
+
+void c_fn_pointer_decl(FILE *f, Type *tfn, bool named) {
+  Function *fn = tfn->fnT;
+  if (fn->d.returnType) {
+    if (c_type_declare(f, fn->d.returnType, &fn->d.return_type_location, ""))
+      FATALX("array return type not supported -> c backend!");
+  } else
+    fprintf(f, "void");
+  fprintf(f, " (*%s)(", (named ? tfn->name : ""));
+  for (int i = 0; i < fn->d.parameter.len; ++i) {
+    Variable *v = &fn->d.parameter.v[i];
+    if (i > 0) {
+      fprintf(f, ", ");
+      c_type_declare(f, v->type, &v->location, "");
+    } else
+      fprintf(f, "void*");
+  }
+  if (fn->d.parameter.len == 0)
+    fprintf(f, "void");
+  fprintf(f, ")");
+}
+
+Type *Module_find_member(Type *t, const char *name);
+
+void c_interface(FILE *f, const char *module_name, const char *name, Interface *intf) {
+  fprintf(f, "typedef struct %s%sTable", module_name, name);
+  fprintf(f, "{\n");
+  for (int i = 0; i < intf->methods.len; ++i) {
+    fprintf(f, "  ");
+    Type *fnt = &intf->methods.fns[i];
+    c_fn_pointer_decl(f, fnt, true);
+    fprintf(f, ";\n");
+  }
+  fprintf(f, "} %s%sTable;\n\n", module_name, name);
+  for (TypeList *tl = intf->used_types; tl; tl = tl->next) {
+    Module *gotM = Type_defined_module(tl->type);
+    if (!gotM)
+      FATALX("could not find module for type '%s'", Type_name(tl->type).s);
+    fprintf(f, "%s%sTable *%s%s_%s%s = &(%s%sTable){\n", module_name, name, module_name, name, gotM->c_name,
+            tl->type->name, module_name, name);
+    for (int i = 0; i < intf->methods.len; ++i) {
+      const char *allName = intf->methods.fns[i].name;
+      const char *fn_name = allName + strlen(name);
+      Type *fnt = Module_find_member(tl->type, fn_name);
+      if (!fnt || fnt->kind != FnT)
+        FATALX("Type '%s' does not fit interface '%s'\n  missing method '%s'", Type_name(tl->type).s, name, fn_name);
+      fprintf(f, "  (");
+      c_fn_pointer_decl(f, fnt, false);
+      fprintf(f, ")");
+      fprintf(f, "&%s%s,\n", fnt->fnT->module->c_name, fnt->name);
+    }
+    fprintf(f, "};\n");
+  }
+
+  fprintf(f, "\ntypedef struct %s%s", module_name, name);
+  fprintf(f, "{\n");
+  fprintf(f, "  void *self;\n");
+  fprintf(f, "  %s%sTable *tab;\n", module_name, name);
+  fprintf(f, "} %s%s;\n\n", module_name, name);
+
+  for (int i = 0; i < intf->methods.len; ++i) {
+    Type *fnt = &intf->methods.fns[i];
+    c_fn_decl(f, module_name, fnt);
+    fprintf(f, " {\n  ");
+    if (fnt->fnT->d.returnType)
+      fprintf(f, "return ");
+
+    fprintf(f, "%s->tab->%s(%s->self", fnt->fnT->d.parameter.v[0].name, fnt->name, fnt->fnT->d.parameter.v[0].name);
+    for (int j = 1; j < fnt->fnT->d.parameter.len; ++j)
+      fprintf(f, ", %s", fnt->fnT->d.parameter.v[j].name);
+    fprintf(f, ");\n");
+    fprintf(f, "}\n");
+  }
 }
 
 void c_union_enum_entry(FILE *f, const char *module_name, const char *name, UnionTypeEntry *entry) {
@@ -2255,6 +2432,9 @@ void c_type(FILE *f, const char *module_name, TypeList *t) {
     c_struct(f, module_name, t->type->name, t->type->kind == UnionT, &t->type->structT->member);
     break;
   case EnumT:
+    break;
+  case InterfaceT:
+    // c_interface(f, module_name, t->type->name, t->type->interfaceT);
     break;
   case UnionTypeT:
     c_uniontype(f, module_name, t->type->name, t->type->unionT->member);
@@ -2394,9 +2574,9 @@ void c_parameter(FILE *f, ParameterList *pl) {
 }
 
 void c_member_access_fn(FILE *f, Expression *e) {
-  if (e->member->member->type->fnT->parameter.len == 0)
+  if (e->member->member->type->fnT->d.parameter.len == 0)
     FATAL(&e->location, "internal error creating member function call!");
-  Variable *first = &e->member->member->type->fnT->parameter.v[0];
+  Variable *first = &e->member->member->type->fnT->d.parameter.v[0];
   const char *prefix = "";
   if (e->member->pointer && first->type->kind != PointerT)
     prefix = "*";
@@ -2427,6 +2607,8 @@ void c_expression(FILE *f, Expression *e) {
     fprintf(f, "%d", e->i);
     break;
   case FloatA:
+    fprintf(f, "%g", e->f);
+    break;
   case DoubleA:
     fprintf(f, "%g", e->f);
     break;
@@ -2455,7 +2637,7 @@ void c_expression(FILE *f, Expression *e) {
     c_expression(f, e->brace->o);
     fprintf(f, ")");
     break;
-  case CallE:
+  case CallE: {
     c_expression(f, e->call->o);
     if (e->call->o->type != MemberAccessE)
       fprintf(f, "(");
@@ -2465,6 +2647,7 @@ void c_expression(FILE *f, Expression *e) {
     c_parameter(f, &e->call->p);
     fprintf(f, ")");
     break;
+  }
   case ConstructE: {
     if (e->construct->type->kind == UnionTypeT) {
       fprintf(f, "(%s%s){", Type_defined_module(e->construct->type)->c_name, e->construct->type->name);
@@ -2477,6 +2660,16 @@ void c_expression(FILE *f, Expression *e) {
               ua->index);
     } else if (e->construct->type->kind == VecT) {
       FATAL(&e->construct->p.p[0].p->location, "vec type should be replaced!");
+    } else if (e->construct->type->kind == InterfaceT) {
+      if (e->construct->p.len != 2)
+        FATAL(&e->location, "Interface construction has wrong number of parameter!");
+      if (e->construct->p.p[1].p->type != IdentifierA)
+        FATAL(&e->location, "Interface construction has missing table name!");
+      if (e->construct->pointer)
+        fprintf(f, "&");
+      fprintf(f, "(%s%s){(void *)(", Type_defined_module(e->construct->type)->c_name, e->construct->type->name);
+      c_expression(f, e->construct->p.p[0].p);
+      fprintf(f, "), %s}", e->construct->p.p[1].p->id->name);
     } else {
       if (e->construct->type->kind == StructT || e->construct->type->kind == UnionT)
         fprintf(f, "(%s%s){", Type_defined_module(e->construct->type)->c_name, e->construct->type->name);
@@ -2489,7 +2682,7 @@ void c_expression(FILE *f, Expression *e) {
     }
     break;
   }
-  case AccessE:
+  case AccessE: {
     c_expression(f, e->access->o);
     if (e->access->delegate)
       fprintf(f, "%s", e->access->delegate);
@@ -2497,6 +2690,7 @@ void c_expression(FILE *f, Expression *e) {
     c_expression(f, e->access->p);
     fprintf(f, "]");
     break;
+  }
   case MemberAccessE: {
     if (!e->member->o_type)
       FATAL(&e->location, "missing type for access");
@@ -2528,6 +2722,7 @@ void c_expression(FILE *f, Expression *e) {
     case EnumT:
     case UseT:
     case StructT:
+    case InterfaceT:
     case UnionT:
     case UnionTypeT:
     case PointerT:
@@ -2547,7 +2742,7 @@ void c_expression(FILE *f, Expression *e) {
         fprintf(f, "%s(", e->member->member->name);
         break;
       }
-      if (e->member->member->type->fnT->parameter.len == 0)
+      if (e->member->member->type->fnT->d.parameter.len == 0)
         FATAL(&e->location, "internal error creating member function call!");
       c_member_access_fn(f, e);
       break;
@@ -2563,19 +2758,22 @@ void c_expression(FILE *f, Expression *e) {
     c_expression(f, e->cast->o);
     fprintf(f, "))");
     break;
-  case UnaryPrefixE:
+  case UnaryPrefixE: {
     fprintf(f, "%s", e->unpre->op);
     c_expression(f, e->unpre->o);
     break;
-  case UnaryPostfixE:
+  }
+  case UnaryPostfixE: {
     c_expression(f, e->unpost->o);
     fprintf(f, "%s", e->unpost->op);
     break;
-  case BinaryOperationE:
+  }
+  case BinaryOperationE: {
     c_expression(f, e->binop->o1);
     fprintf(f, " %s ", e->binop->op->op);
     c_expression(f, e->binop->o2);
     break;
+  }
   }
 }
 
@@ -2687,6 +2885,21 @@ void c_statements(FILE *f, Statement *s, int indent) {
   }
 }
 
+void c_fn_decl(FILE *f, const char *module_name, Type *tfn) {
+  Function *fn = tfn->fnT;
+  if (fn->d.returnType) {
+    if (c_type_declare(f, fn->d.returnType, &fn->d.return_type_location, ""))
+      FATALX("array return type not supported -> c backend!");
+  } else
+    fprintf(f, "void");
+  fprintf(f, " %s%s(", module_name, tfn->name);
+  if (fn->d.parameter.len > 0)
+    c_var_list(f, &fn->d.parameter, ", ");
+  else
+    fprintf(f, "void");
+  fprintf(f, ")");
+}
+
 void c_fn(FILE *f, const char *module_name, TypeList *tl) {
   if (!tl)
     return;
@@ -2695,22 +2908,12 @@ void c_fn(FILE *f, const char *module_name, TypeList *tl) {
   if (tl->type->kind != FnT || tl->type->fnT->is_extern_c)
     return;
 
-  Function *fn = tl->type->fnT;
-  if (fn->returnType) {
-    if (c_type_declare(f, fn->returnType, &fn->return_type_location, ""))
-      FATALX("array return type not supported -> c backend!");
-  } else
-    fprintf(f, "void");
-  fprintf(f, " %s%s(", module_name, tl->type->name);
-  if (fn->parameter.len > 0)
-    c_var_list(f, &fn->parameter, ", ");
-  else
-    fprintf(f, "void");
-  if (!fn->body)
-    fprintf(f, ") {}\n\n");
+  c_fn_decl(f, module_name, tl->type);
+  if (!tl->type->fnT->body)
+    fprintf(f, " {}\n\n");
   else {
-    fprintf(f, ") {\n");
-    c_statements(f, fn->body, 2);
+    fprintf(f, " {\n");
+    c_statements(f, tl->type->fnT->body, 2);
     fprintf(f, "}\n\n");
   }
 }
@@ -2728,6 +2931,20 @@ void c_Module_types(FILE *f, Module *m) {
   }
 }
 
+void c_Module_interfaces(FILE *f, Module *m) {
+  if (m->finished)
+    return;
+  m->finished = true;
+
+  if (m->types) {
+    c_use(f, m->types, c_Module_interfaces);
+
+    for (TypeList *tl = m->types; tl; tl = tl->next)
+      if (tl->type->kind == InterfaceT)
+        c_interface(f, m->c_name, tl->type->name, tl->type->interfaceT);
+  }
+}
+
 void c_Module_fn(FILE *f, Module *m) {
   if (m->finished)
     return;
@@ -2739,6 +2956,20 @@ void c_Module_fn(FILE *f, Module *m) {
     fprintf(f, "\n");
     c_fn(f, m->c_name, m->types);
   }
+}
+
+void c_fn_forward_fn(FILE *f, const char *module_name, const char *fn_name, Function *fn) {
+  if (fn->d.returnType) {
+    if (c_type_declare(f, fn->d.returnType, &fn->d.return_type_location, ""))
+      FATALX("array return type not supported -> c backend!");
+  } else
+    fprintf(f, "void");
+  fprintf(f, " %s%s(", module_name, fn_name);
+  if (fn->d.parameter.len > 0)
+    c_var_list(f, &fn->d.parameter, ", ");
+  else
+    fprintf(f, "void");
+  fprintf(f, ");\n");
 }
 
 void c_type_forward(FILE *f, const char *module_name, TypeList *t) {
@@ -2760,6 +2991,14 @@ void c_type_forward(FILE *f, const char *module_name, TypeList *t) {
   case UnionTypeT:
     c_union_forward(f, module_name, t->type->name, t->type->unionT->member);
     break;
+  case InterfaceT: {
+    fprintf(f, "typedef struct %s%sTable %s%sTable;\n", module_name, t->type->name, module_name, t->type->name);
+    fprintf(f, "typedef struct %s%s %s%s;\n", module_name, t->type->name, module_name, t->type->name);
+    for (int i = 0; i < t->type->interfaceT->methods.len; ++i)
+      c_fn_forward_fn(f, module_name, t->type->interfaceT->methods.fns[i].name,
+                      t->type->interfaceT->methods.fns[i].fnT);
+    break;
+  }
 
   case VecT:
     FATALX("vec type should be replaced here!");
@@ -2798,18 +3037,7 @@ void c_fn_forward(FILE *f, const char *module_name, TypeList *tl) {
   if (tl->type->kind != FnT || tl->type->fnT->is_extern_c)
     return;
 
-  Function *fn = tl->type->fnT;
-  if (fn->returnType) {
-    if (c_type_declare(f, fn->returnType, &fn->return_type_location, ""))
-      FATALX("array return type not supported -> c backend!");
-  } else
-    fprintf(f, "void");
-  fprintf(f, " %s%s(", module_name, tl->type->name);
-  if (fn->parameter.len > 0)
-    c_var_list(f, &fn->parameter, ", ");
-  else
-    fprintf(f, "void");
-  fprintf(f, ");\n");
+  c_fn_forward_fn(f, module_name, tl->type->name, tl->type->fnT);
 }
 
 void c_Module_forward_fn(FILE *f, Module *m) {
@@ -2854,7 +3082,7 @@ bool is_member_fn_for(Type *ot, Type *ft, const char *name) {
     return false;
   Function *f = ft->fnT;
 
-  if (f->parameter.len == 0)
+  if (f->d.parameter.len == 0)
     return false;
 
   const size_t ol = strlen(ot->name);
@@ -2865,7 +3093,7 @@ bool is_member_fn_for(Type *ot, Type *ft, const char *name) {
   } else if (strcmp(ft->name, name) != 0)
     return false;
 
-  Variable *first = &f->parameter.v[0];
+  Variable *first = &f->d.parameter.v[0];
   if (Type_equal(first->type, ot))
     return true;
 
@@ -2894,6 +3122,13 @@ Type *Module_find_member(Type *t, const char *name) {
   case UnionTypeT:
     // union?? -> some build in ()
     break;
+  case InterfaceT: {
+    int offset = strlen(t->name);
+    for (int i = 0; i < t->interfaceT->methods.len; ++i)
+      if (strcmp(t->interfaceT->methods.fns[i].name + offset, name) == 0)
+        return &t->interfaceT->methods.fns[i];
+    break;
+  }
   case UseT:
     return Module_find_type(t->useT->module, name, name + strlen(name));
 
@@ -2917,6 +3152,74 @@ Type *Module_find_member(Type *t, const char *name) {
   }
 
   return NULL;
+}
+
+Type *AdaptParameter_for(Program *p, Type *got, Type *expect, Parameter *param) {
+  (void)expect;
+  (void)param;
+
+  if (expect->kind == InterfaceT) {
+    bool is_pointer = got->kind == PointerT;
+    if (is_pointer)
+      got = got->child;
+    for (int i = 0; i < expect->interfaceT->methods.len; ++i) {
+      const char *allName = expect->interfaceT->methods.fns[i].name;
+      const char *name = allName + strlen(expect->name);
+      Type *fnt = Module_find_member(got, name);
+      if (!fnt || fnt->kind != FnT) {
+        FATAL(&param->p->location, "Type '%s' does not fit interface '%s'\n  missing method '%s'", Type_name(got).s,
+              Type_name(expect).s, name);
+      }
+    }
+    Expression *cE = Program_new_Expression(p, ConstructE, param->p->location);
+    cE->construct->type = expect;
+    cE->construct->p = (ParameterList){Program_alloc(p, sizeof(Parameter) * 2), 2};
+    cE->construct->p.p[0].name = NULL;
+    if (!is_pointer) {
+      Expression *deref = Program_new_Expression(p, UnaryPrefixE, param->p->location);
+      deref->unpre->o = param->p;
+      deref->unpre->op = "&";
+      param->p = deref;
+    }
+    cE->construct->p.p[0].p = param->p;
+    cE->construct->p.p[1].name = NULL;
+    cE->construct->p.p[1].p = Program_new_Expression(p, IdentifierA, param->p->location);
+    BuffString varName;
+    Module *gotM = Type_defined_module(got);
+    if (!gotM)
+      FATAL(&param->p->location, "could not find module for type '%s'", Type_name(got).s);
+    int varNameLen = snprintf(varName.s, sizeof(varName.s), "%s%s_%s%s", expect->interfaceT->module->c_name,
+                              expect->name, gotM->c_name, got->name);
+    cE->construct->p.p[1].p->id->name = Program_copy_string(p, varName.s, varNameLen);
+    cE->construct->p.p[1].p->id->type = NULL;
+    param->p = cE;
+
+    bool allready_used = false;
+    for (TypeList *tl = expect->interfaceT->used_types; !allready_used && tl; tl = tl->next)
+      allready_used = (tl->type == got);
+    if (!allready_used) {
+      TypeList *tl = (TypeList *)Program_alloc(p, sizeof(TypeList));
+      tl->type = got;
+      tl->next = expect->interfaceT->used_types;
+      expect->interfaceT->used_types = tl;
+    }
+    return expect;
+  } else if (expect->kind == PointerT && expect->child->kind == InterfaceT) {
+    Type *x = AdaptParameter_for(p, got, expect->child, param);
+    if (x != expect->child)
+      FATAL(&param->p->location, "internal error constructing interface '%s'", Type_name(expect).s);
+    if (param->p->type != ConstructE)
+      FATAL(&param->p->location, "internal error constructing interface '%s'", Type_name(expect).s);
+    param->p->construct->pointer = true;
+    Type *xP = Module_find_pointer_type(expect->child->interfaceT->module, expect->child);
+    if (!xP) {
+      xP = Program_add_type(p, PointerT, "", expect->child->interfaceT->module);
+      xP->child = expect;
+    }
+    return xP;
+  }
+
+  return got;
 }
 
 Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m, Expression *e) {
@@ -2970,22 +3273,23 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
       ++p_len;
       ++test_start;
     }
-    if (p_len > t->fnT->parameter.len && t->fnT->parameter.v[t->fnT->parameter.len - 1].type != &Ellipsis)
+    if (p_len > t->fnT->d.parameter.len && t->fnT->d.parameter.v[t->fnT->d.parameter.len - 1].type != &Ellipsis)
       FATAL(&e->location, "To much parameter for function call");
-    if (p_len < t->fnT->parameter.len && t->fnT->parameter.v[t->fnT->parameter.len - 1].type != &Ellipsis)
+    if (p_len < t->fnT->d.parameter.len && t->fnT->d.parameter.v[t->fnT->d.parameter.len - 1].type != &Ellipsis)
       FATAL(&e->location, "Missing parameter for function call");
 
     int i = 0;
-    for (int j = test_start; i < e->call->p.len && j < t->fnT->parameter.len; ++i, ++j) {
+    for (int j = test_start; i < e->call->p.len && j < t->fnT->d.parameter.len; ++i, ++j) {
       Type *pt = c_Expression_make_variables_typed(s, p, m, e->call->p.p[i].p);
-      if (!Type_equal(pt, t->fnT->parameter.v[j].type))
-        FATAL(&e->call->p.p[i].p->location, "Type missmatch got '%s' (%p), expect '%s' (%p)", Type_name(pt).s, pt,
-              Type_name(t->fnT->parameter.v[j].type).s, t->fnT->parameter.v[j].type);
+      pt = AdaptParameter_for(p, pt, t->fnT->d.parameter.v[j].type, &e->call->p.p[i]);
+      if (!Type_equal(pt, t->fnT->d.parameter.v[j].type))
+        FATAL(&e->call->p.p[i].p->location, "Type missmatch got '%s', expect '%s'", Type_name(pt).s,
+              Type_name(t->fnT->d.parameter.v[j].type).s);
     }
     for (; i < e->call->p.len; ++i)
       c_Expression_make_variables_typed(s, p, m, e->call->p.p[i].p);
 
-    return t->fnT->returnType;
+    return t->fnT->d.returnType;
   }
   case ConstructE: {
     if (e->construct->type->kind != StructT && e->construct->type->kind != UnionT)
@@ -3101,7 +3405,8 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
       t = t->child;
       e->member->pointer = true;
     }
-    if (t->kind != StructT && t->kind != UnionT && t->kind != EnumT && t->kind != UnionTypeT && t->kind != UseT)
+    if (t->kind != StructT && t->kind != UnionT && t->kind != InterfaceT && t->kind != EnumT && t->kind != UnionTypeT &&
+        t->kind != UseT)
       FATAL(&e->location, "Expect non pointer type for member access got '%s'", Type_name(t).s);
     if (!(e->member->member->type = Module_find_member(t, e->member->member->name)))
       FATAL(&e->location, "unknown member '%s' for '%s'", e->member->member->name, Type_name(t).s);
@@ -3239,7 +3544,7 @@ void c_Statement_make_variables_typed(VariableStack *s, Program *p, Module *m, S
 
 void c_Function_make_variables_typed(VariableStack *s, Program *p, Module *m, Function *f) {
   int size = s->stackSize;
-  for (Variable *p = f->parameter.v; p < f->parameter.v + f->parameter.len; ++p)
+  for (Variable *p = f->d.parameter.v; p < f->d.parameter.v + f->d.parameter.len; ++p)
     VariableStack_push(s, p->name, p->type);
 
   c_Statement_make_variables_typed(s, p, m, f->body);
@@ -3328,12 +3633,12 @@ void c_build_vec_types(Program *p) {
         BuffString fn_name = vec_name;
         strcat(fn_name.s, "push");
         Function *push = Program_add_type(p, FnT, Program_copy_string(p, fn_name.s, strlen(fn_name.s)), m)->fnT;
-        push->returnType = NULL; // value_type;
-        push->return_type_location = null_location;
+        push->d.returnType = NULL; // value_type;
+        push->d.return_type_location = null_location;
         push->is_extern_c = false;
-        push->parameter = (VariableList){(Variable *)Program_alloc(p, 2 * sizeof(Variable)), 2};
-        push->parameter.v[0] = (Variable){null_location, "v", vec_pointer_type};
-        push->parameter.v[1] = (Variable){null_location, "val", value_type};
+        push->d.parameter = (VariableList){(Variable *)Program_alloc(p, 2 * sizeof(Variable)), 2};
+        push->d.parameter.v[0] = (Variable){null_location, "v", vec_pointer_type};
+        push->d.parameter.v[1] = (Variable){null_location, "val", value_type};
 
         BuffString pushfn;
         snprintf(pushfn.s, sizeof(pushfn.s),
@@ -3350,11 +3655,11 @@ void c_build_vec_types(Program *p) {
         BuffString fn_name = vec_name;
         strcat(fn_name.s, "pop");
         Function *pop = Program_add_type(p, FnT, Program_copy_string(p, fn_name.s, strlen(fn_name.s)), m)->fnT;
-        pop->returnType = value_type;
-        pop->return_type_location = null_location;
+        pop->d.returnType = value_type;
+        pop->d.return_type_location = null_location;
         pop->is_extern_c = false;
-        pop->parameter = (VariableList){(Variable *)Program_alloc(p, 1 * sizeof(Variable)), 1};
-        pop->parameter.v[0] = (Variable){null_location, "v", vec_pointer_type};
+        pop->d.parameter = (VariableList){(Variable *)Program_alloc(p, 1 * sizeof(Variable)), 1};
+        pop->d.parameter.v[0] = (Variable){null_location, "v", vec_pointer_type};
 
         pop->body = Program_parse_scope(p, m,
                                         &(State){"v.len--\n"
@@ -3366,11 +3671,11 @@ void c_build_vec_types(Program *p) {
         BuffString fn_name = vec_name;
         strcat(fn_name.s, "free");
         Function *free = Program_add_type(p, FnT, Program_copy_string(p, fn_name.s, strlen(fn_name.s)), m)->fnT;
-        free->returnType = NULL;
-        free->return_type_location = null_location;
+        free->d.returnType = NULL;
+        free->d.return_type_location = null_location;
         free->is_extern_c = false;
-        free->parameter = (VariableList){(Variable *)Program_alloc(p, 1 * sizeof(Variable)), 1};
-        free->parameter.v[0] = (Variable){null_location, "v", vec_pointer_type};
+        free->d.parameter = (VariableList){(Variable *)Program_alloc(p, 1 * sizeof(Variable)), 1};
+        free->d.parameter.v[0] = (Variable){null_location, "v", vec_pointer_type};
         free->body = Program_parse_scope(p, m,
                                          &(State){"free (v.__d as *char)\n"
                                                   "}",
@@ -3425,6 +3730,10 @@ void c_Program(FILE *f, Program *p, Module *m) {
   Program_reset_module_finished(p);
   c_Module_forward_fn(f, &global);
   c_Module_forward_fn(f, m);
+
+  Program_reset_module_finished(p);
+  c_Module_interfaces(f, &global);
+  c_Module_interfaces(f, m);
 
   Program_reset_module_finished(p);
   c_Module_fn(f, &global);

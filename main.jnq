@@ -1,7 +1,8 @@
 
 use Game from tests.game.Game
 use Program from tests.src.Program
-use tests.sub.util 
+use tests.game.math.util
+
 
 fn main() int
 {

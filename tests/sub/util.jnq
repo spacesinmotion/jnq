@@ -19,3 +19,19 @@ type Nix enum {
 }
 
 cfn round(x double) double
+
+type Some2 struct {
+  xx int
+}
+
+fn id(s *Some2, m int) int {
+  printf("--- id Some2 %d\n", s.xx)
+
+  return s.xx + m 
+}
+
+fn val(s *Some2) int {
+  printf("--- val Some2 %d\n", s.xx)
+
+  return s.xx * 2
+}

@@ -1,0 +1,60 @@
+use Some2 from sub.util 
+
+type SomeAble interface {
+  fn id(s *SomeAble, f int) int
+  fn val(s *SomeAble) int
+}
+
+fn some(x *SomeAble) int {
+  return x.id(42) + x.val()
+}
+
+type Some1 struct {
+  xx int
+}
+
+fn id(s *Some1, m int) int {
+  printf("--- id Some1 %d\n", s.xx)
+
+  return s.xx * m
+}
+
+fn val(s *Some1) int {
+  printf("--- val Some1 %d\n", s.xx)
+
+  return s.xx
+}
+
+fn basic_2_structs_1_interface()
+{
+  printf(" .basic_2_structs_1_interface\n")
+
+  s1 := Some1{2}
+  ASSERT(2 == s1.xx)
+  ASSERT(86 == some(s1))
+
+  s2 := Some2{3}
+  ASSERT(3 == s2.xx)
+  ASSERT(51 == some(s2))
+}
+
+fn interface_in_vectors()
+{
+  printf(" .interface_in_vectors\n")
+
+  v := vec[]SomeAble{}
+  v.push(Some1{2})
+  v.push(Some2{3})
+
+  ASSERT(86 == some(v[0]))
+  ASSERT(51 == some(v[1]))
+}
+
+fn main() int
+{
+  printf("interfaces\n")
+  basic_2_structs_1_interface()
+  interface_in_vectors()
+  printf(" ...ok\n")
+  return 0
+}
