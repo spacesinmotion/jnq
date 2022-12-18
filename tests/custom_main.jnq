@@ -1,0 +1,27 @@
+
+
+ccode {
+#include <assert.h>
+}
+
+type Thing struct {
+  x int
+} 
+
+fn increment(t *Thing) {
+  t.x++
+}
+
+cmain {
+int main() {
+  printf("external_calls\n");
+
+  custom_main_Thing d;
+  d.x = 41;
+  custom_main_increment(&d);
+  assert(42 == d.x);
+
+  printf(" ..ok\n");
+  return 0;
+}
+}

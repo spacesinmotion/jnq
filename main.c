@@ -537,6 +537,7 @@ typedef struct Module {
 typedef struct CBlock CBlock;
 typedef struct CBlock {
   const char *block;
+  bool at_start;
   CBlock *next;
 } CBlock;
 
@@ -2082,7 +2083,7 @@ void Program_parse_fn(Program *p, Module *m, State *st, bool extc) {
     FATAL(&st->location, "Missing type name");
 }
 
-void Program_parse_ccode(Program *p, State *st) {
+void Program_parse_ccode(Program *p, State *st, bool at_start) {
   State old = *st;
   if (!check_op(st, "{"))
     FATAL(&old.location, "missing block start for ccode");
@@ -2108,6 +2109,7 @@ void Program_parse_ccode(Program *p, State *st) {
   CBlock *cb = (CBlock *)Program_alloc(p, sizeof(CBlock));
   cb->next = p->cblocks;
   cb->block = Program_copy_string(p, old.c, st->c - old.c - 1);
+  cb->at_start = at_start;
   p->cblocks = cb;
 }
 
@@ -2124,7 +2126,9 @@ void Program_parse_module(Program *p, Module *m, State *st) {
       else if (check_word(st, "cfn"))
         Program_parse_fn(p, m, st, true);
       else if (check_word(st, "ccode"))
-        Program_parse_ccode(p, st);
+        Program_parse_ccode(p, st, true);
+      else if (check_word(st, "cmain"))
+        Program_parse_ccode(p, st, false);
       else {
         FATAL(&st->location, "Unknown keyword >>'%s'\n", st->c);
         break;
@@ -3730,7 +3734,8 @@ void c_Program(FILE *f, Program *p, Module *m) {
   fputs("\n", f);
 
   for (CBlock *cb = p->cblocks; cb; cb = cb->next)
-    fputs(cb->block, f);
+    if (cb->at_start)
+      fputs(cb->block, f);
 
   Program_reset_module_finished(p);
   c_Module_make_variables_typed(p, &global);
@@ -3756,10 +3761,19 @@ void c_Program(FILE *f, Program *p, Module *m) {
   c_Module_fn(f, &global);
   c_Module_fn(f, m);
 
-  fputs("\n", f);
-  fputs("int main() {\n", f);
-  fprintf(f, "  return %smain();\n", m->c_name);
-  fputs("}\n", f);
+  bool custom_main = false;
+  for (CBlock *cb = p->cblocks; cb; cb = cb->next)
+    if (!cb->at_start) {
+      fputs(cb->block, f);
+      custom_main = true;
+    }
+
+  if (!custom_main) {
+    fputs("\n", f);
+    fputs("int main() {\n", f);
+    fprintf(f, "  return %smain();\n", m->c_name);
+    fputs("}\n", f);
+  }
 }
 
 void Program_add_defaults(Program *p) {
