@@ -72,6 +72,19 @@ Location back(State *s, size_t c) {
   return b;
 }
 
+typedef struct BufString {
+  char s[256];
+} BuffString;
+
+BuffString str(const char *format, ...) {
+  va_list args;
+  BuffString s;
+  va_start(args, format);
+  vsnprintf(s.s, sizeof(s.s), format, args);
+  va_end(args);
+  return s;
+}
+
 typedef struct Identifier Identifier;
 typedef struct Variable Variable;
 typedef struct Variable Variable;
@@ -563,6 +576,8 @@ char *Program_copy_string(Program *p, const char *s, size_t l) {
   return id;
 }
 
+char *Program_copy_str(Program *p, BuffString s) { return Program_copy_string(p, s.s, strlen(s.s)); }
+
 char *readFile(const char *filename) {
   char *buffer = 0;
   long length;
@@ -699,10 +714,6 @@ bool Type_equal(Type *t1, Type *t2) {
 
   return t1 == t2;
 }
-
-typedef struct BufString {
-  char s[256];
-} BuffString;
 
 BuffString Type_name(Type *t) {
   if (!t)
@@ -1468,9 +1479,8 @@ FnVec Program_parse_interface_fns(Program *p, Module *m, Type *in, State *st) {
     State old = *st;
     if (!check_identifier(st))
       FATAL(&st->location, "missing function name!");
-    BuffString sn;
-    int l = snprintf(sn.s, sizeof(sn.s), "%s%.*s", in->name, (int)(st->c - old.c), old.c);
-    tt[tt_len].name = Program_copy_string(p, sn.s, l);
+    BuffString sn = str("%s%.*s", in->name, (int)(st->c - old.c), old.c);
+    tt[tt_len].name = Program_copy_string(p, sn.s, strlen(sn.s));
     tt[tt_len].kind = FnT;
     tt[tt_len].fnT = (Function *)Program_alloc(p, sizeof(Function));
     tt[tt_len].fnT->module = m;
@@ -3184,13 +3194,11 @@ Type *AdaptParameter_for(Program *p, Type *got, Type *expect, Parameter *param) 
     cE->construct->p.p[0].p = param->p;
     cE->construct->p.p[1].name = NULL;
     cE->construct->p.p[1].p = Program_new_Expression(p, IdentifierA, param->p->location);
-    BuffString varName;
     Module *gotM = Type_defined_module(got);
     if (!gotM)
       FATAL(&param->p->location, "could not find module for type '%s'", Type_name(got).s);
-    int varNameLen = snprintf(varName.s, sizeof(varName.s), "%s%s_%s%s", expect->interfaceT->module->c_name,
-                              expect->name, gotM->c_name, got->name);
-    cE->construct->p.p[1].p->id->name = Program_copy_string(p, varName.s, varNameLen);
+    cE->construct->p.p[1].p->id->name = Program_copy_str(
+        p, str("%s%s_%s%s", expect->interfaceT->module->c_name, expect->name, gotM->c_name, got->name));
     cE->construct->p.p[1].p->id->type = NULL;
     param->p = cE;
 
@@ -3380,18 +3388,14 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
     if (t->kind == StructT && t->structT->member.len > 0) {
       Variable *delegateV = &t->structT->member.v[0];
       if (delegateV->type->kind == PointerT && strcmp(delegateV->name, "__d") == 0) {
-        BuffString bf;
-        int len = snprintf(bf.s, sizeof(bf.s), ".%s", delegateV->name);
-        e->access->delegate = Program_copy_string(p, bf.s, len);
+        e->access->delegate = Program_copy_str(p, str(".%s", delegateV->name));
         return delegateV->type->child;
       }
     }
     if (t->kind == PointerT && t->child->kind == StructT && t->child->structT->member.len > 0) {
       Variable *delegateV = &t->child->structT->member.v[0];
       if (delegateV->type->kind == PointerT && strcmp(delegateV->name, "__d") == 0) {
-        BuffString bf;
-        int len = snprintf(bf.s, sizeof(bf.s), "->%s", delegateV->name);
-        e->access->delegate = Program_copy_string(p, bf.s, len);
+        e->access->delegate = Program_copy_str(p, str("->%s", delegateV->name));
         return delegateV->type->child;
       }
     }
@@ -3640,15 +3644,13 @@ void c_build_vec_types(Program *p) {
         push->d.parameter.v[0] = (Variable){null_location, "v", vec_pointer_type};
         push->d.parameter.v[1] = (Variable){null_location, "val", value_type};
 
-        BuffString pushfn;
-        snprintf(pushfn.s, sizeof(pushfn.s),
-                 "if(v.len >= v.cap){\n"
-                 "v.cap+=%d\n"
-                 "v.__d=realloc(v.__d as *char, v.cap*sizeof(val)) as %s\n"
-                 "}\n"
-                 "v.__d[v.len++]=val\n"
-                 "}",
-                 count, Type_name(value_type_pointer).s);
+        BuffString pushfn = str("if(v.len >= v.cap){\n"
+                                "v.cap+=%d\n"
+                                "v.__d=realloc(v.__d as *char, v.cap*sizeof(val)) as %s\n"
+                                "}\n"
+                                "v.__d[v.len++]=val\n"
+                                "}",
+                                count, Type_name(value_type_pointer).s);
         push->body = Program_parse_scope(p, m, &(State){pushfn.s, null_location});
       }
       {
