@@ -1379,8 +1379,14 @@ VariableList Program_parse_variable_declaration_list(Program *p, Module *m, Stat
     if (v_len >= 32)
       FATALX("Out of internal memory for variable list!");
     v[v_len] = Program_parse_variable_declaration(p, m, st);
+    if (!v[v_len].name && check_op(st, "...")) {
+      v[v_len].name = "...";
+      v[v_len].location = back(st, 3);
+      v[v_len].type = &Ellipsis;
+    }
     if (!v[v_len].name)
       FATAL(&st->location, "missing variable name");
+
     v_len++;
     check_op(st, ",");
   }
