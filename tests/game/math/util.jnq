@@ -1,14 +1,5 @@
 
-cfn sqrt(a float) float 
-cfn sin(a float) float 
-cfn asin(a float) float 
-cfn cos(a float) float 
-cfn acos(a float) float 
-cfn tan(a float) float 
-cfn atan(a float) float 
-cfn rand() int
-cfn floor(d double) double 
-cfn pow(d double, c double) double 
+use rand from C.stdlib
 
 fn random() float {
   return (rand() % 100000) as double / 1000000.0

@@ -1108,7 +1108,6 @@ Module *Program_parse_sub_file(Program *p, const char *path, Module *parent) {
 
   if (!mod) {
     strcpy(tempPath, lib_path);
-    strcpy(tempPath, "lib.");
     strcat(tempPath, path);
     mod = Program_parse_file(p, tempPath);
   }
@@ -3768,15 +3767,11 @@ void Program_add_defaults(Program *p) {
   Program_parse_fn(p, &global, &(State){"free(d *char)\n", null_location}, true);
 }
 
-int main(int argc, char *argv[]) {
-  if (argc <= 1)
-    FATALX("missing input file\n");
+void init_lib_path() {
+  size_t len = readlink("/proc/self/exe", lib_path, sizeof(lib_path));
+  if (len + 5 > sizeof(lib_path))
+    FATALX("not enough memory for lib_path");
 
-  int jnq_len = strlen(argv[1]);
-  if (jnq_len < 4 || strcmp(argv[1] + (jnq_len - 4), ".jnq") != 0)
-    FATALX("invalid input file '%s'\n", argv[1]);
-
-  readlink("/proc/self/exe", lib_path, sizeof(lib_path));
   char *last = NULL;
   for (char *c = lib_path; *c; ++c) {
     if (*c == '/') {
@@ -3786,6 +3781,18 @@ int main(int argc, char *argv[]) {
   }
   if (last)
     last[1] = '\0';
+  strcat(lib_path, "lib.");
+}
+
+int main(int argc, char *argv[]) {
+  if (argc <= 1)
+    FATALX("missing input file\n");
+
+  int jnq_len = strlen(argv[1]);
+  if (jnq_len < 4 || strcmp(argv[1] + (jnq_len - 4), ".jnq") != 0)
+    FATALX("invalid input file '%s'\n", argv[1]);
+
+  init_lib_path();
 
   char main_mod[256] = {0};
   if (jnq_len > 255)

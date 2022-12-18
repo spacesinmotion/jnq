@@ -3,8 +3,7 @@ use Item, ItemItem, NewItem from Item
 use Image from tests.game.gfx.Image 
 use OverlayText from tests.game.gfx.OverlayText
 use Graphics from tests.game.gfx.Graphics
-
-cfn strcmp(a *char, b *char) int
+use strcmp from C.str
 
 type Inventory struct {
   items vec[]Item

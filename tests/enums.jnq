@@ -1,5 +1,5 @@
 
-cfn strcmp(a *char, b *char) int
+use strcmp from C.str
 
 use sub.util
 

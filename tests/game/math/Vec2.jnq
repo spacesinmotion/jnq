@@ -1,5 +1,5 @@
 
-use sqrt from util
+use sqrt from C.math
 
 type Vec2 struct {
   x float, 

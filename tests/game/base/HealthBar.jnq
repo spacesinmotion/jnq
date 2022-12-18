@@ -1,7 +1,8 @@
 
 use Graphics from tests.game.gfx.Graphics
 use BillboardImage from tests.game.gfx.BillboardImage
-use pow, rand_in, lerp, clamp from tests.game.math.util
+use rand_in, lerp, clamp from tests.game.math.util
+use pow from C.math
 
 type HealthBar struct {
   bar *BillboardImage

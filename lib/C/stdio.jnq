@@ -1,0 +1,6 @@
+
+
+cfn sprintf(t *char, format *char, ...) int
+cfn snprintf(t *char, ml int, format *char, ...) int
+
+cfn scanf(c *char, x *char)

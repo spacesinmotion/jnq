@@ -1,7 +1,7 @@
 
 use OverlayText from tests.game.gfx.OverlayText 
 use Graphics from tests.game.gfx.Graphics
-use floor, pow from tests.game.math.util
+use floor, pow from C.math
 
 type Clock struct {
   display *OverlayText

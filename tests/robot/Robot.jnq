@@ -1,10 +1,8 @@
 
-//cfn system(c *char)
 fn system(c *char) {}
 
-cfn scanf(c *char, x *char)
-cfn rand() int
-cfn srand(s int)
+use rand, srand from C.stdlib
+use scanf from C.stdio
 
 type Robot struct {
   x int

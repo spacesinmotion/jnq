@@ -4,10 +4,9 @@ use Image from tests.game.gfx.Image
 use OverlayImage from tests.game.gfx.OverlayImage
 use OverlayText from tests.game.gfx.OverlayText
 use lerp, clampi, max, abs from tests.game.math.util
+use strlen from C.str
 
 use ItemItem from Item
-
-cfn strlen(t *char) int
 
 type Depend struct {
   img *OverlayImage,

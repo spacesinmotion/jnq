@@ -2,7 +2,8 @@
 use Vec3 from tests.game.math.Vec3
 use Vec2 from tests.game.math.Vec2
 use Graphics from tests.game.gfx.Graphics
-use lerp, random, clamp, cos, sin from tests.game.math.util
+use lerp, random, clamp from tests.game.math.util
+use cos, sin from C.math
 
 type Camera struct {
   ry float,

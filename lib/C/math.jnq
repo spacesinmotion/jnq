@@ -1,0 +1,18 @@
+
+cfn sin(a float) float 
+cfn asin(a float) float 
+cfn cos(a float) float 
+cfn acos(a float) float 
+cfn tan(a float) float 
+cfn atan(a float) float 
+cfn atan2(y float, x float) float 
+
+cfn floor(d double) double 
+cfn ceil(d double) double 
+cfn round(d double) double 
+cfn trunc(d double) double 
+
+cfn fabs(d double) double 
+
+cfn pow(d double, c double) double 
+cfn sqrt(a float) float 
