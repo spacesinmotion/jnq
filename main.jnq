@@ -3,15 +3,16 @@ use Game from tests.game.Game
 use Program from tests.src.Program
 use tests.game.math.util
 
-cfn snprintf(t *char, ml int, format *char, ...)
+use * from C.str
+
 
 fn main() int
 {
   printf("main\n")
 
   text := [256]char{};
-  snprintf(text, 256, "Hallo welt %d %d %d", 1,2,3)
-  printf("%s\n",text)
+  len := snprintf(text, 256, "Hallo welt %d %d %d", 1, 2, 3)
+  printf("'%s' (%d)\n", text, len)
 
   g := Game{}
 

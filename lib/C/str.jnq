@@ -1,0 +1,2 @@
+
+cfn snprintf(t *char, ml int, format *char, ...) int

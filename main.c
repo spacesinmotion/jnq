@@ -19,6 +19,8 @@
 #define JNQ_BIN "jnq_bin.exe"
 #endif
 
+char lib_path[256] = {0};
+
 typedef struct Location {
   const char *file;
   unsigned short line;
@@ -1103,6 +1105,14 @@ Module *Program_parse_sub_file(Program *p, const char *path, Module *parent) {
   Module *mod = Program_parse_file(p, tempPath);
   if (!mod)
     mod = Program_parse_file(p, path);
+
+  if (!mod) {
+    strcpy(tempPath, lib_path);
+    strcpy(tempPath, "lib.");
+    strcat(tempPath, path);
+    mod = Program_parse_file(p, tempPath);
+  }
+
   return mod;
 }
 
@@ -3765,6 +3775,17 @@ int main(int argc, char *argv[]) {
   int jnq_len = strlen(argv[1]);
   if (jnq_len < 4 || strcmp(argv[1] + (jnq_len - 4), ".jnq") != 0)
     FATALX("invalid input file '%s'\n", argv[1]);
+
+  readlink("/proc/self/exe", lib_path, sizeof(lib_path));
+  char *last = NULL;
+  for (char *c = lib_path; *c; ++c) {
+    if (*c == '/') {
+      *c = '.';
+      last = c;
+    }
+  }
+  if (last)
+    last[1] = '\0';
 
   char main_mod[256] = {0};
   if (jnq_len > 255)
