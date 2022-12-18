@@ -3855,7 +3855,7 @@ int main(int argc, char *argv[]) {
   if (error == 0)
     error = setjmp(long_jump_end);
   if (error == 0) {
-    char clang_call[256] = {0};
+    char clang_call[1024] = {0};
     // strcat(clang_call, "cat ");
     // strcat(clang_call, main_c);
     // system(clang_call);
@@ -3867,6 +3867,10 @@ int main(int argc, char *argv[]) {
                        "-D_CRT_SECURE_NO_WARNINGS "
 #endif
     );
+    for (int i = 2; i < argc; ++i) {
+      strcat(clang_call, argv[i]);
+      strcat(clang_call, " ");
+    }
     strcat(clang_call, main_c);
     error = system(clang_call);
     if (error != 0)
