@@ -14,6 +14,8 @@
 #define JNQ_BIN "./jnq_bin"
 #else
 #include <io.h>
+#include <windows.h>
+
 #define access _access
 #define F_OK 0
 #define JNQ_BIN "jnq_bin.exe"
@@ -3782,13 +3784,21 @@ void Program_add_defaults(Program *p) {
 }
 
 void init_lib_path() {
+#ifdef WIN32
+  const char sep = '\\';
+  size_t len = GetModuleFileNameA(NULL, lib_path, sizeof(lib_path));
+#else
+  const char sep = '/';
   size_t len = readlink("/proc/self/exe", lib_path, sizeof(lib_path));
+#endif
+
+  printf("%s\n", lib_path);
   if (len + 5 > sizeof(lib_path))
     FATALX("not enough memory for lib_path");
 
   char *last = NULL;
   for (char *c = lib_path; *c; ++c) {
-    if (*c == '/') {
+    if (*c == sep) {
       *c = '.';
       last = c;
     }
