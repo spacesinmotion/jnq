@@ -5,31 +5,7 @@
 
 // use * from C.stdio
 
-type SomeAble interface {
-  fn id(s *SomeAble, f int) int
-  fn val(s *SomeAble) int
-}
-
-fn some(x *SomeAble) int {
-  return x.id(42) + x.val()
-}
-
-
-type Some1 struct {
-  xx int
-}
-
-fn id(s *Some1, m int) int {
-  printf("--- id Some1 %d\n", s.xx)
-
-  return s.xx * m
-}
-
-fn val(s *Some1) int {
-  printf("--- val Some1 %d\n", s.xx)
-
-  return s.xx
-}
+use Some1, SomeAble, some from tests.interfaces
 
 fn main() int
 {

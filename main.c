@@ -626,8 +626,8 @@ void Program_reset_module_finished(Program *p) {
 }
 
 bool Type_is_import_type(Type *t) {
-  return t->kind == StructT || t->kind == UnionTypeT || t->kind == UnionT || t->kind == FnT || t->kind == EnumT ||
-         t->kind == PlaceHolder;
+  return t->kind == StructT || t->kind == UnionTypeT || t->kind == InterfaceT || t->kind == UnionT || t->kind == FnT ||
+         t->kind == EnumT || t->kind == PlaceHolder;
 }
 
 Type Null = (Type){"null_t", .structT = &(Struct){{}, &global}, StructT, NULL};
