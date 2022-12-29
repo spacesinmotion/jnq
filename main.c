@@ -2341,9 +2341,7 @@ void c_fn_pointer_decl(FILE *f, Type *tfn, bool named) {
   fprintf(f, ")");
 }
 
-Type *Module_find_member(Type *t, const char *name);
-
-void c_interface(FILE *f, const char *module_name, const char *name, Interface *intf) {
+void c_interface_tables(FILE *f, const char *module_name, const char *name, Interface *intf) {
   fprintf(f, "typedef struct %s%sTable", module_name, name);
   fprintf(f, "{\n");
   for (int i = 0; i < intf->methods.len; ++i) {
@@ -2353,6 +2351,17 @@ void c_interface(FILE *f, const char *module_name, const char *name, Interface *
     fprintf(f, ";\n");
   }
   fprintf(f, "} %s%sTable;\n\n", module_name, name);
+
+  fprintf(f, "\ntypedef struct %s%s", module_name, name);
+  fprintf(f, "{\n");
+  fprintf(f, "  void *self;\n");
+  fprintf(f, "  %s%sTable *tab;\n", module_name, name);
+  fprintf(f, "} %s%s;\n\n", module_name, name);
+}
+
+Type *Module_find_member(Type *t, const char *name);
+
+void c_interface(FILE *f, const char *module_name, const char *name, Interface *intf) {
   for (TypeList *tl = intf->used_types; tl; tl = tl->next) {
     Module *gotM = Type_defined_module(tl->type);
     if (!gotM)
@@ -2372,12 +2381,6 @@ void c_interface(FILE *f, const char *module_name, const char *name, Interface *
     }
     fprintf(f, "};\n");
   }
-
-  fprintf(f, "\ntypedef struct %s%s", module_name, name);
-  fprintf(f, "{\n");
-  fprintf(f, "  void *self;\n");
-  fprintf(f, "  %s%sTable *tab;\n", module_name, name);
-  fprintf(f, "} %s%s;\n\n", module_name, name);
 
   for (int i = 0; i < intf->methods.len; ++i) {
     Type *fnt = &intf->methods.fns[i];
@@ -2962,6 +2965,20 @@ void c_Module_types(FILE *f, Module *m) {
   }
 }
 
+void c_Module_interface_tables(FILE *f, Module *m) {
+  if (m->finished)
+    return;
+  m->finished = true;
+
+  if (m->types) {
+    c_use(f, m->types, c_Module_interface_tables);
+
+    for (TypeList *tl = m->types; tl; tl = tl->next)
+      if (tl->type->kind == InterfaceT)
+        c_interface_tables(f, m->c_name, tl->type->name, tl->type->interfaceT);
+  }
+}
+
 void c_Module_interfaces(FILE *f, Module *m) {
   if (m->finished)
     return;
@@ -3358,6 +3375,7 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
           Type *vt = Module_find_member(e->construct->type, pa->name);
           if (!vt)
             FATAL(&pa->p->location, "Type '%s' has no member '%s'!", Type_name(e->construct->type).s, pa->name);
+          pt = AdaptParameter_for(p, pt, vt, &e->construct->p.p[i]);
           if (!Type_equal(pt, vt))
             FATAL(&pa->p->location, "Type missmatch for member '%s' of '%s'!\n  expect '%s', got '%s' ", pa->name,
                   Type_name(e->construct->type).s, Type_name(vt).s, Type_name(pt).s);
@@ -3365,6 +3383,7 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
           if (i >= e->construct->type->structT->member.len)
             FATAL(&e->location, "Too many initializer for struct '%s'", Type_name(e->construct->type).s);
           Variable *ma = &e->construct->type->structT->member.v[i];
+          pt = AdaptParameter_for(p, pt, ma->type, &e->construct->p.p[i]);
           if (!Type_equal(pt, ma->type))
             FATAL(&pa->p->location, "Type missmatch for member '%s' of '%s'!\n  expect '%s', got '%s' ", ma->name,
                   Type_name(e->construct->type).s, Type_name(ma->type).s, Type_name(pt).s);
@@ -3746,6 +3765,10 @@ void c_Program(FILE *f, Program *p, Module *m) {
   Program_reset_module_finished(p);
   c_Module_forward_types(f, &global);
   c_Module_forward_types(f, m);
+
+  Program_reset_module_finished(p);
+  c_Module_interface_tables(f, &global);
+  c_Module_interface_tables(f, m);
 
   Program_reset_module_finished(p);
   c_Module_types(f, &global);

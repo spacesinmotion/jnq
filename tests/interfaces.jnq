@@ -9,6 +9,10 @@ fn some(x *SomeAble) int {
   return x.id(42) + x.val()
 }
 
+type SomeContainer struct {
+  s SomeAble
+}
+
 type Some1 struct {
   xx int
 }
@@ -48,6 +52,14 @@ fn interface_in_vectors()
 
   ASSERT(86 == some(v[0]))
   ASSERT(51 == some(v[1]))
+}
+
+fn interface_in_structs()
+{
+  printf(" .interface_in_structs\n")
+
+  s1 := Some1{}
+  c := SomeContainer{s1}
 }
 
 fn main() int
