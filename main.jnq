@@ -31,7 +31,6 @@ fn val(s *Some1) int {
   return s.xx
 }
 
-
 fn main() int
 {
   printf("main\n")
@@ -39,6 +38,9 @@ fn main() int
   s := SomeAble{}
   ASSERT(s == null)
   s = &Some1{3}
+  ASSERT(s != null)
+  s = null
+  ASSERT(s == null)
 
   vx := SomeAble{}
   v := vec[]SomeAble{}

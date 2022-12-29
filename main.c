@@ -3243,6 +3243,13 @@ void CheckInterface_for(Type *got, Type *expect, Location *l) {
 }
 
 Expression *Interface_construct(Program *p, Type *got, Type *expect, Expression *pr) {
+  if (got == &Null) {
+    Expression *cE = Program_new_Expression(p, ConstructE, pr->location);
+    cE->construct->type = expect;
+    cE->construct->p = (ParameterList){NULL, 0};
+    return cE;
+  }
+
   bool is_pointer = got->kind == PointerT;
   if (!is_pointer) {
     lisp_expression(stderr, pr);

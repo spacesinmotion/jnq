@@ -76,6 +76,9 @@ fn interface_could_be_null()
 
   s = &Some2{3}
   ASSERT(51 == some(&s))
+
+  s = null
+  ASSERT(s == null)
 }
 
 fn interfaces_and_construction()
@@ -84,6 +87,9 @@ fn interfaces_and_construction()
 
   s0 := SomeAble{}
   c0 := SomeContainer{s0}
+  ASSERT(c0.s == null)
+
+  c0 = SomeContainer{null}
   ASSERT(c0.s == null)
 
   c1 := SomeContainer{&Some1{2}}
