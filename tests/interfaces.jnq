@@ -35,11 +35,11 @@ fn basic_2_structs_1_interface()
 
   s1 := Some1{2}
   ASSERT(2 == s1.xx)
-  ASSERT(86 == some(s1))
+  ASSERT(86 == some(&s1))
 
   s2 := Some2{3}
   ASSERT(3 == s2.xx)
-  ASSERT(51 == some(s2))
+  ASSERT(51 == some(&s2))
 }
 
 fn interface_in_vectors()
@@ -47,25 +47,56 @@ fn interface_in_vectors()
   printf(" .interface_in_vectors\n")
 
   v := vec[]SomeAble{}
-  v.push(Some1{2})
-  v.push(Some2{3})
+  v.push(&Some1{2})
+  v.push(&Some2{3})
 
-  ASSERT(86 == some(v[0]))
-  ASSERT(51 == some(v[1]))
+  ASSERT(86 == some(&v[0]))
+  ASSERT(51 == some(&v[1]))
 }
 
 fn interface_in_structs()
 {
   printf(" .interface_in_structs\n")
 
-  s1 := Some1{}
-  c := SomeContainer{s1}
+  s1 := Some1{2}
+  c := SomeContainer{&s1}
+
+  ASSERT(86 == some(&c.s))
+}
+
+fn interface_could_be_null()
+{
+  printf(" .interface_could_be_null\n")
+
+  s := SomeAble{}
+  ASSERT(s == null)
+
+  s = &Some1{2}
+  ASSERT(86 == some(&s))
+
+  s = &Some2{3}
+  ASSERT(51 == some(&s))
+}
+
+fn interfaces_and_construction()
+{
+  printf(" .interfaces_and_construction\n")
+
+  s0 := SomeAble{}
+  c0 := SomeContainer{s0}
+  ASSERT(c0.s == null)
+
+  c1 := SomeContainer{&Some1{2}}
+  ASSERT(c1.s != null)
+  ASSERT(86 == some(&c1.s))
 }
 
 fn main() int
 {
   printf("interfaces\n")
   basic_2_structs_1_interface()
+  interface_in_structs()
+  interface_could_be_null()
   interface_in_vectors()
   printf(" ...ok\n")
   return 0

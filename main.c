@@ -103,6 +103,8 @@ typedef struct UnaryPrefix UnaryPrefix;
 typedef struct UnaryPostfix UnaryPostfix;
 typedef struct BinaryOperation BinaryOperation;
 
+typedef struct CDelegate CDelegate;
+
 typedef struct DeclarationStatement DeclarationStatement;
 typedef struct ExpressionStatement ExpressionStatement;
 
@@ -142,6 +144,7 @@ typedef enum ExpressionType {
   UnaryPrefixE,
   UnaryPostfixE,
   BinaryOperationE,
+  CDelegateE,
 } ExpressionType;
 
 typedef struct Expression {
@@ -164,6 +167,7 @@ typedef struct Expression {
     UnaryPrefix *unpre;
     UnaryPostfix *unpost;
     BinaryOperation *binop;
+    CDelegate *cdelegate;
   };
   ExpressionType type;
 } Expression;
@@ -337,6 +341,11 @@ typedef struct BinaryOperation {
   Expression *o2;
   BinOp *op;
 } BinaryOperation;
+
+typedef struct CDelegate {
+  Expression *o;
+  const char *delegate;
+} CDelegate;
 
 typedef struct ExpressionStatement {
   Expression *e;
@@ -960,6 +969,11 @@ Expression *Program_new_Expression(Program *p, ExpressionType t, Location l) {
     break;
   case BinaryOperationE:
     e->binop = (BinaryOperation *)Program_alloc(p, sizeof(BinaryOperation));
+    break;
+  case CDelegateE:
+    e->cdelegate = (CDelegate *)Program_alloc(p, sizeof(CDelegate));
+    e->cdelegate->o = NULL;
+    e->cdelegate->delegate = NULL;
     break;
   }
   return e;
@@ -2589,6 +2603,11 @@ void lisp_expression(FILE *f, Expression *e) {
     lisp_expression(f, e->binop->o2);
     fprintf(f, ")");
     break;
+  case CDelegateE:
+    fprintf(f, "(.c ");
+    lisp_expression(f, e->cdelegate->o);
+    fprintf(f, " %s)", e->cdelegate->delegate);
+    break;
   }
 }
 
@@ -2695,15 +2714,19 @@ void c_expression(FILE *f, Expression *e) {
     } else if (e->construct->type->kind == VecT) {
       FATAL(&e->construct->p.p[0].p->location, "vec type should be replaced!");
     } else if (e->construct->type->kind == InterfaceT) {
-      if (e->construct->p.len != 2)
-        FATAL(&e->location, "Interface construction has wrong number of parameter!");
-      if (e->construct->p.p[1].p->type != IdentifierA)
-        FATAL(&e->location, "Interface construction has missing table name!");
-      if (e->construct->pointer)
-        fprintf(f, "&");
-      fprintf(f, "(%s%s){(void *)(", Type_defined_module(e->construct->type)->c_name, e->construct->type->name);
-      c_expression(f, e->construct->p.p[0].p);
-      fprintf(f, "), %s}", e->construct->p.p[1].p->id->name);
+      if (e->construct->p.len == 0) {
+        fprintf(f, "(%s%s){NULL, NULL}", Type_defined_module(e->construct->type)->c_name, e->construct->type->name);
+      } else {
+        if (e->construct->p.len != 2)
+          FATAL(&e->location, "Interface construction has wrong number of parameter!");
+        if (e->construct->p.p[1].p->type != IdentifierA)
+          FATAL(&e->location, "Interface construction has missing table name!");
+        if (e->construct->pointer)
+          fprintf(f, "&");
+        fprintf(f, "(%s%s){(void *)(", Type_defined_module(e->construct->type)->c_name, e->construct->type->name);
+        c_expression(f, e->construct->p.p[0].p);
+        fprintf(f, "), %s}", e->construct->p.p[1].p->id->name);
+      }
     } else {
       if (e->construct->type->kind == StructT || e->construct->type->kind == UnionT)
         fprintf(f, "(%s%s){", Type_defined_module(e->construct->type)->c_name, e->construct->type->name);
@@ -2806,6 +2829,11 @@ void c_expression(FILE *f, Expression *e) {
     c_expression(f, e->binop->o1);
     fprintf(f, " %s ", e->binop->op->op);
     c_expression(f, e->binop->o2);
+    break;
+  }
+  case CDelegateE: {
+    c_expression(f, e->cdelegate->o);
+    fprintf(f, "%s", e->cdelegate->delegate);
     break;
   }
   }
@@ -3202,55 +3230,70 @@ Type *Module_find_member(Type *t, const char *name) {
   return NULL;
 }
 
+void CheckInterface_for(Type *got, Type *expect, Location *l) {
+  for (int i = 0; i < expect->interfaceT->methods.len; ++i) {
+    const char *allName = expect->interfaceT->methods.fns[i].name;
+    const char *name = allName + strlen(expect->name);
+    Type *fnt = Module_find_member(got, name);
+    if (!fnt || fnt->kind != FnT) {
+      FATAL(l, "Type '%s' does not fit interface '%s'\n  missing method '%s'", Type_name(got).s, Type_name(expect).s,
+            name);
+    }
+  }
+}
+
+Expression *Interface_construct(Program *p, Type *got, Type *expect, Expression *pr) {
+  bool is_pointer = got->kind == PointerT;
+  if (!is_pointer) {
+    lisp_expression(stderr, pr);
+    fprintf(stderr, " %s <=> %s %p %p\n", Type_name(got).s, Type_name(expect).s, got, expect);
+    FATAL(&pr->location, "construct interface from none pointer type '%s'", Type_name(got).s);
+  }
+
+  if (is_pointer)
+    got = got->child;
+  CheckInterface_for(got, expect, &pr->location);
+  Expression *cE = Program_new_Expression(p, ConstructE, pr->location);
+  cE->construct->type = expect;
+  cE->construct->p = (ParameterList){Program_alloc(p, sizeof(Parameter) * 2), 2};
+  cE->construct->p.p[0].name = NULL;
+  if (!is_pointer) {
+    Expression *deref = Program_new_Expression(p, UnaryPrefixE, pr->location);
+    deref->unpre->o = pr;
+    deref->unpre->op = "&";
+    pr = deref;
+  }
+  cE->construct->p.p[0].p = pr;
+  cE->construct->p.p[1].name = NULL;
+  cE->construct->p.p[1].p = Program_new_Expression(p, IdentifierA, pr->location);
+  Module *gotM = Type_defined_module(got);
+  if (!gotM)
+    FATAL(&pr->location, "could not find module for type '%s'", Type_name(got).s);
+  cE->construct->p.p[1].p->id->name =
+      Program_copy_str(p, str("%s%s_%s%s", expect->interfaceT->module->c_name, expect->name, gotM->c_name, got->name));
+  cE->construct->p.p[1].p->id->type = NULL;
+  pr = cE;
+
+  bool allready_used = false;
+  for (TypeList *tl = expect->interfaceT->used_types; !allready_used && tl; tl = tl->next)
+    allready_used = (tl->type == got);
+  if (!allready_used) {
+    TypeList *tl = (TypeList *)Program_alloc(p, sizeof(TypeList));
+    tl->type = got;
+    tl->next = expect->interfaceT->used_types;
+    expect->interfaceT->used_types = tl;
+  }
+  return pr;
+}
+
 Type *AdaptParameter_for(Program *p, Type *got, Type *expect, Parameter *param) {
   (void)expect;
   (void)param;
 
-  if (expect->kind == InterfaceT) {
-    bool is_pointer = got->kind == PointerT;
-    if (is_pointer)
-      got = got->child;
-    for (int i = 0; i < expect->interfaceT->methods.len; ++i) {
-      const char *allName = expect->interfaceT->methods.fns[i].name;
-      const char *name = allName + strlen(expect->name);
-      Type *fnt = Module_find_member(got, name);
-      if (!fnt || fnt->kind != FnT) {
-        FATAL(&param->p->location, "Type '%s' does not fit interface '%s'\n  missing method '%s'", Type_name(got).s,
-              Type_name(expect).s, name);
-      }
-    }
-    Expression *cE = Program_new_Expression(p, ConstructE, param->p->location);
-    cE->construct->type = expect;
-    cE->construct->p = (ParameterList){Program_alloc(p, sizeof(Parameter) * 2), 2};
-    cE->construct->p.p[0].name = NULL;
-    if (!is_pointer) {
-      Expression *deref = Program_new_Expression(p, UnaryPrefixE, param->p->location);
-      deref->unpre->o = param->p;
-      deref->unpre->op = "&";
-      param->p = deref;
-    }
-    cE->construct->p.p[0].p = param->p;
-    cE->construct->p.p[1].name = NULL;
-    cE->construct->p.p[1].p = Program_new_Expression(p, IdentifierA, param->p->location);
-    Module *gotM = Type_defined_module(got);
-    if (!gotM)
-      FATAL(&param->p->location, "could not find module for type '%s'", Type_name(got).s);
-    cE->construct->p.p[1].p->id->name = Program_copy_str(
-        p, str("%s%s_%s%s", expect->interfaceT->module->c_name, expect->name, gotM->c_name, got->name));
-    cE->construct->p.p[1].p->id->type = NULL;
-    param->p = cE;
-
-    bool allready_used = false;
-    for (TypeList *tl = expect->interfaceT->used_types; !allready_used && tl; tl = tl->next)
-      allready_used = (tl->type == got);
-    if (!allready_used) {
-      TypeList *tl = (TypeList *)Program_alloc(p, sizeof(TypeList));
-      tl->type = got;
-      tl->next = expect->interfaceT->used_types;
-      expect->interfaceT->used_types = tl;
-    }
+  if (expect->kind == InterfaceT && got != expect) {
+    param->p = Interface_construct(p, got, expect, param->p);
     return expect;
-  } else if (expect->kind == PointerT && expect->child->kind == InterfaceT) {
+  } else if (expect->kind == PointerT && expect->child->kind == InterfaceT && got != expect->child) {
     Type *x = AdaptParameter_for(p, got, expect->child, param);
     if (x != expect->child)
       FATAL(&param->p->location, "internal error constructing interface '%s'", Type_name(expect).s);
@@ -3389,6 +3432,11 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
                   Type_name(e->construct->type).s, Type_name(ma->type).s, Type_name(pt).s);
         }
       }
+    } else if (e->construct->type->kind == InterfaceT) {
+      if (e->construct->p.len == 0)
+        ; // null construct
+      else if (e->construct->p.len != 2)
+        FATAL(&e->location, "interfaces could only be constructed with corresponding struct");
     } else if (e->construct->type->kind == UnionT) {
       if (e->construct->p.len > 1)
         FATAL(&e->location, "Too many initializer for union '%s'!", Type_name(e->construct->type).s);
@@ -3487,6 +3535,24 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
   case BinaryOperationE: {
     Type *t1 = c_Expression_make_variables_typed(s, p, m, e->binop->o1);
     Type *t2 = c_Expression_make_variables_typed(s, p, m, e->binop->o2);
+    if (t1->kind == InterfaceT && (strcmp(e->binop->op->op, "==") == 0 || strcmp(e->binop->op->op, "!=") == 0)) {
+      Expression *cd = Program_new_Expression(p, CDelegateE, e->binop->o1->location);
+      cd->cdelegate->o = e->binop->o1;
+      cd->cdelegate->delegate = ".self";
+      e->binop->o1 = cd;
+      return &Bool;
+    }
+    if (t2->kind == InterfaceT && (strcmp(e->binop->op->op, "==") == 0 || strcmp(e->binop->op->op, "!=") == 0)) {
+      Expression *cd = Program_new_Expression(p, CDelegateE, e->binop->o2->location);
+      cd->cdelegate->o = e->binop->o2;
+      cd->cdelegate->delegate = ".self";
+      e->binop->o2 = cd;
+      return &Bool;
+    }
+    if (t1 != t2 && t1->kind == InterfaceT && strcmp(e->binop->op->op, "=") == 0) {
+      e->binop->o2 = Interface_construct(p, t2, t1, e->binop->o2);
+      return t1;
+    }
     if (!Type_equal(t1, t2)) {
       lisp_expression(stderr, e);
       fprintf(stderr, "\n");
@@ -3500,6 +3566,9 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
     if (e->binop->op->returns_bool)
       return &Bool;
     return t1;
+  }
+  case CDelegateE: {
+    return c_Expression_make_variables_typed(s, p, m, e->cdelegate->o);
   }
   }
   FATAL(&e->location, "unknown type for expression!");
