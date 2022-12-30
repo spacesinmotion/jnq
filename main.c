@@ -1972,7 +1972,11 @@ Statement *Program_parse_statement(Program *p, Module *m, State *st, Statement *
     statement->scope->body = Program_parse_scope(p, m, st);
   } else if (check_word(st, "return")) {
     statement = Program_new_Statement(p, Return, next);
-    statement->express->e = Program_parse_expression(p, m, st);
+    skip_whitespace_space(st);
+    if (!check_whitespace_for_nl(st))
+      statement->express->e = Program_parse_expression(p, m, st);
+    else
+      statement->express->e = NULL;
   } else if (check_word(st, "case")) {
     statement = Program_new_Statement(p, Case, next);
     if (!(statement->caseS->caseE = Program_parse_expression(p, m, st)))
@@ -3825,7 +3829,7 @@ void c_Program(FILE *f, Program *p, Module *m) {
   fputs("  do {                                       \\\n", f);
   fputs("    if (!(EXP)) {                                \\\n", f);
   fputs("      fprintf(stderr, \"FAILED: '%s'\\n \", #EXP); \\\n", f);
-  fputs("      exit(1); \\\n", f);
+  fputs("      abort(); \\\n", f);
   fputs("    } \\\n", f);
   fputs("  } while (0)\n", f);
   fputs("\n", f);

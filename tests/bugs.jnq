@@ -1,7 +1,7 @@
 
-fn main() int {
-  printf("bugs...\n")
 
+fn some_bugs() {
+  printf(" .some_bugs\n")
   a := 1
   b := 1
 
@@ -15,7 +15,33 @@ fn main() int {
   f := dx * dx;
   ASSERT(dx == 3.0)
   ASSERT(f == 9.0)
+}
 
+fn early_out_apply(x *int) {
+  *x += 4
+}
+
+fn early_out(x *int) {
+  if (*x == 0)
+    return
+  early_out_apply(x)
+} 
+
+fn early_out_bug() {
+  printf(" .early_out_bug\n")
+
+  a := 0
+  early_out(&a)
+  ASSERT(0 == a)
+  b := 1
+  early_out(&b)
+  ASSERT(b == 5)
+}
+
+fn main() int {
+  printf("bugs...\n")
+  some_bugs()
+  early_out_bug()
   printf(" ...ok\n")
   return 0
 }

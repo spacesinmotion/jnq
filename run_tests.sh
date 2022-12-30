@@ -1,5 +1,7 @@
 #!/usr/bin/sh
 
+set -e
+
 cd tests
 errors=()
 for t in `ls *.jnq`; do
