@@ -3074,9 +3074,6 @@ void c_type_forward(FILE *f, const char *module_name, TypeList *t) {
   case InterfaceT: {
     fprintf(f, "typedef struct %s%sTable %s%sTable;\n", module_name, t->type->name, module_name, t->type->name);
     fprintf(f, "typedef struct %s%s %s%s;\n", module_name, t->type->name, module_name, t->type->name);
-    for (int i = 0; i < t->type->interfaceT->methods.len; ++i)
-      c_fn_forward_fn(f, module_name, t->type->interfaceT->methods.fns[i].name,
-                      t->type->interfaceT->methods.fns[i].fnT);
     break;
   }
 
@@ -3114,10 +3111,14 @@ void c_fn_forward(FILE *f, const char *module_name, TypeList *tl) {
     return;
 
   c_fn_forward(f, module_name, tl->next);
-  if (tl->type->kind != FnT || tl->type->fnT->is_extern_c)
-    return;
+  if (tl->type->kind == FnT && !tl->type->fnT->is_extern_c)
+    c_fn_forward_fn(f, module_name, tl->type->name, tl->type->fnT);
 
-  c_fn_forward_fn(f, module_name, tl->type->name, tl->type->fnT);
+  if (tl->type->kind == InterfaceT) {
+    for (int i = 0; i < tl->type->interfaceT->methods.len; ++i)
+      c_fn_forward_fn(f, module_name, tl->type->interfaceT->methods.fns[i].name,
+                      tl->type->interfaceT->methods.fns[i].fnT);
+  }
 }
 
 void c_Module_forward_fn(FILE *f, Module *m) {

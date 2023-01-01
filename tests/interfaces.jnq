@@ -97,6 +97,22 @@ fn interfaces_and_construction()
   ASSERT(86 == some(&c1.s))
 }
 
+
+type Object interface {
+  fn destroy(o *Object, g *Game)
+}
+
+type Game struct {
+  object Object
+}
+
+fn GameObject_recursive_declaration()
+{
+  printf(" .GameObject_recursive_declaration\n")
+
+  g := Game{}
+}
+
 fn main() int
 {
   printf("interfaces\n")
