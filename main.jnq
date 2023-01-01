@@ -5,6 +5,26 @@
 
 // use * from C.stdio
 
+type Object interface {
+  fn destroy(o *Object, g *Game)
+}
+
+type Object2 interface {
+  fn destroy(o *Object2, g *Game)
+}
+
+type Game struct {
+  objectA vec[8]Object
+  objectB vec[8]Object2
+}
+
+fn GameObject_recursive_declaration()
+{
+  printf(" .GameObject_recursive_declaration\n")
+
+  g := Game{}
+}
+
 use Some1, SomeAble, some from tests.interfaces
 
 fn main() int

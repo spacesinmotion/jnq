@@ -97,13 +97,19 @@ fn interfaces_and_construction()
   ASSERT(86 == some(&c1.s))
 }
 
-
 type Object interface {
   fn destroy(o *Object, g *Game)
 }
 
+type Object2 interface {
+  fn destroy(o *Object2, g *Game)
+}
+
 type Game struct {
   object Object
+
+  os1 vec[4]Object
+  os2 vec[4]Object2
 }
 
 fn GameObject_recursive_declaration()

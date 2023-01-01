@@ -3712,14 +3712,13 @@ void c_build_vec_types(Program *p) {
         tl->next = allVec;
         break;
       }
-      if (!tl->next || tl->next->type->kind != VecT)
-        continue;
+      while (tl->next && tl->next->type->kind == VecT) {
+        TypeList *vecT = tl->next;
+        tl->next = vecT->next;
 
-      TypeList *vecT = tl->next;
-      tl->next = vecT->next;
-
-      vecT->next = allVec;
-      allVec = vecT;
+        vecT->next = allVec;
+        allVec = vecT;
+      }
     }
     for (TypeList *tl = m->types; tl; tl = tl->next) {
       if (tl->type->kind != VecT)
