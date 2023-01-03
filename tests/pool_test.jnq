@@ -1,0 +1,37 @@
+
+use Point from sub.util
+
+fn pool_Point()
+{
+  printf(" .pool_Point\n")
+
+  v := pool[128]Point{}
+  ASSERT(0 == v.__l)
+  ASSERT(null == v.__f)
+
+  p1 := v.create(Point{1,2})
+  ASSERT(1 == v.__l)
+  ASSERT(null == v.__f)
+  ASSERT(1 == p1.x)
+  ASSERT(2 == p1.y)
+
+  v.remove(p1)
+  ASSERT(1 == v.__l)
+  ASSERT(null != v.__f)
+
+  p2 := v.create(Point{3,6})
+  ASSERT(1 == v.__l)
+  ASSERT(null == v.__f)
+  ASSERT(3 == p2.x)
+  ASSERT(6 == p2.y)
+  ASSERT(3 == p1.x)
+  ASSERT(6 == p1.y)
+}
+
+fn main() int
+{
+  printf("pool_test\n")
+  pool_Point()
+  printf(" ...ok\n")
+  return 0
+}

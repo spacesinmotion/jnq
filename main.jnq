@@ -1,51 +1,39 @@
 
-// use Game from tests.game.Game
-// use Program from tests.src.Program
-// use tests.game.math.util
-
-// use * from C.stdio
-
-type Object interface {
-  fn destroy(o *Object, g *Game)
+type Point struct {
+  x int,
+  y int,
 }
 
-type Object2 interface {
-  fn destroy(o *Object2, g *Game)
-}
-
-type Game struct {
-  objectA vec[8]Object
-  objectB vec[8]Object2
-}
-
-fn GameObject_recursive_declaration()
-{
-  printf(" .GameObject_recursive_declaration\n")
-
-  g := Game{}
-}
-
-use Some1, SomeAble, some from tests.interfaces
 
 fn main() int
 {
-  printf("main\n")
+  v := pool[128]Point{}
+  ASSERT(0 == v.__l)
+  ASSERT(null == v.__f)
 
-  s := SomeAble{}
-  ASSERT(s == null)
-  s = &Some1{3}
-  ASSERT(s != null)
-  s = null
-  ASSERT(s == null)
+  p1 := v.create(Point{1,2})
+  ASSERT(1 == v.__l)
+  ASSERT(null == v.__f)
+  ASSERT(1 == p1.x)
+  ASSERT(2 == p1.y)
 
-  vx := SomeAble{}
-  v := vec[]SomeAble{}
-  s1 := Some1{2}
-  s2 := Some1{2}
-  v.push(&s1)
-  v.push(&s2)
+  v.remove(p1)
+  ASSERT(1 == v.__l)
+  ASSERT(null != v.__f)
 
-  some(&v[0])
+  p2 := v.create(Point{3,6})
+  ASSERT(1 == v.__l)
+  ASSERT(null == v.__f)
+  ASSERT(3 == p2.x)
+  ASSERT(6 == p2.y)
+  ASSERT(3 == p1.x)
+  ASSERT(6 == p1.y)
+  
+  // v.push(Point{3,6})
+  // ASSERT(1 == v.len)
+  // ASSERT(128 == v.cap)
+  // ASSERT(3 == v[0].x)
+  // ASSERT(6 == v[0].y)
 
   printf("ok\n")
   return 0
