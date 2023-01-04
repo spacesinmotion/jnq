@@ -4,6 +4,10 @@ type Point struct {
   y int,
 }
 
+fn destroy(p *Point, g *Game) {
+
+}
+
 type Object interface {
   fn destroy(o *Object, g *Game)
 }
@@ -23,6 +27,23 @@ type Game struct {
 
 fn main() int
 {
+  p1 := Point{1,2}
+  p2 := Point{4,3}
+
+  g := Game{}
+  g.os1.push(&p1)
+  g.os1.push(&p1)
+  g.os1.push(&p2)
+
+  if (g.os1[0] == g.os1[1])
+    printf("works for me 1\n")
+  if (g.os1[0] != g.os1[2])
+    printf("works for me 2\n")
+  if (g.os1[0] != g.os1[1])
+    printf("noooo 1\n")
+  if (g.os1[1] == g.os1[2])
+    printf("noooo 1\n")
+
   printf("ok\n")
   return 0
 }

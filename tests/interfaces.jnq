@@ -105,6 +105,13 @@ type Object2 interface {
   fn destroy(o *Object2, g *Game)
 }
 
+type RealObject struct {
+}
+
+fn destroy(ro *RealObject, g *Game) {
+
+}
+
 type Game struct {
   object Object
 
@@ -119,6 +126,24 @@ fn GameObject_recursive_declaration()
   g := Game{}
 }
 
+fn compare_interface_as_pointer()
+{
+  printf(" .compare_interface_as_pointer\n")
+
+  p1 := RealObject{}
+  p2 := RealObject{}
+
+  g := Game{}
+  g.os1.push(&p1)
+  g.os1.push(&p1)
+  g.os1.push(&p2)
+
+  ASSERT(g.os1[0] == g.os1[1])
+  ASSERT(g.os1[0] != g.os1[2])
+  ASSERT(!(g.os1[0] != g.os1[1]))
+  ASSERT(!(g.os1[1] == g.os1[2]))
+}
+
 fn main() int
 {
   printf("interfaces\n")
@@ -126,6 +151,8 @@ fn main() int
   interface_in_structs()
   interface_could_be_null()
   interface_in_vectors()
+  GameObject_recursive_declaration()
+  compare_interface_as_pointer()
   printf(" ...ok\n")
   return 0
 }

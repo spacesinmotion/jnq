@@ -712,9 +712,9 @@ bool Type_equal(Type *t1, Type *t2) {
   if (!t1 || !t2)
     FATALX("there should be no null type pointer?!");
   if (t1 == &Null)
-    return t2 == &Null || t2->kind == PointerT;
+    return t2 == &Null || t2->kind == PointerT || t2->kind == InterfaceT;
   if (t2 == &Null)
-    return t1 == &Null || t1->kind == PointerT;
+    return t1 == &Null || t1->kind == PointerT || t1->kind == InterfaceT;
 
   if ((t1->kind == PointerT && t2->kind == ArrayT) || (t2->kind == PointerT && t1->kind == ArrayT))
     return Type_equal(t1->child, t2->child);
@@ -3645,14 +3645,14 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
       cd->cdelegate->o = e->binop->o1;
       cd->cdelegate->delegate = ".self";
       e->binop->o1 = cd;
-      return &Bool;
+      // return &Bool;
     }
     if (t2->kind == InterfaceT && (strcmp(e->binop->op->op, "==") == 0 || strcmp(e->binop->op->op, "!=") == 0)) {
       Expression *cd = Program_new_Expression(p, CDelegateE, e->binop->o2->location);
       cd->cdelegate->o = e->binop->o2;
       cd->cdelegate->delegate = ".self";
       e->binop->o2 = cd;
-      return &Bool;
+      // return &Bool;
     }
     if (t1 != t2 && t1->kind == InterfaceT && strcmp(e->binop->op->op, "=") == 0) {
       e->binop->o2 = Interface_construct(p, t2, t1, e->binop->o2);
