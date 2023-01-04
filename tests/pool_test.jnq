@@ -28,10 +28,30 @@ fn pool_Point()
   ASSERT(6 == p1.y)
 }
 
+fn buf_test() {
+  printf(" .buf_Point\n")
+
+  v := buf[8]Point{}
+  ASSERT(0 == v.len)
+
+  v.push(Point{1,2})
+  ASSERT(1 == v.len)
+  ASSERT(1 == v[0].x)
+  ASSERT(2 == v[0].y)
+
+  v[0].x = 5
+  v[0].y = 3
+  p1 := v.pop()
+  ASSERT(0 == v.len)
+  ASSERT(5 == p1.x)
+  ASSERT(3 == p1.y)
+}
+
 fn main() int
 {
   printf("pool_test\n")
   pool_Point()
+  buf_test()
   printf(" ...ok\n")
   return 0
 }

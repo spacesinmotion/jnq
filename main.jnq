@@ -4,37 +4,25 @@ type Point struct {
   y int,
 }
 
+type Object interface {
+  fn destroy(o *Object, g *Game)
+}
+
+type Object2 interface {
+  fn destroy(o *Object2, g *Game)
+}
+
+type Game struct {
+  pointsV vec[4]Point
+  pointsB buf[8]Point
+  pointsP pool[16]Point
+  os1 vec[4]Object
+  os2 vec[4]Object2
+  vInt vec[]int
+}
 
 fn main() int
 {
-  v := pool[128]Point{}
-  ASSERT(0 == v.__l)
-  ASSERT(null == v.__f)
-
-  p1 := v.create(Point{1,2})
-  ASSERT(1 == v.__l)
-  ASSERT(null == v.__f)
-  ASSERT(1 == p1.x)
-  ASSERT(2 == p1.y)
-
-  v.remove(p1)
-  ASSERT(1 == v.__l)
-  ASSERT(null != v.__f)
-
-  p2 := v.create(Point{3,6})
-  ASSERT(1 == v.__l)
-  ASSERT(null == v.__f)
-  ASSERT(3 == p2.x)
-  ASSERT(6 == p2.y)
-  ASSERT(3 == p1.x)
-  ASSERT(6 == p1.y)
-  
-  // v.push(Point{3,6})
-  // ASSERT(1 == v.len)
-  // ASSERT(128 == v.cap)
-  // ASSERT(3 == v[0].x)
-  // ASSERT(6 == v[0].y)
-
   printf("ok\n")
   return 0
 }

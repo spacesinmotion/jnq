@@ -481,6 +481,7 @@ typedef enum TypeKind {
   PointerT,
   VecT,
   PoolT,
+  BufT,
   FnT,
   PlaceHolder
 } TypeKind;
@@ -516,6 +517,7 @@ Module *Type_defined_module(Type *t) {
     return t->fnT->module;
   case VecT:
   case PoolT:
+  case BufT:
   case ArrayT:
   case PointerT: {
     if (!t->child)
@@ -762,6 +764,12 @@ BuffString Type_name(Type *t) {
       else
         i += snprintf(ss + i, sizeof(s.s) - i, "pool[]");
       break;
+    case BufT:
+      if (t->array_count > 0)
+        i += snprintf(ss + i, sizeof(s.s) - i, "buf[%d]", t->array_count);
+      else
+        i += snprintf(ss + i, sizeof(s.s) - i, "buf[]");
+      break;
     case UseT:
     case StructT:
     case InterfaceT:
@@ -798,7 +806,6 @@ Module *Program_add_module(Program *p, const char *pathc) {
 }
 
 Type *Program_add_type(Program *p, TypeKind k, const char *name, Module *m) {
-
   Type *tt = NULL;
   if (name && name[0] != '\0') {
     tt = Module_find_type(m, name, name + strlen(name));
@@ -852,6 +859,7 @@ Type *Program_add_type(Program *p, TypeKind k, const char *name, Module *m) {
     break;
   case VecT:
   case PoolT:
+  case BufT:
   case ArrayT:
     tt->array_count = 0;
     break;
@@ -879,6 +887,41 @@ Type *Program_add_type(Program *p, TypeKind k, const char *name, Module *m) {
   tl->next = m->types;
   m->types = tl;
   return tt;
+}
+
+Type *Program_add_type_after(Program *p, TypeKind k, Module *m, Type *child) {
+  Type *t = Program_add_type(p, k, "", m);
+  t->child = child;
+  if (!m->types || t != m->types->type)
+    FATALX("internal error expect new types to be added up front!");
+
+  TypeList *vecT = m->types;
+  m->types = m->types->next;
+
+  if (Type_defined_module(child) == &global) {
+    vecT->next = global.types;
+    global.types = vecT;
+    vecT = NULL;
+  } else {
+    for (TypeList *tl = m->types; tl; tl = tl->next) {
+      if (tl->type != child)
+        continue;
+
+      vecT->next = tl->next;
+      tl->next = vecT;
+      vecT = NULL;
+
+      Type *tt = tl->next->type;
+      tl->next->type = tl->type;
+      tl->type = tt;
+      break;
+    }
+  }
+
+  if (vecT != NULL)
+    FATALX("internal error did not find child type for '%s'!", Type_name(t).s);
+
+  return t;
 }
 
 Statement *Program_new_Statement(Program *p, StatementType t, Statement *n) {
@@ -1073,6 +1116,8 @@ bool check_key_word(const char *b, const char *e) {
     return true;
   if ((e - b) == 3 && strncmp(b, "vec", 3) == 0)
     return true;
+  if ((e - b) == 3 && strncmp(b, "buf", 3) == 0)
+    return true;
   if ((e - b) == 3 && strncmp(b, "use", 3) == 0)
     return true;
   if ((e - b) == 4 && strncmp(b, "type", 4) == 0)
@@ -1233,6 +1278,18 @@ bool Program_parse_use_path(Program *p, Module *m, State *st) {
   return true;
 }
 
+TypeKind check_vec_special(State *st) {
+  if (check_word(st, "pool"))
+    return PoolT;
+  if (check_word(st, "buf"))
+    return BufT;
+  if (check_word(st, "vec"))
+    return VecT;
+  return PlaceHolder;
+}
+
+bool is_vec_special(TypeKind k) { return k == VecT || k == PoolT || k == BufT; }
+
 bool Program_check_declared_type(Program *p, State *st) {
   skip_whitespace(st);
   State old = *st;
@@ -1243,8 +1300,8 @@ bool Program_check_declared_type(Program *p, State *st) {
     *st = old;
   }
 
-  bool is_pool = check_word(st, "pool");
-  if ((is_pool || check_word(st, "vec")) && check_op(st, "[")) {
+  TypeKind vec_t = check_vec_special(st);
+  if (vec_t != PlaceHolder && check_op(st, "[")) {
     int dummy;
     read_int(st, &dummy);
     if (check_op(st, "]") && Program_check_declared_type(p, st))
@@ -1318,8 +1375,8 @@ Type *Program_parse_declared_type(Program *p, Module *m, State *st) {
     *st = old;
   }
 
-  bool is_pool = check_word(st, "pool");
-  if (is_pool || check_word(st, "vec")) {
+  TypeKind vec_t = check_vec_special(st);
+  if (vec_t != PlaceHolder) {
     if (check_op(st, "[")) {
       int count = 0;
       read_int(st, &count);
@@ -1329,9 +1386,9 @@ Type *Program_parse_declared_type(Program *p, Module *m, State *st) {
           Module *cm = Type_defined_module(c);
           if (!cm)
             FATALX("internal problem finding module for type");
-          Type *td = Module_find_vec_type(cm, is_pool ? PoolT : VecT, count, c);
+          Type *td = Module_find_vec_type(cm, vec_t, count, c);
           if (!td) {
-            td = Program_add_type(p, is_pool ? PoolT : VecT, "", cm);
+            td = Program_add_type_after(p, vec_t, cm, c);
             td->array_count = count;
             td->child = c;
           }
@@ -2237,6 +2294,12 @@ BuffString Type_special_cname(Type *t) {
       else
         i += snprintf(ss + i, sizeof(s.s) - i, "_pool__");
       break;
+    case BufT:
+      if (t->array_count > 0)
+        i += snprintf(ss + i, sizeof(s.s) - i, "_buf_%d_", t->array_count);
+      else
+        i += snprintf(ss + i, sizeof(s.s) - i, "_buf__");
+      break;
     case UseT:
     case StructT:
     case InterfaceT:
@@ -2278,6 +2341,7 @@ bool c_type_declare(FILE *f, Type *t, Location *l, const char *var) {
     fprintf(f, "*");
     break;
   case VecT:
+  case BufT:
   case PoolT:
     FATAL(l, "Internal error '%s' should be replaced!", Type_name(t).s);
     break;
@@ -2515,6 +2579,7 @@ void c_type(FILE *f, const char *module_name, TypeList *t) {
     break;
   case VecT:
   case PoolT:
+  case BufT:
     FATALX("'%s' should be replaced here that kind", Type_name(t->type).s);
     break;
   case ArrayT:
@@ -2814,6 +2879,7 @@ void c_expression(FILE *f, Expression *e) {
 
     case VecT:
     case PoolT:
+    case BufT:
       FATAL(&e->location, "type should be  for '%s'!", Type_name(e->member->member->type).s);
       break;
 
@@ -3100,6 +3166,7 @@ void c_type_forward(FILE *f, const char *module_name, TypeList *t) {
 
   case VecT:
   case PoolT:
+  case BufT:
     FATALX("'%s' type should be replaced here!", Type_name(t->type).s);
     break;
 
@@ -3237,6 +3304,7 @@ Type *Module_find_member(Type *t, const char *name) {
 
   case VecT:
   case PoolT:
+  case BufT:
     FATALX("missing find member implementation for '%s'!", Type_name(t).s);
     break;
 
@@ -3423,7 +3491,7 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
           FATAL(&pa->p->location, "Named construction '%s' for none struct type '%s'!", pa->name,
                 Type_name(e->construct->type).s);
       }
-    if (e->construct->type->kind == ArrayT || e->construct->type->kind == VecT || e->construct->type->kind == PoolT) {
+    if (e->construct->type->kind == ArrayT || is_vec_special(e->construct->type->kind)) {
       if (e->construct->type->array_count > 0 && e->construct->p.len > e->construct->type->array_count)
         FATAL(&e->location, "Too many initializer for array of '%s'!", Type_name(e->construct->type).s);
       for (Parameter *pa = e->construct->p.p; pa < e->construct->p.p + e->construct->p.len; ++pa) {
@@ -3510,14 +3578,16 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
     Type *t = c_Expression_make_variables_typed(s, p, m, e->access->o);
     if (t->kind == StructT && t->structT->member.len > 0) {
       Variable *delegateV = &t->structT->member.v[0];
-      if (delegateV->type->kind == PointerT && strcmp(delegateV->name, "__d") == 0) {
+      if ((delegateV->type->kind == PointerT || delegateV->type->kind == ArrayT) &&
+          strcmp(delegateV->name, "__d") == 0) {
         e->access->delegate = Program_copy_str(p, str(".%s", delegateV->name));
         return delegateV->type->child;
       }
     }
     if (t->kind == PointerT && t->child->kind == StructT && t->child->structT->member.len > 0) {
       Variable *delegateV = &t->child->structT->member.v[0];
-      if (delegateV->type->kind == PointerT && strcmp(delegateV->name, "__d") == 0) {
+      if ((delegateV->type->kind == PointerT || delegateV->type->kind == ArrayT) &&
+          strcmp(delegateV->name, "__d") == 0) {
         e->access->delegate = Program_copy_str(p, str("->%s", delegateV->name));
         return delegateV->type->child;
       }
@@ -3595,8 +3665,8 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
       fprintf(stderr, "\n");
       lisp_expression(stderr, e->binop->o2);
       fprintf(stderr, "\n");
-      FATAL(&e->location, "Expect equal types for binary operation '%s' (%s, %s) (%d, %d)", e->binop->op->op,
-            Type_name(t1).s, Type_name(t2).s, t1 ? t1->kind : -1, t2 ? t2->kind : -1);
+      FATAL(&e->location, "Expect equal types for binary operation '%s' (%s, %s) (%p, %p)", e->binop->op->op,
+            Type_name(t1).s, Type_name(t2).s, t1, t2);
     }
     if (e->binop->op->returns_bool)
       return &Bool;
@@ -3727,187 +3797,253 @@ void c_check_types(Module *m) {
   }
 }
 
-void c_build_vec_types(Program *p) {
+void c_build_pool_from(Program *p, Module *m, TypeList *tl) {
+  BuffString pool_name = Type_special_cname(tl->type);
+  int count = tl->type->array_count;
+  if (count <= 0)
+    count = 128;
+
+  Type *value_type = tl->type->child;
+  Type *value_type_array = Module_find_array_type(m, count, value_type);
+  if (!value_type_array) {
+    value_type_array = Program_add_type(p, ArrayT, "", m);
+    value_type_array->array_count = count;
+    value_type_array->child = value_type;
+  }
+  // for (TypeList *tl = m->types; tl; tl = tl->next)
+  //   printf("::: %s\n", Type_special_cname(tl->type).s);
+  Type *value_type_pointer = Module_find_pointer_type(m, value_type);
+  if (!value_type_pointer) {
+    value_type_pointer = Program_add_type(p, PointerT, "", m);
+    value_type_pointer->child = value_type;
+  }
+
+  Struct *poolS = (Struct *)Program_alloc(p, sizeof(Struct));
+  poolS->module = m;
+  poolS->member = (VariableList){(Variable *)Program_alloc(p, sizeof(Variable) * 3), 3};
+  poolS->member.v[0] = (Variable){null_location, "__d", value_type_array};
+  poolS->member.v[1] = (Variable){null_location, "__l", &Int};
+  poolS->member.v[2] = (Variable){null_location, "__f", value_type_pointer};
+
+  tl->type->structT = poolS;
+  tl->type->kind = StructT;
+  tl->type->child = NULL;
+  tl->type->name = Program_copy_string(p, pool_name.s, strlen(pool_name.s));
+  Type *pool_pointer_type = Module_find_pointer_type(m, tl->type);
+  if (!pool_pointer_type) {
+    pool_pointer_type = Program_add_type(p, PointerT, "", m);
+    pool_pointer_type->child = tl->type;
+  }
+
+  {
+    BuffString fn_name = pool_name;
+    strcat(fn_name.s, "create");
+    Function *create = Program_add_type(p, FnT, Program_copy_string(p, fn_name.s, strlen(fn_name.s)), m)->fnT;
+    create->d.returnType = value_type_pointer;
+    create->d.return_type_location = null_location;
+    create->is_extern_c = false;
+    create->d.parameter = (VariableList){(Variable *)Program_alloc(p, 2 * sizeof(Variable)), 2};
+    create->d.parameter.v[0] = (Variable){null_location, "p", pool_pointer_type};
+    create->d.parameter.v[1] = (Variable){null_location, "val", value_type};
+
+    BuffString pushfn = str("if(p.__f){\n"
+                            "  b := p.__f"
+                            "  p.__f = *(b as **%s)\n"
+                            "  *b = val\n"
+                            "  return b\n"
+                            "}\n"
+                            "b := &p.__d[p.__l++]\n"
+                            "*b = val\n"
+                            "return b\n"
+                            "}",
+                            Type_name(value_type).s);
+    create->body = Program_parse_scope(p, m, &(State){pushfn.s, null_location});
+  }
+  {
+    BuffString fn_name = pool_name;
+    strcat(fn_name.s, "remove");
+    Function *remove = Program_add_type(p, FnT, Program_copy_string(p, fn_name.s, strlen(fn_name.s)), m)->fnT;
+    remove->d.returnType = NULL;
+    remove->d.return_type_location = null_location;
+    remove->is_extern_c = false;
+    remove->d.parameter = (VariableList){(Variable *)Program_alloc(p, 2 * sizeof(Variable)), 2};
+    remove->d.parameter.v[0] = (Variable){null_location, "v", pool_pointer_type};
+    remove->d.parameter.v[1] = (Variable){null_location, "b", value_type_pointer};
+
+    BuffString removefn = str("fo := b as **%s;\n"
+                              "*fo=v.__f\n"
+                              "v.__f=fo as *%s\n"
+                              "}",
+                              Type_name(value_type).s, Type_name(value_type).s);
+    remove->body = Program_parse_scope(p, m, &(State){removefn.s, null_location});
+  }
+}
+
+void c_build_buf_from(Program *p, Module *m, TypeList *tl) {
+  BuffString buf_name = Type_special_cname(tl->type);
+  int count = tl->type->array_count;
+  if (count <= 0)
+    count = 16;
+
+  Type *value_type = tl->type->child;
+  Type *value_type_array = Module_find_array_type(m, count, value_type);
+  if (!value_type_array) {
+    value_type_array = Program_add_type(p, ArrayT, "", m);
+    value_type_array->array_count = count;
+    value_type_array->child = value_type;
+  }
+  Type *value_type_pointer = Module_find_pointer_type(m, value_type);
+  if (!value_type_pointer) {
+    value_type_pointer = Program_add_type(p, PointerT, "", m);
+    value_type_pointer->child = value_type;
+  }
+
+  Struct *bufS = (Struct *)Program_alloc(p, sizeof(Struct));
+  bufS->module = m;
+  bufS->member = (VariableList){(Variable *)Program_alloc(p, sizeof(Variable) * 2), 2};
+  bufS->member.v[0] = (Variable){null_location, "__d", value_type_array};
+  bufS->member.v[1] = (Variable){null_location, "len", &Int};
+
+  tl->type->structT = bufS;
+  tl->type->kind = StructT;
+  tl->type->child = NULL;
+  tl->type->name = Program_copy_string(p, buf_name.s, strlen(buf_name.s));
+  Type *buf_pointer_type = Module_find_pointer_type(m, tl->type);
+  if (!buf_pointer_type) {
+    buf_pointer_type = Program_add_type(p, PointerT, "", m);
+    buf_pointer_type->child = tl->type;
+  }
+
+  {
+    BuffString fn_name = buf_name;
+    strcat(fn_name.s, "push");
+    Function *push = Program_add_type(p, FnT, Program_copy_string(p, fn_name.s, strlen(fn_name.s)), m)->fnT;
+    push->d.returnType = NULL; // value_type;
+    push->d.return_type_location = null_location;
+    push->is_extern_c = false;
+    push->d.parameter = (VariableList){(Variable *)Program_alloc(p, 2 * sizeof(Variable)), 2};
+    push->d.parameter.v[0] = (Variable){null_location, "v", buf_pointer_type};
+    push->d.parameter.v[1] = (Variable){null_location, "val", value_type};
+
+    BuffString pushfn = str("ASSERT(v.len<%d)\n"
+                            "v.__d[v.len++]=val\n"
+                            "}",
+                            count);
+    push->body = Program_parse_scope(p, m, &(State){pushfn.s, null_location});
+  }
+  {
+    BuffString fn_name = buf_name;
+    strcat(fn_name.s, "pop");
+    Function *pop = Program_add_type(p, FnT, Program_copy_string(p, fn_name.s, strlen(fn_name.s)), m)->fnT;
+    pop->d.returnType = value_type;
+    pop->d.return_type_location = null_location;
+    pop->is_extern_c = false;
+    pop->d.parameter = (VariableList){(Variable *)Program_alloc(p, 1 * sizeof(Variable)), 1};
+    pop->d.parameter.v[0] = (Variable){null_location, "v", buf_pointer_type};
+
+    pop->body = Program_parse_scope(p, m,
+                                    &(State){"v.len--\n"
+                                             "ASSERT(v.len>=0)\n"
+                                             "return v.__d[v.len]\n"
+                                             "}",
+                                             null_location});
+  }
+}
+
+void c_build_vec_from(Program *p, Module *m, TypeList *tl) {
+  BuffString vec_name = Type_special_cname(tl->type);
+  int count = tl->type->array_count;
+  if (count <= 0)
+    count = 16;
+
+  Type *value_type = tl->type->child;
+  Type *value_type_pointer = Module_find_pointer_type(m, value_type);
+  if (!value_type_pointer) {
+    value_type_pointer = Program_add_type(p, PointerT, "", m);
+    value_type_pointer->child = value_type;
+  }
+
+  Struct *vecS = (Struct *)Program_alloc(p, sizeof(Struct));
+  vecS->module = m;
+  vecS->member = (VariableList){(Variable *)Program_alloc(p, sizeof(Variable) * 3), 3};
+  vecS->member.v[0] = (Variable){null_location, "__d", value_type_pointer};
+  vecS->member.v[1] = (Variable){null_location, "len", &Int};
+  vecS->member.v[2] = (Variable){null_location, "cap", &Int};
+
+  tl->type->structT = vecS;
+  tl->type->kind = StructT;
+  tl->type->child = NULL;
+  tl->type->name = Program_copy_string(p, vec_name.s, strlen(vec_name.s));
+  Type *vec_pointer_type = Module_find_pointer_type(m, tl->type);
+  if (!vec_pointer_type) {
+    vec_pointer_type = Program_add_type(p, PointerT, "", m);
+    vec_pointer_type->child = tl->type;
+  }
+
+  {
+    BuffString fn_name = vec_name;
+    strcat(fn_name.s, "push");
+    Function *push = Program_add_type(p, FnT, Program_copy_string(p, fn_name.s, strlen(fn_name.s)), m)->fnT;
+    push->d.returnType = NULL; // value_type;
+    push->d.return_type_location = null_location;
+    push->is_extern_c = false;
+    push->d.parameter = (VariableList){(Variable *)Program_alloc(p, 2 * sizeof(Variable)), 2};
+    push->d.parameter.v[0] = (Variable){null_location, "v", vec_pointer_type};
+    push->d.parameter.v[1] = (Variable){null_location, "val", value_type};
+
+    BuffString pushfn = str("if(v.len >= v.cap){\n"
+                            "v.cap+=%d\n"
+                            "v.__d=realloc(v.__d as *char, v.cap*sizeof(val)) as %s\n"
+                            "}\n"
+                            "v.__d[v.len++]=val\n"
+                            "}",
+                            count, Type_name(value_type_pointer).s);
+    push->body = Program_parse_scope(p, m, &(State){pushfn.s, null_location});
+  }
+  {
+    BuffString fn_name = vec_name;
+    strcat(fn_name.s, "pop");
+    Function *pop = Program_add_type(p, FnT, Program_copy_string(p, fn_name.s, strlen(fn_name.s)), m)->fnT;
+    pop->d.returnType = value_type;
+    pop->d.return_type_location = null_location;
+    pop->is_extern_c = false;
+    pop->d.parameter = (VariableList){(Variable *)Program_alloc(p, 1 * sizeof(Variable)), 1};
+    pop->d.parameter.v[0] = (Variable){null_location, "v", vec_pointer_type};
+
+    pop->body = Program_parse_scope(p, m,
+                                    &(State){"v.len--\n"
+                                             "return v.__d[v.len]\n"
+                                             "}",
+                                             null_location});
+  }
+  {
+    BuffString fn_name = vec_name;
+    strcat(fn_name.s, "free");
+    Function *free = Program_add_type(p, FnT, Program_copy_string(p, fn_name.s, strlen(fn_name.s)), m)->fnT;
+    free->d.returnType = NULL;
+    free->d.return_type_location = null_location;
+    free->is_extern_c = false;
+    free->d.parameter = (VariableList){(Variable *)Program_alloc(p, 1 * sizeof(Variable)), 1};
+    free->d.parameter.v[0] = (Variable){null_location, "v", vec_pointer_type};
+    free->body = Program_parse_scope(p, m,
+                                     &(State){"free (v.__d as *char)\n"
+                                              "}",
+                                              null_location});
+  }
+}
+
+void c_build_special_types(Program *p) {
   for (Module *m = p->modules; m; m = m->next) {
-    TypeList *allVec = NULL;
+    // for (TypeList *tl = m->types; tl; tl = tl->next)
+    //   printf("... %s\n", Type_special_cname(tl->type).s);
+
     for (TypeList *tl = m->types; tl; tl = tl->next) {
-      if (!tl->next) {
-        tl->next = allVec;
-        break;
-      }
-      while (tl->next && (tl->next->type->kind == VecT || tl->next->type->kind == PoolT)) {
-        TypeList *vecT = tl->next;
-        tl->next = vecT->next;
-
-        vecT->next = allVec;
-        allVec = vecT;
-      }
-    }
-    for (TypeList *tl = m->types; tl; tl = tl->next) {
-      if (tl->type->kind != VecT)
-        continue;
-
-      BuffString vec_name = Type_special_cname(tl->type);
-      int count = tl->type->array_count;
-      if (count <= 0)
-        count = 16;
-
-      Type *value_type = tl->type->child;
-      Type *value_type_pointer = Module_find_pointer_type(m, value_type);
-      if (!value_type_pointer) {
-        value_type_pointer = Program_add_type(p, PointerT, "", m);
-        value_type_pointer->child = value_type;
-      }
-
-      Struct *vecS = (Struct *)Program_alloc(p, sizeof(Struct));
-      vecS->module = m;
-      vecS->member = (VariableList){(Variable *)Program_alloc(p, sizeof(Variable) * 3), 3};
-      vecS->member.v[0] = (Variable){null_location, "__d", value_type_pointer};
-      vecS->member.v[1] = (Variable){null_location, "len", &Int};
-      vecS->member.v[2] = (Variable){null_location, "cap", &Int};
-
-      tl->type->structT = vecS;
-      tl->type->kind = StructT;
-      tl->type->child = NULL;
-      tl->type->name = Program_copy_string(p, vec_name.s, strlen(vec_name.s));
-      Type *vec_pointer_type = Module_find_pointer_type(m, tl->type);
-      if (!vec_pointer_type) {
-        vec_pointer_type = Program_add_type(p, PointerT, "", m);
-        vec_pointer_type->child = tl->type;
-      }
-
-      {
-        BuffString fn_name = vec_name;
-        strcat(fn_name.s, "push");
-        Function *push = Program_add_type(p, FnT, Program_copy_string(p, fn_name.s, strlen(fn_name.s)), m)->fnT;
-        push->d.returnType = NULL; // value_type;
-        push->d.return_type_location = null_location;
-        push->is_extern_c = false;
-        push->d.parameter = (VariableList){(Variable *)Program_alloc(p, 2 * sizeof(Variable)), 2};
-        push->d.parameter.v[0] = (Variable){null_location, "v", vec_pointer_type};
-        push->d.parameter.v[1] = (Variable){null_location, "val", value_type};
-
-        BuffString pushfn = str("if(v.len >= v.cap){\n"
-                                "v.cap+=%d\n"
-                                "v.__d=realloc(v.__d as *char, v.cap*sizeof(val)) as %s\n"
-                                "}\n"
-                                "v.__d[v.len++]=val\n"
-                                "}",
-                                count, Type_name(value_type_pointer).s);
-        push->body = Program_parse_scope(p, m, &(State){pushfn.s, null_location});
-      }
-      {
-        BuffString fn_name = vec_name;
-        strcat(fn_name.s, "pop");
-        Function *pop = Program_add_type(p, FnT, Program_copy_string(p, fn_name.s, strlen(fn_name.s)), m)->fnT;
-        pop->d.returnType = value_type;
-        pop->d.return_type_location = null_location;
-        pop->is_extern_c = false;
-        pop->d.parameter = (VariableList){(Variable *)Program_alloc(p, 1 * sizeof(Variable)), 1};
-        pop->d.parameter.v[0] = (Variable){null_location, "v", vec_pointer_type};
-
-        pop->body = Program_parse_scope(p, m,
-                                        &(State){"v.len--\n"
-                                                 "return v.__d[v.len]\n"
-                                                 "}",
-                                                 null_location});
-      }
-      {
-        BuffString fn_name = vec_name;
-        strcat(fn_name.s, "free");
-        Function *free = Program_add_type(p, FnT, Program_copy_string(p, fn_name.s, strlen(fn_name.s)), m)->fnT;
-        free->d.returnType = NULL;
-        free->d.return_type_location = null_location;
-        free->is_extern_c = false;
-        free->d.parameter = (VariableList){(Variable *)Program_alloc(p, 1 * sizeof(Variable)), 1};
-        free->d.parameter.v[0] = (Variable){null_location, "v", vec_pointer_type};
-        free->body = Program_parse_scope(p, m,
-                                         &(State){"free (v.__d as *char)\n"
-                                                  "}",
-                                                  null_location});
-      }
-    }
-    for (TypeList *tl = m->types; tl; tl = tl->next) {
-      if (tl->type->kind != PoolT)
-        continue;
-
-      BuffString pool_name = Type_special_cname(tl->type);
-      int count = tl->type->array_count;
-      if (count <= 0)
-        count = 128;
-
-      Type *value_type = tl->type->child;
-      Type *value_type_array = Module_find_array_type(m, count, value_type);
-      if (!value_type_array) {
-        value_type_array = Program_add_type(p, ArrayT, "", m);
-        value_type_array->array_count = count;
-        value_type_array->child = value_type;
-      }
-      Type *value_type_pointer = Module_find_pointer_type(m, value_type);
-      if (!value_type_pointer) {
-        value_type_pointer = Program_add_type(p, PointerT, "", m);
-        value_type_pointer->child = value_type;
-      }
-
-      Struct *poolS = (Struct *)Program_alloc(p, sizeof(Struct));
-      poolS->module = m;
-      poolS->member = (VariableList){(Variable *)Program_alloc(p, sizeof(Variable) * 3), 3};
-      poolS->member.v[0] = (Variable){null_location, "__d", value_type_array};
-      poolS->member.v[1] = (Variable){null_location, "__l", &Int};
-      poolS->member.v[2] = (Variable){null_location, "__f", value_type_pointer};
-
-      tl->type->structT = poolS;
-      tl->type->kind = StructT;
-      tl->type->child = NULL;
-      tl->type->name = Program_copy_string(p, pool_name.s, strlen(pool_name.s));
-      Type *pool_pointer_type = Module_find_pointer_type(m, tl->type);
-      if (!pool_pointer_type) {
-        pool_pointer_type = Program_add_type(p, PointerT, "", m);
-        pool_pointer_type->child = tl->type;
-      }
-
-      {
-        BuffString fn_name = pool_name;
-        strcat(fn_name.s, "create");
-        Function *create = Program_add_type(p, FnT, Program_copy_string(p, fn_name.s, strlen(fn_name.s)), m)->fnT;
-        create->d.returnType = value_type_pointer;
-        create->d.return_type_location = null_location;
-        create->is_extern_c = false;
-        create->d.parameter = (VariableList){(Variable *)Program_alloc(p, 2 * sizeof(Variable)), 2};
-        create->d.parameter.v[0] = (Variable){null_location, "p", pool_pointer_type};
-        create->d.parameter.v[1] = (Variable){null_location, "val", value_type};
-
-        BuffString pushfn = str("if(p.__f){\n"
-                                "  b := p.__f"
-                                "  p.__f = *(b as **%s)\n"
-                                "  *b = val\n"
-                                "  return b\n"
-                                "}\n"
-                                "b := &p.__d[p.__l++]\n"
-                                "*b = val\n"
-                                "return b\n"
-                                "}",
-                                Type_name(value_type).s);
-        create->body = Program_parse_scope(p, m, &(State){pushfn.s, null_location});
-      }
-      {
-        BuffString fn_name = pool_name;
-        strcat(fn_name.s, "remove");
-        Function *remove = Program_add_type(p, FnT, Program_copy_string(p, fn_name.s, strlen(fn_name.s)), m)->fnT;
-        remove->d.returnType = NULL;
-        remove->d.return_type_location = null_location;
-        remove->is_extern_c = false;
-        remove->d.parameter = (VariableList){(Variable *)Program_alloc(p, 2 * sizeof(Variable)), 2};
-        remove->d.parameter.v[0] = (Variable){null_location, "v", pool_pointer_type};
-        remove->d.parameter.v[1] = (Variable){null_location, "b", value_type_pointer};
-
-        BuffString removefn = str("fo := b as **%s;\n"
-                                  "*fo=v.__f\n"
-                                  "v.__f=fo as *%s\n"
-                                  "}",
-                                  Type_name(value_type).s, Type_name(value_type).s);
-        remove->body = Program_parse_scope(p, m, &(State){removefn.s, null_location});
-      }
+      if (tl->type->kind == VecT)
+        c_build_vec_from(p, m, tl);
+      if (tl->type->kind == BufT)
+        c_build_buf_from(p, m, tl);
+      if (tl->type->kind == PoolT)
+        c_build_pool_from(p, m, tl);
     }
   }
 }
@@ -3918,7 +4054,7 @@ void c_Program(FILE *f, Program *p, Module *m) {
   c_check_types(m);
 
   Program_reset_module_finished(p);
-  c_build_vec_types(p);
+  c_build_special_types(p);
 
   fputs("#include <ctype.h>\n", f);
   fputs("#include <stdarg.h>\n", f);
