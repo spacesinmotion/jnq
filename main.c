@@ -3847,16 +3847,17 @@ void c_build_pool_from(Program *p, Module *m, TypeList *tl) {
     create->d.parameter.v[1] = (Variable){null_location, "val", value_type};
 
     BuffString pushfn = str("if(p.__f){\n"
-                            "  b := p.__f"
-                            "  p.__f = *(b as **%s)\n"
-                            "  *b = val\n"
-                            "  return b\n"
+                            "b := p.__f\n"
+                            "p.__f = *(b as **%s)\n"
+                            "*b = val\n"
+                            "return b\n"
                             "}\n"
+                            "ASSERT(p.__l<%d)\n"
                             "b := &p.__d[p.__l++]\n"
                             "*b = val\n"
                             "return b\n"
                             "}",
-                            Type_name(value_type).s);
+                            Type_name(value_type).s, count);
     create->body = Program_parse_scope(p, m, &(State){pushfn.s, null_location});
   }
   {
