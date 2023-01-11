@@ -263,7 +263,6 @@ typedef struct Construct {
 typedef struct Access {
   Expression *o;
   Expression *p;
-  const char *delegate;
 } Access;
 
 typedef struct MemberAccess {
@@ -1005,7 +1004,6 @@ Expression *Program_new_Expression(Program *p, ExpressionType t, Location l) {
     e->access = (Access *)Program_alloc(p, sizeof(Access));
     e->access->o = NULL;
     e->access->p = NULL;
-    e->access->delegate = NULL;
     break;
   case MemberAccessE:
     e->member = (MemberAccess *)Program_alloc(p, sizeof(MemberAccess));
@@ -2830,8 +2828,6 @@ void c_expression(FILE *f, Expression *e) {
   }
   case AccessE: {
     c_expression(f, e->access->o);
-    if (e->access->delegate)
-      fprintf(f, "%s", e->access->delegate);
     fprintf(f, "[");
     c_expression(f, e->access->p);
     fprintf(f, "]");
@@ -3580,7 +3576,10 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
       Variable *delegateV = &t->structT->member.v[0];
       if ((delegateV->type->kind == PointerT || delegateV->type->kind == ArrayT) &&
           strcmp(delegateV->name, "__d") == 0) {
-        e->access->delegate = Program_copy_str(p, str(".%s", delegateV->name));
+        Expression *cd = Program_new_Expression(p, CDelegateE, e->access->o->location);
+        cd->cdelegate->o = e->access->o;
+        cd->cdelegate->delegate = ".__d";
+        e->access->o = cd;
         return delegateV->type->child;
       }
     }
@@ -3588,7 +3587,10 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
       Variable *delegateV = &t->child->structT->member.v[0];
       if ((delegateV->type->kind == PointerT || delegateV->type->kind == ArrayT) &&
           strcmp(delegateV->name, "__d") == 0) {
-        e->access->delegate = Program_copy_str(p, str("->%s", delegateV->name));
+        Expression *cd = Program_new_Expression(p, CDelegateE, e->access->o->location);
+        cd->cdelegate->o = e->access->o;
+        cd->cdelegate->delegate = "->__d";
+        e->access->o = cd;
         return delegateV->type->child;
       }
     }
