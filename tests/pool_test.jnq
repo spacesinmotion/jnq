@@ -28,6 +28,22 @@ fn pool_Point()
   ASSERT(6 == p1.y)
 }
 
+fn pool_empty_test()
+{
+  printf(" .pool_empty_test\n")
+
+  v := pool[4]Point{}
+
+  p1 := v.create(Point{0,0})
+  for (i:=1; i<4; ++i) {
+    ASSERT(!v.empty())
+    v.create(Point{0,0})
+  }
+  ASSERT(v.empty())
+  v.remove(p1)
+  ASSERT(!v.empty())
+}
+
 fn buf_test() {
   printf(" .buf_Point\n")
 

@@ -3870,6 +3870,21 @@ void c_build_pool_from(Program *p, Module *m, TypeList *tl) {
                               Type_name(value_type).s, Type_name(value_type).s);
     remove->body = Program_parse_scope(p, m, &(State){removefn.s, null_location});
   }
+  {
+    BuffString fn_name = pool_name;
+    strcat(fn_name.s, "empty");
+    Function *remove = Program_add_type(p, FnT, Program_copy_string(p, fn_name.s, strlen(fn_name.s)), m)->fnT;
+    remove->d.returnType = &Bool;
+    remove->d.return_type_location = null_location;
+    remove->is_extern_c = false;
+    remove->d.parameter = (VariableList){(Variable *)Program_alloc(p, 1 * sizeof(Variable)), 1};
+    remove->d.parameter.v[0] = (Variable){null_location, "v", pool_pointer_type};
+    BuffString removefn = str("if (v.__f) return true;\n"
+                              "return v.__l < %d\n"
+                              "}",
+                              count);
+    remove->body = Program_parse_scope(p, m, &(State){removefn.s, null_location});
+  }
 }
 
 void c_build_buf_from(Program *p, Module *m, TypeList *tl) {
