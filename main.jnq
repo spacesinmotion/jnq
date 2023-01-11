@@ -1,4 +1,6 @@
 
+use XXX from tests.sub.util
+
 type Point struct {
   x int,
   y int,

@@ -464,6 +464,7 @@ typedef struct Function {
 
 typedef struct Use {
   Module *module;
+  Location location;
   Type **type;
   int type_len;
   bool take_all;
@@ -1193,7 +1194,7 @@ typedef struct StringView {
 
 bool Program_parse_use_path(Program *p, Module *m, State *st) {
   skip_whitespace(st);
-  State old = *st;
+  State start = *st, old = *st;
 
   StringView imp[32];
   int imp_len = 0;
@@ -1260,6 +1261,7 @@ bool Program_parse_use_path(Program *p, Module *m, State *st) {
   const char *n = Program_copy_string(p, name, strlen(name));
   Use *u = Program_add_type(p, UseT, n, m)->useT;
   u->module = use;
+  u->location = start.location;
   u->take_all = take_all;
   if (!take_all) {
     u->type_len = imp_len;
@@ -3769,6 +3771,16 @@ void c_check_types(Module *m) {
   if (m->finished)
     return;
   m->finished = true;
+  for (TypeList *tl = m->types; tl; tl = tl->next) {
+    if (tl->type->kind != UseT)
+      continue;
+
+    for (Type **t = tl->type->useT->type; t < (tl->type->useT->type + tl->type->useT->type_len); ++t) {
+      if ((*t)->kind == PlaceHolder)
+        FATAL(&tl->type->useT->location, "include unkown type '%s' in module '%s'", Type_name(*t).s,
+              tl->type->useT->module->path);
+    }
+  }
   for (TypeList *tl = m->types; tl; tl = tl->next) {
     if (tl->type->kind == PlaceHolder)
       FATALX("undefined type '%s' in module '%s'", Type_name(tl->type).s, m->path);
