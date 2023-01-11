@@ -1225,13 +1225,11 @@ bool Program_parse_use_path(Program *p, Module *m, State *st) {
     take_all = true;
   }
 
-  if (!is_type_list) {
-    *st = old;
-    imp_len = 0;
-  } else {
-    skip_whitespace(st);
-    old = *st;
-  }
+  if (!is_type_list)
+    FATAL(&old.location, "missing import type list");
+
+  skip_whitespace(st);
+  old = *st;
 
   char buffer[256] = {0};
   char *name = buffer;
@@ -2345,7 +2343,6 @@ bool c_type_declare(FILE *f, Type *t, Location *l, const char *var) {
     break;
   case UseT:
     FATAL(l, "Can't use module '%s' as type!", Type_name(t).s);
-    // fprintf(f, "%s", t->name);
     break;
   case StructT:
   case InterfaceT:
@@ -2725,8 +2722,7 @@ void c_member_access_fn(FILE *f, Expression *e) {
   if (!e->member->member->type->fnT->is_extern_c)
     fprintf(f, "%s", Type_defined_module(e->member->member->type)->c_name);
   fprintf(f, "%s(%s", e->member->member->name, prefix);
-  if (e->member->o->type != IdentifierA || e->member->o->id->type->kind != UseT)
-    c_expression(f, e->member->o);
+  c_expression(f, e->member->o);
 }
 
 void c_expression(FILE *f, Expression *e) {
@@ -2781,8 +2777,7 @@ void c_expression(FILE *f, Expression *e) {
     c_expression(f, e->call->o);
     if (e->call->o->type != MemberAccessE)
       fprintf(f, "(");
-    else if (e->call->p.len > 0 &&
-             (e->call->o->member->o->type != IdentifierA || e->call->o->member->o->id->type->kind != UseT))
+    else if (e->call->p.len > 0)
       fprintf(f, ", ");
     c_parameter(f, &e->call->p);
     fprintf(f, ")");
@@ -2836,17 +2831,7 @@ void c_expression(FILE *f, Expression *e) {
   case MemberAccessE: {
     if (!e->member->o_type)
       FATAL(&e->location, "missing type for access");
-    if (e->member->o_type->kind == UseT) {
-      if (e->member->member->type->kind == StructT)
-        fprintf(f, "%s%s", Type_defined_module(e->member->member->type)->c_name, e->member->member->name);
-      else if (e->member->member->type->kind == FnT) {
-        if (!e->member->member->type->fnT->is_extern_c)
-          fprintf(f, "%s", Type_defined_module(e->member->member->type)->c_name);
-        fprintf(f, "%s(", e->member->member->name);
-      } else
-        FATAL(&e->location, "Missing implementation!");
-      break;
-    } else if (e->member->o_type->kind == EnumT) {
+    if (e->member->o_type->kind == EnumT) {
       if (e->member->member->type->kind == EnumT)
         fprintf(f, "%s%s", Type_defined_module(e->member->member->type)->c_name, e->member->member->name);
       else if (e->member->member->type->kind == FnT) {
@@ -2880,12 +2865,6 @@ void c_expression(FILE *f, Expression *e) {
       break;
 
     case FnT: {
-      if (e->member->o->type == IdentifierA && e->member->o->id->type->kind == UseT) {
-        if (!e->member->member->type->fnT->is_extern_c)
-          fprintf(f, "%s", Type_defined_module(e->member->member->type)->c_name);
-        fprintf(f, "%s(", e->member->member->name);
-        break;
-      }
       if (e->member->member->type->fnT->d.parameter.len == 0)
         FATAL(&e->location, "internal error creating member function call!");
       c_member_access_fn(f, e);
@@ -3296,7 +3275,7 @@ Type *Module_find_member(Type *t, const char *name) {
     break;
   }
   case UseT:
-    return Module_find_type(t->useT->module, name, name + strlen(name));
+    FATALX("module name could not be used to access member '%s'!", Type_name(t).s);
 
   case VecT:
   case PoolT:
@@ -3457,7 +3436,7 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
 
     int p_len = e->call->p.len;
     int test_start = 0;
-    if (e->call->o->type == MemberAccessE && e->call->o->member->o_type->kind != UseT) {
+    if (e->call->o->type == MemberAccessE) {
       ++p_len;
       ++test_start;
     }
@@ -3604,8 +3583,7 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
       t = t->child;
       e->member->pointer = true;
     }
-    if (t->kind != StructT && t->kind != UnionT && t->kind != InterfaceT && t->kind != EnumT && t->kind != UnionTypeT &&
-        t->kind != UseT)
+    if (t->kind != StructT && t->kind != UnionT && t->kind != InterfaceT && t->kind != EnumT && t->kind != UnionTypeT)
       FATAL(&e->location, "Expect non pointer type for member access got '%s'", Type_name(t).s);
     if (!(e->member->member->type = Module_find_member(t, e->member->member->name)))
       FATAL(&e->location, "unknown member '%s' for '%s'", e->member->member->name, Type_name(t).s);

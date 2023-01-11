@@ -1,14 +1,14 @@
 
-use sub.util
+use add, Point, strlen from sub.util
 
-use sub.util_user
+use util_user from sub.util_user
 
 fn main() int {
   printf("use sub module\n")
 
-  ASSERT(42 == util.add(31, 11))
+  ASSERT(42 == add(31, 11))
 
-  p := util.Point{9, 7}
+  p := Point{9, 7}
   ASSERT(p.x == 9)
   ASSERT(p.y == 7)
 
@@ -21,9 +21,9 @@ fn main() int {
   ASSERT(p.x == -4)
   ASSERT(p.y == -5)
 
-  util_user.util_user()
+  util_user()
 
-  ASSERT(5 == util.strlen("hallo"))
+  ASSERT(5 == strlen("hallo"))
 
   printf(" ...ok\n")
   return 0

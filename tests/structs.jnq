@@ -1,5 +1,5 @@
 
-use sub.util
+use Nix from sub.util
 
 type Stuff struct {
   a int
@@ -160,7 +160,7 @@ type Vec struct {
   v [3]double
   i int
   n Kool
-  x util.Nix
+  x Nix
 }
 
 fn structs_with_arrays_and_enums()  {
@@ -169,14 +169,14 @@ fn structs_with_arrays_and_enums()  {
   dir := Vec{}
   dir.i = 25
   dir.n = Kool.KoolB
-  dir.x = util.Nix.Nicer
+  dir.x = Nix.Nicer
   dir.v[0] = 2.5
   dir.v[1] = 3.5
   dir.v[2] = 4.5
 
   ASSERT(dir.i == 25)
   ASSERT(dir.n == Kool.KoolB)
-  ASSERT(dir.x == util.Nix.Nicer)
+  ASSERT(dir.x == Nix.Nicer)
   ASSERT(dir.v[0] == 2.5)
   ASSERT(dir.v[1] == 3.5)
   ASSERT(dir.v[2] == 4.5)

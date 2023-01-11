@@ -1,5 +1,5 @@
 
-use sub.util
+use Point, Nix from sub.util
 
 type Vec2 struct {
   x float, 
@@ -12,15 +12,15 @@ type Vec3 struct {
   z float 
 }
 
-type VecU uniontype { Vec3, Vec2, util.Point, util.Nix }
+type VecU uniontype { Vec3, Vec2, Point, Nix }
 
 fn main() int {
   printf("uniontypes\n")
 
   x := VecU{Vec2{0.1f, 0.3f}}
   y := VecU{Vec3{0.1f, 0.3f}}
-  p := VecU{util.Point{20, 42}}
-  n := VecU{util.Nix.Nice}
+  p := VecU{Point{20, 42}}
+  n := VecU{Nix.Nice}
 
   printf(" ...ok\n")
   return 0

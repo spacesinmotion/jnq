@@ -1,12 +1,12 @@
 
-use util
+use add, Point from util
 
 fn util_user() {
   printf("util_user\n")
 
-  ASSERT(21 == util.add(11, 10))
+  ASSERT(21 == add(11, 10))
 
-  p := util.Point{95, 37}
+  p := Point{95, 37}
   ASSERT(p.x == 95)
   ASSERT(p.y == 37)
   p = p.neg()

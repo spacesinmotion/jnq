@@ -1,7 +1,7 @@
 
 use strcmp from C.str
 
-use sub.util
+use Nix from sub.util
 
 type Days enum {
   Mon, Tue, Wed, Thu = 4, Fri, Sat = -4, Sun
@@ -28,9 +28,9 @@ fn main() int {
   ASSERT(e != f)
   ASSERT(-3 == f as int)
 
-  n := util.Nix.Nicer
-  ASSERT(n != util.Nix.Nice)
-  ASSERT(n == util.Nix.Nicer)
+  n := Nix.Nicer
+  ASSERT(n != Nix.Nice)
+  ASSERT(n == Nix.Nicer)
 
   ASSERT(strcmp("Tue", e.tostring()) == 0)
   ASSERT(strcmp("Fri", Days.Fri.tostring()) == 0)
