@@ -243,6 +243,7 @@ typedef struct Parameter {
 typedef struct ParameterList {
   Parameter *p;
   int len;
+  int cap;
 } ParameterList;
 
 typedef struct Brace {
@@ -269,7 +270,6 @@ typedef struct MemberAccess {
   Expression *o;
   Type *o_type;
   Identifier *member;
-  bool pointer;
 } MemberAccess;
 
 typedef struct Cast {
@@ -1722,7 +1722,8 @@ ParameterList Program_parse_parameter_list(Program *p, Module *m, State *st) {
 
   ParameterList pl;
   pl.len = param_len;
-  pl.p = (Parameter *)Program_alloc(p, pl.len * sizeof(Parameter));
+  pl.cap = pl.len + 1;
+  pl.p = (Parameter *)Program_alloc(p, pl.cap * sizeof(Parameter));
   for (int i = 0; i < param_len; ++i)
     pl.p[i] = param[i];
 
@@ -1759,7 +1760,8 @@ ParameterList Program_parse_named_parameter_list(Program *p, Module *m, State *s
 
   ParameterList pl;
   pl.len = param_len;
-  pl.p = (Parameter *)Program_alloc(p, pl.len * sizeof(Parameter));
+  pl.cap = pl.len + 1;
+  pl.p = (Parameter *)Program_alloc(p, pl.cap * sizeof(Parameter));
   for (int i = 0; i < param_len; ++i)
     pl.p[i] = param[i];
   return pl;
@@ -1807,7 +1809,6 @@ Expression *Program_parse_suffix_expression(Program *p, Module *m, State *st, Ex
     ma->member->member = (Identifier *)Program_alloc(p, sizeof(Identifier));
     ma->member->member->name = member;
     ma->member->member->type = NULL;
-    ma->member->pointer = pointer;
     ma = Program_parse_suffix_expression(p, m, st, ma);
     return ma;
   }
@@ -2660,7 +2661,7 @@ void lisp_expression(FILE *f, Expression *e) {
     fprintf(f, ")");
     break;
   case MemberAccessE:
-    if (e->member->pointer)
+    if (e->member->o_type->kind == PointerT)
       fprintf(f, "(-> ");
     else
       fprintf(f, "(. ");
@@ -2692,7 +2693,7 @@ void lisp_expression(FILE *f, Expression *e) {
   case CDelegateE:
     fprintf(f, "(.c ");
     lisp_expression(f, e->cdelegate->o);
-    fprintf(f, " %s)", e->cdelegate->delegate);
+    fprintf(f, "%s)", e->cdelegate->delegate);
     break;
   }
 }
@@ -2710,21 +2711,6 @@ void c_parameter(FILE *f, ParameterList *pl) {
       fprintf(f, ".%s = ", pl->p[i].name);
     c_expression(f, pl->p[i].p);
   }
-}
-
-void c_member_access_fn(FILE *f, Expression *e) {
-  if (e->member->member->type->fnT->d.parameter.len == 0)
-    FATAL(&e->location, "internal error creating member function call!");
-  Variable *first = &e->member->member->type->fnT->d.parameter.v[0];
-  const char *prefix = "";
-  if (e->member->pointer && first->type->kind != PointerT)
-    prefix = "*";
-  else if (!e->member->pointer && first->type->kind == PointerT)
-    prefix = "&";
-  if (!e->member->member->type->fnT->is_extern_c)
-    fprintf(f, "%s", Type_defined_module(e->member->member->type)->c_name);
-  fprintf(f, "%s(%s", e->member->member->name, prefix);
-  c_expression(f, e->member->o);
 }
 
 void c_expression(FILE *f, Expression *e) {
@@ -2777,10 +2763,7 @@ void c_expression(FILE *f, Expression *e) {
     break;
   case CallE: {
     c_expression(f, e->call->o);
-    if (e->call->o->type != MemberAccessE)
-      fprintf(f, "(");
-    else if (e->call->p.len > 0)
-      fprintf(f, ", ");
+    fprintf(f, "(");
     c_parameter(f, &e->call->p);
     fprintf(f, ")");
     break;
@@ -2836,9 +2819,7 @@ void c_expression(FILE *f, Expression *e) {
     if (e->member->o_type->kind == EnumT) {
       if (e->member->member->type->kind == EnumT)
         fprintf(f, "%s%s", Type_defined_module(e->member->member->type)->c_name, e->member->member->name);
-      else if (e->member->member->type->kind == FnT) {
-        c_member_access_fn(f, e);
-      } else
+      else
         FATAL(&e->location, "Missing implementation!");
       break;
     }
@@ -2857,19 +2838,17 @@ void c_expression(FILE *f, Expression *e) {
     case PointerT:
     case ArrayT:
       c_expression(f, e->member->o);
-      fprintf(f, "%s%s", (e->member->pointer ? "->" : "."), e->member->member->name);
+      fprintf(f, "%s%s", (e->member->o_type->kind == PointerT ? "->" : "."), e->member->member->name);
       break;
 
     case VecT:
     case PoolT:
     case BufT:
-      FATAL(&e->location, "type should be  for '%s'!", Type_name(e->member->member->type).s);
+      FATAL(&e->location, "type should be replaced '%s'!", Type_name(e->member->member->type).s);
       break;
 
     case FnT: {
-      if (e->member->member->type->fnT->d.parameter.len == 0)
-        FATAL(&e->location, "internal error creating member function call!");
-      c_member_access_fn(f, e);
+      FATAL(&e->location, "internal error creating member function call!");
       break;
     }
     }
@@ -3319,7 +3298,7 @@ Expression *Interface_construct(Program *p, Type *got, Type *expect, Expression 
   if (got == &Null) {
     Expression *cE = Program_new_Expression(p, ConstructE, pr->location);
     cE->construct->type = expect;
-    cE->construct->p = (ParameterList){NULL, 0};
+    cE->construct->p = (ParameterList){NULL, 0, 0};
     return cE;
   }
 
@@ -3335,7 +3314,7 @@ Expression *Interface_construct(Program *p, Type *got, Type *expect, Expression 
   CheckInterface_for(got, expect, &pr->location);
   Expression *cE = Program_new_Expression(p, ConstructE, pr->location);
   cE->construct->type = expect;
-  cE->construct->p = (ParameterList){Program_alloc(p, sizeof(Parameter) * 2), 2};
+  cE->construct->p = (ParameterList){Program_alloc(p, sizeof(Parameter) * 2), 2, 2};
   cE->construct->p.p[0].name = NULL;
   if (!is_pointer) {
     Expression *deref = Program_new_Expression(p, UnaryPrefixE, pr->location);
@@ -3367,9 +3346,6 @@ Expression *Interface_construct(Program *p, Type *got, Type *expect, Expression 
 }
 
 Type *AdaptParameter_for(Program *p, Type *got, Type *expect, Parameter *param) {
-  (void)expect;
-  (void)param;
-
   if (expect->kind == InterfaceT && got != expect) {
     param->p = Interface_construct(p, got, expect, param->p);
     return expect;
@@ -3386,6 +3362,23 @@ Type *AdaptParameter_for(Program *p, Type *got, Type *expect, Parameter *param) 
       xP->child = expect;
     }
     return xP;
+  } else if (expect->kind == PointerT && expect->child == got) {
+    Type *xP = Module_find_pointer_type(Type_defined_module(expect->child), expect->child);
+    if (!xP) {
+      xP = Program_add_type(p, PointerT, "", Type_defined_module(expect->child));
+      xP->child = expect->child;
+    }
+    Expression *prefix = Program_new_Expression(p, UnaryPrefixE, param->p->location);
+    prefix->unpre->op = "&";
+    prefix->unpre->o = param->p;
+    param->p = prefix;
+    return xP;
+  } else if (got->kind == PointerT && expect == got->child) {
+    Expression *prefix = Program_new_Expression(p, UnaryPrefixE, param->p->location);
+    prefix->unpre->op = "*";
+    prefix->unpre->o = param->p;
+    param->p = prefix;
+    return expect;
   }
 
   return got;
@@ -3413,7 +3406,6 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
 
   case IdentifierA: {
     if (e->id->type) {
-      FATALX("allready defined?");
       return e->id->type;
     }
     if ((e->id->type = VariableStack_find(s, e->id->name)))
@@ -3431,17 +3423,39 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
   }
   case BraceE:
     return c_Expression_make_variables_typed(s, p, m, e->brace->o);
+
+  case MemberAccessE: {
+    Type *t = c_Expression_make_variables_typed(s, p, m, e->member->o);
+    e->member->o_type = t;
+    if (t->kind == PointerT)
+      t = t->child;
+    if (t->kind != StructT && t->kind != UnionT && t->kind != InterfaceT && t->kind != EnumT && t->kind != UnionTypeT)
+      FATAL(&e->location, "Expect non pointer type for member access got '%s'", Type_name(t).s);
+    if (!(e->member->member->type = Module_find_member(t, e->member->member->name)))
+      FATAL(&e->location, "unknown member '%s' for '%s'", e->member->member->name, Type_name(t).s);
+    if (e->member->member->type->kind == FnT)
+      e->member->member->name = e->member->member->type->name;
+    return e->member->member->type;
+  }
   case CallE: {
     Type *t = c_Expression_make_variables_typed(s, p, m, e->call->o);
     if (!t || t->kind != FnT)
       FATAL(&e->location, "Need a function to be called!");
 
+    Type *first_param_type = NULL;
+    if (e->call->o->type == MemberAccessE) {
+      first_param_type = e->call->o->member->o_type;
+      for (int i = e->call->p.len - 1; i >= 0; --i)
+        e->call->p.p[i + 1] = e->call->p.p[i];
+      e->call->p.len++;
+      e->call->p.p[0].name = NULL;
+      e->call->p.p[0].p = e->call->o->member->o;
+      e->call->o->type = IdentifierA;
+      e->call->o->id = e->call->o->member->member;
+    }
+
     int p_len = e->call->p.len;
     int test_start = 0;
-    if (e->call->o->type == MemberAccessE) {
-      ++p_len;
-      ++test_start;
-    }
     if (p_len > t->fnT->d.parameter.len && t->fnT->d.parameter.v[t->fnT->d.parameter.len - 1].type != &Ellipsis)
       FATAL(&e->location, "To much parameter for function call");
     if (p_len < t->fnT->d.parameter.len && t->fnT->d.parameter.v[t->fnT->d.parameter.len - 1].type != &Ellipsis)
@@ -3449,7 +3463,9 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
 
     int i = 0;
     for (int j = test_start; i < e->call->p.len && j < t->fnT->d.parameter.len; ++i, ++j) {
-      Type *pt = c_Expression_make_variables_typed(s, p, m, e->call->p.p[i].p);
+      Type *pt = j == 0 ? first_param_type : NULL;
+      if (!pt)
+        pt = c_Expression_make_variables_typed(s, p, m, e->call->p.p[i].p);
       pt = AdaptParameter_for(p, pt, t->fnT->d.parameter.v[j].type, &e->call->p.p[i]);
       if (!Type_equal(pt, t->fnT->d.parameter.v[j].type))
         FATAL(&e->call->p.p[i].p->location, "Type missmatch got '%s', expect '%s'", Type_name(pt).s,
@@ -3579,21 +3595,6 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
       FATAL(&e->location, "Expect array/pointer type for access got '%s'", Type_name(t).s);
     return t->child;
   }
-  case MemberAccessE: {
-    Type *t = c_Expression_make_variables_typed(s, p, m, e->member->o);
-    if (t->kind == PointerT) {
-      t = t->child;
-      e->member->pointer = true;
-    }
-    if (t->kind != StructT && t->kind != UnionT && t->kind != InterfaceT && t->kind != EnumT && t->kind != UnionTypeT)
-      FATAL(&e->location, "Expect non pointer type for member access got '%s'", Type_name(t).s);
-    if (!(e->member->member->type = Module_find_member(t, e->member->member->name)))
-      FATAL(&e->location, "unknown member '%s' for '%s'", e->member->member->name, Type_name(t).s);
-    e->member->o_type = t;
-    if (e->member->member->type->kind == FnT)
-      e->member->member->name = e->member->member->type->name;
-    return e->member->member->type;
-  }
   case AsCast:
     c_Expression_make_variables_typed(s, p, m, e->cast->o);
     // check if cast is valid!
@@ -3655,6 +3656,7 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
     return t1;
   }
   case CDelegateE: {
+    FATALX("nooo");
     return c_Expression_make_variables_typed(s, p, m, e->cdelegate->o);
   }
   }
