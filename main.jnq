@@ -54,7 +54,13 @@ fn main() int
   if (g.os1[1] == g.os1[2])
     printf("noooo 1\n")
 
+  x1 := g.os1[0] == g.os1[1] ? 123 : 321
+  ASSERT(x1 == 123)
+  x2 := g.os1[1] == g.os1[2] ? 123 : 321
+  ASSERT(x2 == 321)
+  
   g.os1[0].destroy(g)
+
 
   printf("ok\n")
   return 0

@@ -1,0 +1,62 @@
+fn simple_ternary_operation()
+{
+  printf(" .simple_ternary_operation\n")
+
+  a := 4
+
+  ASSERT(a == 4 ? true : false)
+  ASSERT(a != 4 ? false : true)
+}
+
+fn ternary_in_expression()
+{
+  printf(" .ternary_in_expression\n")
+
+  a := 4
+  x1 := a == 4 ? 120 + 3 : 322 - 1
+  ASSERT(x1 == 123)
+  x2 := a == 8 ? 120 + 3 : 322 - 1
+  ASSERT(x2 == 321)
+}
+
+fn ternary_pointer_condition()
+{
+  printf(" .ternary_pointer_condition\n")
+
+  a := 4
+  aa := &a
+  bb := null as *int
+
+  ASSERT(aa ? true : false)
+  ASSERT(bb ? false : true)
+}
+
+use Some2 from sub.util 
+
+type SomeAble interface {
+  fn id(s *SomeAble, f int) int
+  fn val(s *SomeAble) int
+}
+
+fn check(sa SomeAble) bool {
+  return sa ? true : false
+}
+
+fn ternary_interface_condition()
+{
+  printf(" .ternary_interface_condition\n")
+
+  s2 := Some2{}
+  ASSERT(check(&s2))
+  ASSERT(!check(null))
+}
+
+fn main() int {
+  printf("ternary_op_test\n")
+  simple_ternary_operation()
+  ternary_in_expression()
+  ternary_pointer_condition()
+  ternary_interface_condition()
+  printf(" ...ok\n")
+  return 0
+}

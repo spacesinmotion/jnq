@@ -102,6 +102,7 @@ typedef struct Cast Cast;
 typedef struct UnaryPrefix UnaryPrefix;
 typedef struct UnaryPostfix UnaryPostfix;
 typedef struct BinaryOperation BinaryOperation;
+typedef struct TernaryOperation TernaryOperation;
 
 typedef struct CDelegate CDelegate;
 
@@ -144,6 +145,7 @@ typedef enum ExpressionType {
   UnaryPrefixE,
   UnaryPostfixE,
   BinaryOperationE,
+  TernaryOperationE,
   CDelegateE,
 } ExpressionType;
 
@@ -167,6 +169,7 @@ typedef struct Expression {
     UnaryPrefix *unpre;
     UnaryPostfix *unpost;
     BinaryOperation *binop;
+    TernaryOperation *ternop;
     CDelegate *cdelegate;
   };
   ExpressionType type;
@@ -340,6 +343,12 @@ typedef struct BinaryOperation {
   Expression *o2;
   BinOp *op;
 } BinaryOperation;
+
+typedef struct TernaryOperation {
+  Expression *condition;
+  Expression *if_e;
+  Expression *else_e;
+} TernaryOperation;
 
 typedef struct CDelegate {
   Expression *o;
@@ -1020,6 +1029,10 @@ Expression *Program_new_Expression(Program *p, ExpressionType t, Location l) {
     break;
   case BinaryOperationE:
     e->binop = (BinaryOperation *)Program_alloc(p, sizeof(BinaryOperation));
+    break;
+  case TernaryOperationE:
+    e->ternop = (TernaryOperation *)Program_alloc(p, sizeof(TernaryOperation));
+    e->ternop->condition = e->ternop->if_e = e->ternop->else_e = NULL;
     break;
   case CDelegateE:
     e->cdelegate = (CDelegate *)Program_alloc(p, sizeof(CDelegate));
@@ -2010,6 +2023,20 @@ Expression *Program_parse_expression(Program *p, Module *m, State *st) {
   }
   if (yard.val_stack_size != 1)
     FATALX("Expression parsing failed with too many values (%d)", yard.val_stack_size);
+
+  State old = *st;
+  if (check_op(st, "?")) {
+    Expression *e = Program_new_Expression(p, TernaryOperationE, old.location);
+    e->ternop->condition = yard.val_stack[0];
+    if (!(e->ternop->if_e = Program_parse_expression(p, m, st)))
+      FATAL(&old.location, "expect 1st expression for ternary operation");
+    if (!check_op(st, ":"))
+      FATAL(&old.location, "expect ':' for ternary operation");
+    if (!(e->ternop->else_e = Program_parse_expression(p, m, st)))
+      FATAL(&old.location, "expect 2nd expression for ternary operation");
+    return e;
+  }
+
   return yard.val_stack[0];
 }
 
@@ -2690,6 +2717,15 @@ void lisp_expression(FILE *f, Expression *e) {
     lisp_expression(f, e->binop->o2);
     fprintf(f, ")");
     break;
+  case TernaryOperationE:
+    fprintf(f, "(?! ");
+    lisp_expression(f, e->ternop->condition);
+    fprintf(f, " ");
+    lisp_expression(f, e->ternop->if_e);
+    fprintf(f, " ");
+    lisp_expression(f, e->ternop->else_e);
+    fprintf(f, ")");
+    break;
   case CDelegateE:
     fprintf(f, "(.c ");
     lisp_expression(f, e->cdelegate->o);
@@ -2876,6 +2912,14 @@ void c_expression(FILE *f, Expression *e) {
     c_expression(f, e->binop->o1);
     fprintf(f, " %s ", e->binop->op->op);
     c_expression(f, e->binop->o2);
+    break;
+  }
+  case TernaryOperationE: {
+    c_expression(f, e->ternop->condition);
+    fprintf(f, " ? ");
+    c_expression(f, e->ternop->if_e);
+    fprintf(f, " : ");
+    c_expression(f, e->ternop->else_e);
     break;
   }
   case CDelegateE: {
@@ -3653,6 +3697,22 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
     }
     if (e->binop->op->returns_bool)
       return &Bool;
+    return t1;
+  }
+  case TernaryOperationE: {
+    Type *tc = c_Expression_make_variables_typed(s, p, m, e->ternop->condition);
+    if (tc != &Bool && tc != &Null && tc->kind != PointerT && tc->kind != InterfaceT)
+      FATAL(&e->location, "Expect 'bool' or pointer as contition got '%s'", Type_name(tc).s);
+    if (tc->kind == InterfaceT) {
+      Expression *cd = Program_new_Expression(p, CDelegateE, e->location);
+      cd->cdelegate->o = e->ternop->condition;
+      cd->cdelegate->delegate = ".self";
+      e->ternop->condition = cd;
+    }
+    Type *t1 = c_Expression_make_variables_typed(s, p, m, e->ternop->if_e);
+    Type *t2 = c_Expression_make_variables_typed(s, p, m, e->ternop->else_e);
+    if (!Type_equal(t1, t2))
+      FATAL(&e->location, "Expect equal types for ternary operation (%s, %s)", Type_name(t1).s, Type_name(t2).s);
     return t1;
   }
   case CDelegateE: {
