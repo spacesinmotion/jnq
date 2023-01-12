@@ -2034,6 +2034,13 @@ Expression *Program_parse_expression(Program *p, Module *m, State *st) {
       FATAL(&old.location, "expect ':' for ternary operation");
     if (!(e->ternop->else_e = Program_parse_expression(p, m, st)))
       FATAL(&old.location, "expect 2nd expression for ternary operation");
+    if (e->ternop->condition->type == BinaryOperationE && e->ternop->condition->binop->op->prec < 100 - 13) {
+      Expression *cond = e->ternop->condition->binop->o2;
+      e->ternop->condition->binop->o2 = e;
+      TernaryOperation *ternop = e->ternop;
+      e = e->ternop->condition;
+      ternop->condition = cond;
+    }
     return e;
   }
 

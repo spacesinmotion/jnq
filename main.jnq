@@ -61,6 +61,9 @@ fn main() int
   
   g.os1[0].destroy(g)
 
+  f := 4.5f
+  f = true ? 1.0f : 9.0f
+  ASSERT(f == 1.0f)
 
   printf("ok\n")
   return 0
