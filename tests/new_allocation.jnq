@@ -1,0 +1,23 @@
+use Point from sub.util
+
+fn basic_allocation() {
+  printf(" .basic_allocation\n")
+
+  ppp := new Point{1, 2}
+
+  ASSERT(ppp)
+  ASSERT(ppp != null)
+  ASSERT(ppp.x == 1)
+  ASSERT(ppp.y == 2)
+
+  delete ppp
+  ppp = null
+  ASSERT(ppp == null)
+}
+
+fn main() int {
+  printf("new_allocation...\n")
+  basic_allocation()
+  printf(" ...ok\n")
+  return 0
+}

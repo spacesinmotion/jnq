@@ -65,6 +65,13 @@ fn main() int
   f = true ? 1.0f : 9.0f
   ASSERT(f == 1.0f)
 
+  ppp := new Point{1, 2}
+
+  ASSERT(ppp.x == 1)
+  ASSERT(ppp.y == 2)
+
+  delete ppp
+
   printf("ok\n")
   return 0
 }

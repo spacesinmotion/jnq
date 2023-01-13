@@ -96,6 +96,7 @@ typedef struct AutoTypeDeclaration AutoTypeDeclaration;
 typedef struct Brace Brace;
 typedef struct Call Call;
 typedef struct Construct Construct;
+typedef struct New New;
 typedef struct Access Access;
 typedef struct MemberAccess MemberAccess;
 typedef struct Cast Cast;
@@ -114,6 +115,7 @@ typedef struct BreakStatement BreakStatement;
 typedef struct ContinueStatement ContinueStatement;
 typedef struct CaseStatement CaseStatement;
 typedef struct DefaultStatement DefaultStatement;
+typedef struct DeleteStatement DeleteStatement;
 
 typedef struct ScopeStatement ScopeStatement;
 
@@ -139,6 +141,7 @@ typedef enum ExpressionType {
   BraceE,
   CallE,
   ConstructE,
+  NewE,
   AccessE,
   MemberAccessE,
   AsCast,
@@ -163,6 +166,7 @@ typedef struct Expression {
     Brace *brace;
     Call *call;
     Construct *construct;
+    New *newE;
     Access *access;
     MemberAccess *member;
     Cast *cast;
@@ -182,6 +186,7 @@ typedef enum StatementType {
   Continue,
   Case,
   Default,
+  Delete,
   Scope,
   If,
   For,
@@ -200,6 +205,7 @@ typedef struct Statement {
     ContinueStatement *cont;
     CaseStatement *caseS;
     DefaultStatement *defaultS;
+    DeleteStatement *deleteS;
     ScopeStatement *scope;
     IfStatement *ifS;
     ForStatement *forS;
@@ -263,6 +269,10 @@ typedef struct Construct {
   ParameterList p;
   bool pointer;
 } Construct;
+
+typedef struct New {
+  Expression *o;
+} New;
 
 typedef struct Access {
   Expression *o;
@@ -367,6 +377,10 @@ typedef struct DeclarationStatement {
 typedef struct ReturnStatement {
   Expression *e;
 } ReturnStatement;
+
+typedef struct DeleteStatement {
+  Expression *e;
+} DeleteStatement;
 
 typedef struct BreakStatement {
 } BreakStatement;
@@ -949,6 +963,10 @@ Statement *Program_new_Statement(Program *p, StatementType t, Statement *n) {
   case Default:
     s->defaultS = (DefaultStatement *)Program_alloc(p, sizeof(DefaultStatement));
     break;
+  case Delete:
+    s->deleteS = (DeleteStatement *)Program_alloc(p, sizeof(DeleteStatement));
+    s->deleteS->e = NULL;
+    break;
   case Continue:
     s->cont = (ContinueStatement *)Program_alloc(p, sizeof(ContinueStatement));
     break;
@@ -1009,6 +1027,10 @@ Expression *Program_new_Expression(Program *p, ExpressionType t, Location l) {
   case ConstructE:
     e->construct = (Construct *)Program_alloc(p, sizeof(Construct));
     e->construct->pointer = false;
+    break;
+  case NewE:
+    e->newE = (New *)Program_alloc(p, sizeof(New));
+    e->newE->o = NULL;
     break;
   case AccessE:
     e->access = (Access *)Program_alloc(p, sizeof(Access));
@@ -1782,6 +1804,10 @@ ParameterList Program_parse_named_parameter_list(Program *p, Module *m, State *s
 
 Expression *Program_parse_construction(Program *p, Module *m, State *st) {
   skip_whitespace(st);
+  State new_loc = *st;
+
+  bool new_construct = check_word(st, "new");
+  skip_whitespace(st);
   State old = *st;
 
   if (Program_check_declared_type(p, st) && check_op(st, "{")) {
@@ -1795,6 +1821,11 @@ Expression *Program_parse_construction(Program *p, Module *m, State *st) {
       if (!check_op(st, "}"))
         FATAL(&st->location, "unfinished constructor call, missing '}'");
       construct->construct->type = type;
+      if (new_construct) {
+        Expression *new_c = Program_new_Expression(p, NewE, new_loc.location);
+        new_c->newE->o = construct;
+        return new_c;
+      }
       return construct;
     }
   }
@@ -2080,6 +2111,13 @@ Statement *Program_parse_statement(Program *p, Module *m, State *st, Statement *
       statement->express->e = Program_parse_expression(p, m, st);
     else
       statement->express->e = NULL;
+  } else if (check_word(st, "delete")) {
+    statement = Program_new_Statement(p, Delete, next);
+    skip_whitespace_space(st);
+    if (!check_whitespace_for_nl(st))
+      statement->deleteS->e = Program_parse_expression(p, m, st);
+    else
+      FATAL(&st->location, "Missing delete expression");
   } else if (check_word(st, "case")) {
     statement = Program_new_Statement(p, Case, next);
     if (!(statement->caseS->caseE = Program_parse_expression(p, m, st)))
@@ -2687,6 +2725,11 @@ void lisp_expression(FILE *f, Expression *e) {
     lisp_parameter(f, &e->construct->p);
     fprintf(f, ")");
     break;
+  case NewE:
+    fprintf(f, "(new ");
+    lisp_expression(f, e->newE->o);
+    fprintf(f, ")");
+    break;
   case AccessE:
     fprintf(f, "([] ");
     lisp_expression(f, e->access->o);
@@ -2809,6 +2852,15 @@ void c_expression(FILE *f, Expression *e) {
     fprintf(f, "(");
     c_parameter(f, &e->call->p);
     fprintf(f, ")");
+    break;
+  }
+  case NewE: {
+    if (e->newE->o->type != ConstructE)
+      FATAL(&e->location, "expect construction for 'new'");
+    Type *t = e->newE->o->construct->type;
+    fprintf(f, "__NEW_(%s%s, &(", Type_defined_module(t)->c_name, t->name);
+    c_expression(f, e->newE->o);
+    fprintf(f, "))");
     break;
   }
   case ConstructE: {
@@ -2964,6 +3016,11 @@ void c_statements(FILE *f, Statement *s, int indent) {
     fprintf(f, "return ");
     c_expression(f, s->ret->e);
     fprintf(f, ";\n");
+    break;
+  case Delete:
+    fprintf(f, "free(");
+    c_expression(f, s->deleteS->e);
+    fprintf(f, ");\n");
     break;
   case Break:
     fprintf(f, "break;\n");
@@ -3650,6 +3707,18 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
     c_Expression_make_variables_typed(s, p, m, e->cast->o);
     // check if cast is valid!
     return e->cast->type;
+  case NewE: {
+    Type *st = c_Expression_make_variables_typed(s, p, m, e->newE->o);
+    Module *cm = Type_defined_module(st);
+    if (!cm)
+      FATALX("internal problem finding module for type");
+    Type *td = Module_find_pointer_type(cm, st);
+    if (!td) {
+      td = Program_add_type(p, PointerT, "", cm);
+      td->child = st;
+    }
+    return td;
+  }
   case UnaryPrefixE: {
     Type *st = c_Expression_make_variables_typed(s, p, m, e->unpost->o);
     if (strcmp(e->unpre->op, "&") == 0) {
@@ -3744,6 +3813,9 @@ void c_Statement_make_variables_typed(VariableStack *s, Program *p, Module *m, S
   case Return:
     if (st->ret->e)
       c_Expression_make_variables_typed(s, p, m, st->ret->e);
+    break;
+  case Delete:
+    c_Expression_make_variables_typed(s, p, m, st->deleteS->e);
     break;
   case Break:
   case Continue:
@@ -4151,6 +4223,7 @@ void c_Program(FILE *f, Program *p, Module *m) {
   fputs("    } \\\n", f);
   fputs("  } while (0)\n", f);
   fputs("\n", f);
+  fputs("#define __NEW_(T, src) ((T *)memcpy(malloc(sizeof(T)), src, sizeof(T)))\n", f);
 
   for (CBlock *cb = p->cblocks; cb; cb = cb->next)
     if (cb->at_start)
