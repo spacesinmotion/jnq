@@ -4394,7 +4394,7 @@ void write_symbols(Module *m) {
       fprintf(f, ",\n");
     fprintf(f, "{");
     fprintf(f, "\"name\":\"%s\",", l->type->name);
-    if (l->type->kind == StructT || l->type->kind == UnionT)
+    if (l->type->kind == StructT || l->type->kind == UnionT || l->type->kind == PlaceHolder)
       fprintf(f, "\"kind\":\"struct\",");
     else if (l->type->kind == FnT)
       fprintf(f, "\"kind\":\"fn\",");
@@ -4403,7 +4403,7 @@ void write_symbols(Module *m) {
     else if (l->type->kind == InterfaceT)
       fprintf(f, "\"kind\":\"interface\",");
     else
-      FATALX("missing implementation!");
+      FATALX("missing implementation %d!", l->type->kind);
     fprintf(f, "\"uri\":\"file://%s\",", l->type->location.file);
     fprintf(f, "\"line\":%d,", l->type->location.line);
     fprintf(f, "\"column\":%d", l->type->location.column);
@@ -4418,9 +4418,9 @@ int symbols(Program *p) {
   size_t size = 0;
   size_t size_read = 1024;
   char *code = NULL;
-  while ( size_read == 1024) {
-    code = (char *)realloc(code, size+1024);
-    size_read = read(STDIN_FILENO, code+size, 1024);
+  while (size_read == 1024) {
+    code = (char *)realloc(code, size + 1024);
+    size_read = read(STDIN_FILENO, code + size, 1024);
     size += 1024;
   }
   State st = State_new(code, "dummy");
