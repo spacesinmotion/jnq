@@ -4388,13 +4388,13 @@ void write_symbols(Module *m) {
 
   fprintf(f, "[\n");
   for (TypeList *l = m->types; l; l = l->next) {
-    if (!l->type->name || !l->type->name[0] || l->type->kind == UseT)
+    if (!l->type->name || !l->type->name[0] || l->type->kind == UseT || l->type->kind == PlaceHolder)
       continue;
     if (l != m->types)
       fprintf(f, ",\n");
     fprintf(f, "{");
     fprintf(f, "\"name\":\"%s\",", l->type->name);
-    if (l->type->kind == StructT || l->type->kind == UnionT || l->type->kind == PlaceHolder)
+    if (l->type->kind == StructT || l->type->kind == UnionT)
       fprintf(f, "\"kind\":\"struct\",");
     else if (l->type->kind == FnT)
       fprintf(f, "\"kind\":\"fn\",");
