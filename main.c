@@ -29,6 +29,24 @@ typedef struct Location {
   unsigned short column;
 } Location;
 
+typedef struct LocationRange {
+  const char *file;
+  unsigned short start_line;
+  unsigned short start_column;
+  unsigned short end_line;
+  unsigned short end_column;
+} LocationRange;
+
+LocationRange NewRange(Location s, Location e) {
+  return (LocationRange){
+      .file = s.file,
+      .start_line = s.line,
+      .start_column = s.column,
+      .end_line = e.line,
+      .end_column = e.column,
+  };
+}
+
 typedef struct State {
   const char *c;
   Location location;
@@ -432,7 +450,7 @@ typedef struct SwitchStatement {
 typedef struct Struct {
   VariableList member;
   Module *module;
-  Location location;
+  LocationRange location;
 } Struct;
 
 typedef struct FunctionDecl {
@@ -451,7 +469,7 @@ typedef struct TypeList TypeList;
 typedef struct Interface {
   FnVec methods;
   Module *module;
-  Location location;
+  LocationRange location;
   TypeList *used_types;
 } Interface;
 
@@ -465,7 +483,7 @@ typedef struct EnumEntry {
 typedef struct Enum {
   EnumEntry *entries;
   Module *module;
-  Location location;
+  LocationRange location;
 } Enum;
 
 typedef struct UnionTypeEntry UnionTypeEntry;
@@ -479,14 +497,14 @@ typedef struct UnionTypeEntry {
 typedef struct Union {
   UnionTypeEntry *member;
   Module *module;
-  Location location;
+  LocationRange location;
 } Union;
 
 typedef struct Function {
   FunctionDecl d;
   Statement *body;
   Module *module;
-  Location location;
+  LocationRange location;
   bool is_extern_c;
 } Function;
 
@@ -564,7 +582,7 @@ Module *Type_defined_module(Type *t) {
   return NULL;
 }
 
-Location *Type_location(Type *t) {
+LocationRange *Type_location(Type *t) {
   switch (t->kind) {
   case StructT:
   case UnionT:
@@ -689,30 +707,31 @@ bool Type_is_import_type(Type *t) {
          t->kind == EnumT || t->kind == PlaceHolder;
 }
 
-Type Null = (Type){"null_t", .structT = &(Struct){{}, &global, (Location){}}, StructT, NULL};
-Type Bool = (Type){"bool", .structT = &(Struct){{}, &global, (Location){}}, StructT, NULL};
-Type Char = (Type){"char", .structT = &(Struct){{}, &global, (Location){}}, StructT, NULL};
-Type Int = (Type){"int", .structT = &(Struct){{}, &global, (Location){}}, StructT, NULL};
-Type Float = (Type){"float", .structT = &(Struct){{}, &global, (Location){}}, StructT, NULL};
-Type Double = (Type){"double", .structT = &(Struct){{}, &global, (Location){}}, StructT, NULL};
-Type String = (Type){"string", .structT = &(Struct){{}, &global, (Location){}}, StructT, NULL};
+Type Null = (Type){"null_t", .structT = &(Struct){{}, &global, (LocationRange){}}, StructT, NULL};
+Type Bool = (Type){"bool", .structT = &(Struct){{}, &global, (LocationRange){}}, StructT, NULL};
+Type Char = (Type){"char", .structT = &(Struct){{}, &global, (LocationRange){}}, StructT, NULL};
+Type Int = (Type){"int", .structT = &(Struct){{}, &global, (LocationRange){}}, StructT, NULL};
+Type Float = (Type){"float", .structT = &(Struct){{}, &global, (LocationRange){}}, StructT, NULL};
+Type Double = (Type){"double", .structT = &(Struct){{}, &global, (LocationRange){}}, StructT, NULL};
+Type String = (Type){"string", .structT = &(Struct){{}, &global, (LocationRange){}}, StructT, NULL};
 
-Type Ellipsis = (Type){"...", .structT = &(Struct){{}, &global, (Location){}}, StructT, NULL};
+Type Ellipsis = (Type){"...", .structT = &(Struct){{}, &global, (LocationRange){}}, StructT, NULL};
 
 Variable print_param[] = {{null_location, "format", &String}, {null_location, "...", &Ellipsis}};
-Function print = (Function){{(VariableList){print_param, 2}, NULL, null_location}, NULL, &global, (Location){}, true};
+Function print =
+    (Function){{(VariableList){print_param, 2}, NULL, null_location}, NULL, &global, (LocationRange){}, true};
 Type Printf = (Type){"printf", .fnT = &print, FnT, NULL};
 
 Function assert = (Function){{(VariableList){&(Variable){null_location, "cond", &Bool}, 1}, NULL, null_location},
                              NULL,
                              &global,
-                             (Location){},
+                             (LocationRange){},
                              true};
 Type Assert = (Type){"ASSERT", .fnT = &assert, FnT, NULL};
 Function SizeOfFn = (Function){{(VariableList){&(Variable){null_location, "...", &Ellipsis}, 1}, &Int, null_location},
                                NULL,
                                &global,
-                               (Location){},
+                               (LocationRange){},
                                true};
 Type SizeOf = (Type){"sizeof", .fnT = &SizeOfFn, FnT, NULL};
 
@@ -1680,20 +1699,20 @@ void Program_parse_type(Program *p, Module *m, State *st) {
     bool is_union = check_word(st, "union");
     if ((is_union || check_word(st, "struct")) && check_op(st, "{")) {
       Struct *s = Program_add_type(p, is_union ? UnionT : StructT, name, m)->structT;
-      s->location = old.location;
       s->member = Program_parse_variable_declaration_list(p, m, st, "}");
+      s->location = NewRange(old.location, st->location);
     } else if (check_word(st, "enum") && check_op(st, "{")) {
       Enum *e = Program_add_type(p, EnumT, name, m)->enumT;
-      e->location = old.location;
       e->entries = Program_parse_enum_entry_list(p, st);
+      e->location = NewRange(old.location, st->location);
     } else if (check_word(st, "uniontype") && check_op(st, "{")) {
       Union *u = Program_add_type(p, UnionTypeT, name, m)->unionT;
-      u->location = old.location;
       u->member = Program_parse_union_entry_list(p, m, st);
+      u->location = NewRange(old.location, st->location);
     } else if (check_word(st, "interface") && check_op(st, "{")) {
       Type *in = Program_add_type(p, InterfaceT, name, m);
-      in->interfaceT->location = old.location;
       in->interfaceT->methods = Program_parse_interface_fns(p, m, in, st);
+      in->interfaceT->location = NewRange(old.location, st->location);
     } else
       FATAL(&st->location, "Missing type declaration");
   } else
@@ -2277,7 +2296,7 @@ void Program_parse_fn(Program *p, Module *m, State *st, bool extc) {
   if (check_identifier(st)) {
     const char *name = Program_copy_string(p, b, st->c - b);
     Function *fn = Program_add_type(p, FnT, name, m)->fnT;
-    fn->location = old.location;
+    fn->location = NewRange(old.location, st->location);
     if (!Program_parse_fn_decl(p, m, &fn->d, st))
       FATAL(&st->location, "Missing parameterlist");
     fn->is_extern_c = extc;
@@ -4419,7 +4438,7 @@ void write_symbols(Module *m) {
 
   fprintf(f, "[\n");
   for (TypeList *l = m->types; l; l = l->next) {
-    Location *ll = Type_location(l->type);
+    LocationRange *ll = Type_location(l->type);
     if (!ll)
       continue;
     if (l != m->types)
@@ -4437,8 +4456,10 @@ void write_symbols(Module *m) {
     else
       FATALX("missing implementation %d!", l->type->kind);
     fprintf(f, "\"uri\":\"file://%s\",", ll->file);
-    fprintf(f, "\"line\":%d,", ll->line);
-    fprintf(f, "\"column\":%d", ll->column);
+    fprintf(f, "\"line\":%d,", ll->start_line);
+    fprintf(f, "\"column\":%d,", ll->start_column);
+    fprintf(f, "\"end_line\":%d,", ll->end_line);
+    fprintf(f, "\"end_column\":%d", ll->end_column);
 
     fprintf(f, "}");
   }
