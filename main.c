@@ -432,6 +432,7 @@ typedef struct SwitchStatement {
 typedef struct Struct {
   VariableList member;
   Module *module;
+  Location location;
 } Struct;
 
 typedef struct FunctionDecl {
@@ -450,6 +451,7 @@ typedef struct TypeList TypeList;
 typedef struct Interface {
   FnVec methods;
   Module *module;
+  Location location;
   TypeList *used_types;
 } Interface;
 
@@ -463,6 +465,7 @@ typedef struct EnumEntry {
 typedef struct Enum {
   EnumEntry *entries;
   Module *module;
+  Location location;
 } Enum;
 
 typedef struct UnionTypeEntry UnionTypeEntry;
@@ -476,12 +479,14 @@ typedef struct UnionTypeEntry {
 typedef struct Union {
   UnionTypeEntry *member;
   Module *module;
+  Location location;
 } Union;
 
 typedef struct Function {
   FunctionDecl d;
   Statement *body;
   Module *module;
+  Location location;
   bool is_extern_c;
 } Function;
 
@@ -523,7 +528,6 @@ typedef struct Type {
   };
   TypeKind kind;
   Type *child;
-  Location location;
 } Type;
 
 Module *Type_defined_module(Type *t) {
@@ -555,6 +559,31 @@ Module *Type_defined_module(Type *t) {
     break;
   case UseT:
     FATALX("Can't get defined module for use-type.");
+    break;
+  }
+  return NULL;
+}
+
+Location *Type_location(Type *t) {
+  switch (t->kind) {
+  case StructT:
+  case UnionT:
+    return &t->structT->location;
+  case EnumT:
+    return &t->enumT->location;
+  case UnionTypeT:
+    return &t->unionT->location;
+  case InterfaceT:
+    return &t->interfaceT->location;
+  case FnT:
+    return &t->fnT->location;
+  case VecT:
+  case PoolT:
+  case BufT:
+  case ArrayT:
+  case PointerT:
+  case PlaceHolder:
+  case UseT:
     break;
   }
   return NULL;
@@ -660,25 +689,31 @@ bool Type_is_import_type(Type *t) {
          t->kind == EnumT || t->kind == PlaceHolder;
 }
 
-Type Null = (Type){"null_t", .structT = &(Struct){{}, &global}, StructT, NULL};
-Type Bool = (Type){"bool", .structT = &(Struct){{}, &global}, StructT, NULL};
-Type Char = (Type){"char", .structT = &(Struct){{}, &global}, StructT, NULL};
-Type Int = (Type){"int", .structT = &(Struct){{}, &global}, StructT, NULL};
-Type Float = (Type){"float", .structT = &(Struct){{}, &global}, StructT, NULL};
-Type Double = (Type){"double", .structT = &(Struct){{}, &global}, StructT, NULL};
-Type String = (Type){"string", .structT = &(Struct){{}, &global}, StructT, NULL};
+Type Null = (Type){"null_t", .structT = &(Struct){{}, &global, (Location){}}, StructT, NULL};
+Type Bool = (Type){"bool", .structT = &(Struct){{}, &global, (Location){}}, StructT, NULL};
+Type Char = (Type){"char", .structT = &(Struct){{}, &global, (Location){}}, StructT, NULL};
+Type Int = (Type){"int", .structT = &(Struct){{}, &global, (Location){}}, StructT, NULL};
+Type Float = (Type){"float", .structT = &(Struct){{}, &global, (Location){}}, StructT, NULL};
+Type Double = (Type){"double", .structT = &(Struct){{}, &global, (Location){}}, StructT, NULL};
+Type String = (Type){"string", .structT = &(Struct){{}, &global, (Location){}}, StructT, NULL};
 
-Type Ellipsis = (Type){"...", .structT = &(Struct){{}, &global}, StructT, NULL};
+Type Ellipsis = (Type){"...", .structT = &(Struct){{}, &global, (Location){}}, StructT, NULL};
 
 Variable print_param[] = {{null_location, "format", &String}, {null_location, "...", &Ellipsis}};
-Function print = (Function){{(VariableList){print_param, 2}, NULL, null_location}, NULL, &global, true};
+Function print = (Function){{(VariableList){print_param, 2}, NULL, null_location}, NULL, &global, (Location){}, true};
 Type Printf = (Type){"printf", .fnT = &print, FnT, NULL};
 
-Function assert = (Function){
-    {(VariableList){&(Variable){null_location, "cond", &Bool}, 1}, NULL, null_location}, NULL, &global, true};
+Function assert = (Function){{(VariableList){&(Variable){null_location, "cond", &Bool}, 1}, NULL, null_location},
+                             NULL,
+                             &global,
+                             (Location){},
+                             true};
 Type Assert = (Type){"ASSERT", .fnT = &assert, FnT, NULL};
-Function SizeOfFn = (Function){
-    {(VariableList){&(Variable){null_location, "...", &Ellipsis}, 1}, &Int, null_location}, NULL, &global, true};
+Function SizeOfFn = (Function){{(VariableList){&(Variable){null_location, "...", &Ellipsis}, 1}, &Int, null_location},
+                               NULL,
+                               &global,
+                               (Location){},
+                               true};
 Type SizeOf = (Type){"sizeof", .fnT = &SizeOfFn, FnT, NULL};
 
 Type *Module_find_type(Module *m, const char *b, const char *e) {
@@ -724,14 +759,14 @@ Type *Module_find_type(Module *m, const char *b, const char *e) {
   return NULL;
 }
 
-Type *Program_add_type(Program *p, TypeKind k, const char *name, Module *m, Location l);
+Type *Program_add_type(Program *p, TypeKind k, const char *name, Module *m);
 
 Type *Module_type_or_placeholder(Program *p, Module *m, const char *b, const char *e) {
   Type *t = Module_find_type(m, b, e);
   if (t)
     return t;
   const char *n = Program_copy_string(p, b, e - b);
-  return Program_add_type(p, PlaceHolder, n, m, (Location){});
+  return Program_add_type(p, PlaceHolder, n, m);
 }
 
 bool Type_equal(Type *t1, Type *t2) {
@@ -831,7 +866,7 @@ Module *Program_add_module(Program *p, const char *pathc) {
   return m;
 }
 
-Type *Program_add_type(Program *p, TypeKind k, const char *name, Module *m, Location l) {
+Type *Program_add_type(Program *p, TypeKind k, const char *name, Module *m) {
   Type *tt = NULL;
   if (name && name[0] != '\0') {
     tt = Module_find_type(m, name, name + strlen(name));
@@ -841,7 +876,6 @@ Type *Program_add_type(Program *p, TypeKind k, const char *name, Module *m, Loca
   bool was_placeholder = tt && tt->kind == PlaceHolder;
   if (!tt)
     tt = (Type *)Program_alloc(p, sizeof(Type));
-  tt->location = l;
 
   tt->name = name;
   tt->kind = k;
@@ -916,8 +950,8 @@ Type *Program_add_type(Program *p, TypeKind k, const char *name, Module *m, Loca
   return tt;
 }
 
-Type *Program_add_type_after(Program *p, TypeKind k, Module *m, Type *child, Location l) {
-  Type *t = Program_add_type(p, k, "", m, l);
+Type *Program_add_type_after(Program *p, TypeKind k, Module *m, Type *child) {
+  Type *t = Program_add_type(p, k, "", m);
   t->child = child;
   if (!m->types || t != m->types->type)
     FATALX("internal error expect new types to be added up front!");
@@ -1301,7 +1335,7 @@ bool Program_parse_use_path(Program *p, Module *m, State *st) {
     FATAL(&old.location, "import not found '%s'", buffer);
 
   const char *n = Program_copy_string(p, name, strlen(name));
-  Use *u = Program_add_type(p, UseT, n, m, start.location)->useT;
+  Use *u = Program_add_type(p, UseT, n, m)->useT;
   u->module = use;
   u->location = start.location;
   u->take_all = take_all;
@@ -1407,7 +1441,7 @@ Type *Program_parse_declared_type(Program *p, Module *m, State *st) {
         FATALX("internal problem finding module for type");
       Type *td = Module_find_pointer_type(cm, c);
       if (!td) {
-        td = Program_add_type(p, PointerT, "", cm, (Location){});
+        td = Program_add_type(p, PointerT, "", cm);
         td->child = c;
       }
       return td;
@@ -1428,7 +1462,7 @@ Type *Program_parse_declared_type(Program *p, Module *m, State *st) {
             FATALX("internal problem finding module for type");
           Type *td = Module_find_vec_type(cm, vec_t, count, c);
           if (!td) {
-            td = Program_add_type_after(p, vec_t, cm, c, (Location){});
+            td = Program_add_type_after(p, vec_t, cm, c);
             td->array_count = count;
             td->child = c;
           }
@@ -1450,7 +1484,7 @@ Type *Program_parse_declared_type(Program *p, Module *m, State *st) {
           FATALX("internal problem finding module for type");
         Type *td = Module_find_array_type(cm, count, c);
         if (!td) {
-          td = Program_add_type(p, ArrayT, "", cm, (Location){});
+          td = Program_add_type(p, ArrayT, "", cm);
           td->array_count = count;
           td->child = c;
         }
@@ -1645,16 +1679,20 @@ void Program_parse_type(Program *p, Module *m, State *st) {
     const char *name = Program_copy_string(p, old.c, st->c - old.c);
     bool is_union = check_word(st, "union");
     if ((is_union || check_word(st, "struct")) && check_op(st, "{")) {
-      Struct *s = Program_add_type(p, is_union ? UnionT : StructT, name, m, old.location)->structT;
+      Struct *s = Program_add_type(p, is_union ? UnionT : StructT, name, m)->structT;
+      s->location = old.location;
       s->member = Program_parse_variable_declaration_list(p, m, st, "}");
     } else if (check_word(st, "enum") && check_op(st, "{")) {
-      Enum *e = Program_add_type(p, EnumT, name, m, old.location)->enumT;
+      Enum *e = Program_add_type(p, EnumT, name, m)->enumT;
+      e->location = old.location;
       e->entries = Program_parse_enum_entry_list(p, st);
     } else if (check_word(st, "uniontype") && check_op(st, "{")) {
-      Union *u = Program_add_type(p, UnionTypeT, name, m, old.location)->unionT;
+      Union *u = Program_add_type(p, UnionTypeT, name, m)->unionT;
+      u->location = old.location;
       u->member = Program_parse_union_entry_list(p, m, st);
     } else if (check_word(st, "interface") && check_op(st, "{")) {
-      Type *in = Program_add_type(p, InterfaceT, name, m, old.location);
+      Type *in = Program_add_type(p, InterfaceT, name, m);
+      in->interfaceT->location = old.location;
       in->interfaceT->methods = Program_parse_interface_fns(p, m, in, st);
     } else
       FATAL(&st->location, "Missing type declaration");
@@ -2238,7 +2276,8 @@ void Program_parse_fn(Program *p, Module *m, State *st, bool extc) {
   const char *b = st->c;
   if (check_identifier(st)) {
     const char *name = Program_copy_string(p, b, st->c - b);
-    Function *fn = Program_add_type(p, FnT, name, m, old.location)->fnT;
+    Function *fn = Program_add_type(p, FnT, name, m)->fnT;
+    fn->location = old.location;
     if (!Program_parse_fn_decl(p, m, &fn->d, st))
       FATAL(&st->location, "Missing parameterlist");
     fn->is_extern_c = extc;
@@ -3474,14 +3513,14 @@ Type *AdaptParameter_for(Program *p, Type *got, Type *expect, Parameter *param) 
     param->p->construct->pointer = true;
     Type *xP = Module_find_pointer_type(expect->child->interfaceT->module, expect->child);
     if (!xP) {
-      xP = Program_add_type(p, PointerT, "", expect->child->interfaceT->module, (Location){});
+      xP = Program_add_type(p, PointerT, "", expect->child->interfaceT->module);
       xP->child = expect;
     }
     return xP;
   } else if (expect->kind == PointerT && expect->child == got) {
     Type *xP = Module_find_pointer_type(Type_defined_module(expect->child), expect->child);
     if (!xP) {
-      xP = Program_add_type(p, PointerT, "", Type_defined_module(expect->child), (Location){});
+      xP = Program_add_type(p, PointerT, "", Type_defined_module(expect->child));
       xP->child = expect->child;
     }
     Expression *prefix = Program_new_Expression(p, UnaryPrefixE, param->p->location);
@@ -3722,7 +3761,7 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
       FATALX("internal problem finding module for type");
     Type *td = Module_find_pointer_type(cm, st);
     if (!td) {
-      td = Program_add_type(p, PointerT, "", cm, (Location){});
+      td = Program_add_type(p, PointerT, "", cm);
       td->child = st;
     }
     return td;
@@ -3735,7 +3774,7 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
         FATALX("internal problem finding module for type");
       Type *td = Module_find_pointer_type(cm, st);
       if (!td) {
-        td = Program_add_type(p, PointerT, "", cm, (Location){});
+        td = Program_add_type(p, PointerT, "", cm);
         td->child = st;
       }
       return td;
@@ -3947,7 +3986,7 @@ void c_build_pool_from(Program *p, Module *m, TypeList *tl) {
   Type *value_type = tl->type->child;
   Type *value_type_array = Module_find_array_type(m, count, value_type);
   if (!value_type_array) {
-    value_type_array = Program_add_type(p, ArrayT, "", m, (Location){});
+    value_type_array = Program_add_type(p, ArrayT, "", m);
     value_type_array->array_count = count;
     value_type_array->child = value_type;
   }
@@ -3955,7 +3994,7 @@ void c_build_pool_from(Program *p, Module *m, TypeList *tl) {
   //   printf("::: %s\n", Type_special_cname(tl->type).s);
   Type *value_type_pointer = Module_find_pointer_type(m, value_type);
   if (!value_type_pointer) {
-    value_type_pointer = Program_add_type(p, PointerT, "", m, (Location){});
+    value_type_pointer = Program_add_type(p, PointerT, "", m);
     value_type_pointer->child = value_type;
   }
 
@@ -3972,15 +4011,14 @@ void c_build_pool_from(Program *p, Module *m, TypeList *tl) {
   tl->type->name = Program_copy_string(p, pool_name.s, strlen(pool_name.s));
   Type *pool_pointer_type = Module_find_pointer_type(m, tl->type);
   if (!pool_pointer_type) {
-    pool_pointer_type = Program_add_type(p, PointerT, "", m, (Location){});
+    pool_pointer_type = Program_add_type(p, PointerT, "", m);
     pool_pointer_type->child = tl->type;
   }
 
   {
     BuffString fn_name = pool_name;
     strcat(fn_name.s, "create");
-    Function *create =
-        Program_add_type(p, FnT, Program_copy_string(p, fn_name.s, strlen(fn_name.s)), m, (Location){})->fnT;
+    Function *create = Program_add_type(p, FnT, Program_copy_string(p, fn_name.s, strlen(fn_name.s)), m)->fnT;
     create->d.returnType = value_type_pointer;
     create->d.return_type_location = null_location;
     create->is_extern_c = false;
@@ -4005,8 +4043,7 @@ void c_build_pool_from(Program *p, Module *m, TypeList *tl) {
   {
     BuffString fn_name = pool_name;
     strcat(fn_name.s, "remove");
-    Function *remove =
-        Program_add_type(p, FnT, Program_copy_string(p, fn_name.s, strlen(fn_name.s)), m, (Location){})->fnT;
+    Function *remove = Program_add_type(p, FnT, Program_copy_string(p, fn_name.s, strlen(fn_name.s)), m)->fnT;
     remove->d.returnType = NULL;
     remove->d.return_type_location = null_location;
     remove->is_extern_c = false;
@@ -4024,8 +4061,7 @@ void c_build_pool_from(Program *p, Module *m, TypeList *tl) {
   {
     BuffString fn_name = pool_name;
     strcat(fn_name.s, "empty");
-    Function *remove =
-        Program_add_type(p, FnT, Program_copy_string(p, fn_name.s, strlen(fn_name.s)), m, (Location){})->fnT;
+    Function *remove = Program_add_type(p, FnT, Program_copy_string(p, fn_name.s, strlen(fn_name.s)), m)->fnT;
     remove->d.returnType = &Bool;
     remove->d.return_type_location = null_location;
     remove->is_extern_c = false;
@@ -4048,13 +4084,13 @@ void c_build_buf_from(Program *p, Module *m, TypeList *tl) {
   Type *value_type = tl->type->child;
   Type *value_type_array = Module_find_array_type(m, count, value_type);
   if (!value_type_array) {
-    value_type_array = Program_add_type(p, ArrayT, "", m, (Location){});
+    value_type_array = Program_add_type(p, ArrayT, "", m);
     value_type_array->array_count = count;
     value_type_array->child = value_type;
   }
   Type *value_type_pointer = Module_find_pointer_type(m, value_type);
   if (!value_type_pointer) {
-    value_type_pointer = Program_add_type(p, PointerT, "", m, (Location){});
+    value_type_pointer = Program_add_type(p, PointerT, "", m);
     value_type_pointer->child = value_type;
   }
 
@@ -4070,15 +4106,14 @@ void c_build_buf_from(Program *p, Module *m, TypeList *tl) {
   tl->type->name = Program_copy_string(p, buf_name.s, strlen(buf_name.s));
   Type *buf_pointer_type = Module_find_pointer_type(m, tl->type);
   if (!buf_pointer_type) {
-    buf_pointer_type = Program_add_type(p, PointerT, "", m, (Location){});
+    buf_pointer_type = Program_add_type(p, PointerT, "", m);
     buf_pointer_type->child = tl->type;
   }
 
   {
     BuffString fn_name = buf_name;
     strcat(fn_name.s, "push");
-    Function *push =
-        Program_add_type(p, FnT, Program_copy_string(p, fn_name.s, strlen(fn_name.s)), m, (Location){})->fnT;
+    Function *push = Program_add_type(p, FnT, Program_copy_string(p, fn_name.s, strlen(fn_name.s)), m)->fnT;
     push->d.returnType = NULL; // value_type;
     push->d.return_type_location = null_location;
     push->is_extern_c = false;
@@ -4095,8 +4130,7 @@ void c_build_buf_from(Program *p, Module *m, TypeList *tl) {
   {
     BuffString fn_name = buf_name;
     strcat(fn_name.s, "pop");
-    Function *pop =
-        Program_add_type(p, FnT, Program_copy_string(p, fn_name.s, strlen(fn_name.s)), m, (Location){})->fnT;
+    Function *pop = Program_add_type(p, FnT, Program_copy_string(p, fn_name.s, strlen(fn_name.s)), m)->fnT;
     pop->d.returnType = value_type;
     pop->d.return_type_location = null_location;
     pop->is_extern_c = false;
@@ -4121,7 +4155,7 @@ void c_build_vec_from(Program *p, Module *m, TypeList *tl) {
   Type *value_type = tl->type->child;
   Type *value_type_pointer = Module_find_pointer_type(m, value_type);
   if (!value_type_pointer) {
-    value_type_pointer = Program_add_type(p, PointerT, "", m, (Location){});
+    value_type_pointer = Program_add_type(p, PointerT, "", m);
     value_type_pointer->child = value_type;
   }
 
@@ -4138,15 +4172,14 @@ void c_build_vec_from(Program *p, Module *m, TypeList *tl) {
   tl->type->name = Program_copy_string(p, vec_name.s, strlen(vec_name.s));
   Type *vec_pointer_type = Module_find_pointer_type(m, tl->type);
   if (!vec_pointer_type) {
-    vec_pointer_type = Program_add_type(p, PointerT, "", m, (Location){});
+    vec_pointer_type = Program_add_type(p, PointerT, "", m);
     vec_pointer_type->child = tl->type;
   }
 
   {
     BuffString fn_name = vec_name;
     strcat(fn_name.s, "push");
-    Function *push =
-        Program_add_type(p, FnT, Program_copy_string(p, fn_name.s, strlen(fn_name.s)), m, (Location){})->fnT;
+    Function *push = Program_add_type(p, FnT, Program_copy_string(p, fn_name.s, strlen(fn_name.s)), m)->fnT;
     push->d.returnType = NULL; // value_type;
     push->d.return_type_location = null_location;
     push->is_extern_c = false;
@@ -4166,8 +4199,7 @@ void c_build_vec_from(Program *p, Module *m, TypeList *tl) {
   {
     BuffString fn_name = vec_name;
     strcat(fn_name.s, "pop");
-    Function *pop =
-        Program_add_type(p, FnT, Program_copy_string(p, fn_name.s, strlen(fn_name.s)), m, (Location){})->fnT;
+    Function *pop = Program_add_type(p, FnT, Program_copy_string(p, fn_name.s, strlen(fn_name.s)), m)->fnT;
     pop->d.returnType = value_type;
     pop->d.return_type_location = null_location;
     pop->is_extern_c = false;
@@ -4183,8 +4215,7 @@ void c_build_vec_from(Program *p, Module *m, TypeList *tl) {
   {
     BuffString fn_name = vec_name;
     strcat(fn_name.s, "free");
-    Function *free =
-        Program_add_type(p, FnT, Program_copy_string(p, fn_name.s, strlen(fn_name.s)), m, (Location){})->fnT;
+    Function *free = Program_add_type(p, FnT, Program_copy_string(p, fn_name.s, strlen(fn_name.s)), m)->fnT;
     free->d.returnType = NULL;
     free->d.return_type_location = null_location;
     free->is_extern_c = false;
@@ -4388,7 +4419,8 @@ void write_symbols(Module *m) {
 
   fprintf(f, "[\n");
   for (TypeList *l = m->types; l; l = l->next) {
-    if (!l->type->name || !l->type->name[0] || l->type->kind == UseT || l->type->kind == PlaceHolder)
+    Location *ll = Type_location(l->type);
+    if (!ll)
       continue;
     if (l != m->types)
       fprintf(f, ",\n");
@@ -4404,9 +4436,9 @@ void write_symbols(Module *m) {
       fprintf(f, "\"kind\":\"interface\",");
     else
       FATALX("missing implementation %d!", l->type->kind);
-    fprintf(f, "\"uri\":\"file://%s\",", l->type->location.file);
-    fprintf(f, "\"line\":%d,", l->type->location.line);
-    fprintf(f, "\"column\":%d", l->type->location.column);
+    fprintf(f, "\"uri\":\"file://%s\",", ll->file);
+    fprintf(f, "\"line\":%d,", ll->line);
+    fprintf(f, "\"column\":%d", ll->column);
 
     fprintf(f, "}");
   }
