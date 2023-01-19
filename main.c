@@ -2296,7 +2296,6 @@ void Program_parse_fn(Program *p, Module *m, State *st, bool extc) {
   if (check_identifier(st)) {
     const char *name = Program_copy_string(p, b, st->c - b);
     Function *fn = Program_add_type(p, FnT, name, m)->fnT;
-    fn->location = NewRange(old.location, st->location);
     if (!Program_parse_fn_decl(p, m, &fn->d, st))
       FATAL(&st->location, "Missing parameterlist");
     fn->is_extern_c = extc;
@@ -2306,6 +2305,7 @@ void Program_parse_fn(Program *p, Module *m, State *st, bool extc) {
       else
         FATAL(&st->location, "Missing function body");
     }
+    fn->location = NewRange(old.location, st->location);
   } else
     FATAL(&st->location, "Missing type name");
 }
@@ -4437,12 +4437,14 @@ void write_symbols(Module *m) {
   FILE *f = stdout;
 
   fprintf(f, "[\n");
+  bool first = true;
   for (TypeList *l = m->types; l; l = l->next) {
     LocationRange *ll = Type_location(l->type);
     if (!ll)
       continue;
-    if (l != m->types)
+    if (!first)
       fprintf(f, ",\n");
+    first = false;
     fprintf(f, "{");
     fprintf(f, "\"name\":\"%s\",", l->type->name);
     if (l->type->kind == StructT || l->type->kind == UnionT)
