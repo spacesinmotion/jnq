@@ -95,7 +95,6 @@ fn union_check()  {
   ASSERT(s.b == 0.6)
 }
 
-
 type X struct {
   i int
   x *X
@@ -182,6 +181,47 @@ fn structs_with_arrays_and_enums()  {
   ASSERT(dir.v[2] == 4.5)
 }
 
+ccode {
+
+typedef struct Pos2 {
+  int i, j;
+} Pos2;
+
+Pos2 Pos2_new(int i, int j) {
+  return (Pos2){i,j};
+}
+
+int i_(Pos2 *p) {
+  return p->i;
+}
+
+Pos2 add_one(Pos2 p) {
+  return (Pos2){p.i+1, p.j+1};
+}
+
+}
+
+type Pos2 cstruct {
+  i int,
+  j int,
+}
+
+cfn Pos2_new(i int , i int) Pos2
+
+cfn i_(p *Pos2) int
+
+cfn add_one(p Pos2) Pos2
+
+fn structs_from_c()
+{
+  printf(" .structs_from_c\n")
+
+  p := add_one(Pos2_new(4,2))
+
+  ASSERT(5 == p.i_())
+  ASSERT(3 == p.j)
+}
+
 fn main() int {
   printf("structs\n")
 
@@ -193,6 +233,7 @@ fn main() int {
   member_call_with_args()
   use_structs_defined_later()
   structs_with_arrays_and_enums()
+  structs_from_c()
 
   printf(" ...ok\n")
   return 0
