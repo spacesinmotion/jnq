@@ -519,6 +519,7 @@ typedef struct Use {
 typedef enum TypeKind {
   UseT,
   StructT,
+  CStructT,
   UnionT,
   EnumT,
   InterfaceT,
@@ -551,6 +552,7 @@ typedef struct Type {
 Module *Type_defined_module(Type *t) {
   switch (t->kind) {
   case StructT:
+  case CStructT:
   case UnionT:
     return t->structT->module;
   case EnumT:
@@ -585,6 +587,7 @@ Module *Type_defined_module(Type *t) {
 LocationRange *Type_location(Type *t) {
   switch (t->kind) {
   case StructT:
+  case CStructT:
   case UnionT:
     return &t->structT->location;
   case EnumT:
@@ -852,6 +855,7 @@ BuffString Type_name(Type *t) {
       break;
     case UseT:
     case StructT:
+    case CStructT:
     case InterfaceT:
     case UnionT:
     case EnumT:
@@ -907,6 +911,7 @@ Type *Program_add_type(Program *p, TypeKind k, const char *name, Module *m) {
     tt->useT->take_all = false;
     break;
   case StructT:
+  case CStructT:
   case UnionT:
     tt->structT = (Struct *)Program_alloc(p, sizeof(Struct));
     tt->structT->member = (VariableList){NULL, 0};
@@ -1697,8 +1702,9 @@ void Program_parse_type(Program *p, Module *m, State *st) {
   if (check_identifier(st)) {
     const char *name = Program_copy_string(p, old.c, st->c - old.c);
     bool is_union = check_word(st, "union");
-    if ((is_union || check_word(st, "struct")) && check_op(st, "{")) {
-      Struct *s = Program_add_type(p, is_union ? UnionT : StructT, name, m)->structT;
+    bool is_c_struct = !is_union && check_word(st, "cstruct");
+    if ((is_union || is_c_struct || check_word(st, "struct")) && check_op(st, "{")) {
+      Struct *s = Program_add_type(p, is_union ? UnionT : (is_c_struct ? CStructT : StructT), name, m)->structT;
       s->member = Program_parse_variable_declaration_list(p, m, st, "}");
       s->location = NewRange(old.location, st->location);
     } else if (check_word(st, "enum") && check_op(st, "{")) {
@@ -2439,6 +2445,7 @@ BuffString Type_special_cname(Type *t) {
       break;
     case UseT:
     case StructT:
+    case CStructT:
     case InterfaceT:
     case UnionT:
     case EnumT:
@@ -2484,6 +2491,9 @@ bool c_type_declare(FILE *f, Type *t, Location *l, const char *var) {
     break;
   case UseT:
     FATAL(l, "Can't use module '%s' as type!", Type_name(t).s);
+    break;
+  case CStructT:
+    fprintf(f, "%s", t->name);
     break;
   case StructT:
   case InterfaceT:
@@ -2698,6 +2708,8 @@ void c_type(FILE *f, const char *module_name, TypeList *t) {
 
   switch (t->type->kind) {
   case UseT:
+    break;
+  case CStructT:
     break;
   case UnionT:
   case StructT:
@@ -2993,6 +3005,7 @@ void c_expression(FILE *f, Expression *e) {
     case EnumT:
     case UseT:
     case StructT:
+    case CStructT:
     case InterfaceT:
     case UnionT:
     case UnionTypeT:
@@ -3276,6 +3289,8 @@ void c_type_forward(FILE *f, const char *module_name, TypeList *t) {
   c_type_forward(f, module_name, t->next);
 
   switch (t->type->kind) {
+  case CStructT:
+    break;
   case StructT:
     fprintf(f, "typedef struct %s%s %s%s;\n", module_name, t->type->name, module_name, t->type->name);
     break;
@@ -3406,6 +3421,7 @@ bool is_member_fn_for(Type *ot, Type *ft, const char *name) {
 Type *Module_find_member(Type *t, const char *name) {
   switch (t->kind) {
   case UnionT:
+  case CStructT:
   case StructT: {
     for (Variable *v = t->structT->member.v; v < t->structT->member.v + t->structT->member.len; ++v)
       if (strcmp(v->name, name) == 0) {
@@ -3603,7 +3619,8 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
     e->member->o_type = t;
     if (t->kind == PointerT)
       t = t->child;
-    if (t->kind != StructT && t->kind != UnionT && t->kind != InterfaceT && t->kind != EnumT && t->kind != UnionTypeT)
+    if (t->kind != StructT && t->kind != CStructT && t->kind != UnionT && t->kind != InterfaceT && t->kind != EnumT &&
+        t->kind != UnionTypeT)
       FATAL(&e->location, "Expect non pointer type for member access got '%s'", Type_name(t).s);
     if (!(e->member->member->type = Module_find_member(t, e->member->member->name)))
       FATAL(&e->location, "unknown member '%s' for '%s'", e->member->member->name, Type_name(t).s);
@@ -3640,6 +3657,9 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
       Type *pt = j == 0 ? first_param_type : NULL;
       if (!pt)
         pt = c_Expression_make_variables_typed(s, p, m, e->call->p.p[i].p);
+      if (!pt)
+        FATAL(&e->call->p.p[i].p->location, "Type missmatch got 'void', expect '%s'",
+              Type_name(t->fnT->d.parameter.v[j].type).s);
       pt = AdaptParameter_for(p, pt, t->fnT->d.parameter.v[j].type, &e->call->p.p[i]);
       if (!Type_equal(pt, t->fnT->d.parameter.v[j].type))
         FATAL(&e->call->p.p[i].p->location, "Type missmatch got '%s', expect '%s'", Type_name(pt).s,

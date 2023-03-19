@@ -1,77 +1,39 @@
 
-type Point struct {
-  x int,
-  y int,
+ccode {
+
+typedef struct Pos2 {
+  int i, j;
+} Pos2;
+
+Pos2 Pos2_new(int i, int j) {
+  return (Pos2){i,j};
 }
 
-fn destroy(p *Point, g *Game) {
+int i_(Pos2 *p) {
+  return p->i;
+}
+
+Pos2 add_one(Pos2 p) {
+  return (Pos2){p.i+1, p.j+1};
+}
 
 }
 
-fn doThings(p Point) {
-
+type Pos2 cstruct {
+  i int,
+  j int,
 }
 
-type Object interface {
-  fn destroy(o *Object, g *Game)
-}
+cfn Pos2_new(i int , i int) Pos2
 
-type Object2 interface {
-  fn destroy(o *Object2, g *Game)
-}
+cfn i_(p *Pos2) int
 
-type Game struct {
-  pointsV vec[4]Point
-  pointsB buf[8]Point
-  pointsP pool[16]Point
-  os1 vec[4]Object
-  os2 vec[4]Object2
-  os3 pool[4]Object
-  os4 buf[4]Object
-  vInt vec[]int
-}
+cfn add_one(p Pos2) Pos2
 
 fn main() int
 {
-  p1 := Point{1,2}
-  p2 := Point{4,3}
+  p := add_one(Pos2_new(4,2))
 
-  g := Game{}
-  g.os1.push(&p1)
-  g.os1.push(&p1)
-  g.os1.push(&p2)
-
-  p1.doThings()
-  pp := &p1
-  pp.doThings()
-
-  if (g.os1[0] == g.os1[1])
-    printf("works for me 1\n")
-  if (g.os1[0] != g.os1[2])
-    printf("works for me 2\n")
-  if (g.os1[0] != g.os1[1])
-    printf("noooo 1\n")
-  if (g.os1[1] == g.os1[2])
-    printf("noooo 1\n")
-
-  x1 := g.os1[0] == g.os1[1] ? 123 : 321
-  ASSERT(x1 == 123)
-  x2 := g.os1[1] == g.os1[2] ? 123 : 321
-  ASSERT(x2 == 321)
-  
-  g.os1[0].destroy(g)
-
-  f := 4.5f
-  f = true ? 1.0f : 9.0f
-  ASSERT(f == 1.0f)
-
-  ppp := new Point{1, 2}
-
-  ASSERT(ppp.x == 1)
-  ASSERT(ppp.y == 2)
-
-  delete ppp
-
-  printf("ok\n")
+  printf("%d %d ok\n", p.i_(), p.j)
   return 0
 }
