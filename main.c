@@ -4468,6 +4468,11 @@ void write_symbols(Module *m) {
   fprintf(f, "]\n");
 }
 
+#ifdef WIN32
+#define STDIN_FILENO _fileno(stdin)
+#define read(a, b, c) _read(a, b, c)
+#endif
+
 int symbols(Program *p) {
   p->single_file_mode = true;
   size_t size = 0;
