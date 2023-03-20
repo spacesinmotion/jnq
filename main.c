@@ -706,8 +706,8 @@ void Program_reset_module_finished(Program *p) {
 }
 
 bool Type_is_import_type(Type *t) {
-  return t->kind == StructT || t->kind == UnionTypeT || t->kind == InterfaceT || t->kind == UnionT || t->kind == FnT ||
-         t->kind == EnumT || t->kind == PlaceHolder;
+  return t->kind == StructT || t->kind == CStructT || t->kind == UnionTypeT || t->kind == InterfaceT ||
+         t->kind == UnionT || t->kind == FnT || t->kind == EnumT || t->kind == PlaceHolder;
 }
 
 Type Null = (Type){"null_t", .structT = &(Struct){{}, &global, (LocationRange){}}, StructT, NULL};
@@ -2970,6 +2970,8 @@ void c_expression(FILE *f, Expression *e) {
     } else {
       if (e->construct->type->kind == StructT || e->construct->type->kind == UnionT)
         fprintf(f, "(%s%s){", Type_defined_module(e->construct->type)->c_name, e->construct->type->name);
+      else if (e->construct->type->kind == CStructT)
+        fprintf(f, "(%s){", e->construct->type->name);
       else if (e->construct->type->kind == ArrayT)
         fprintf(f, "{");
       else
@@ -3700,7 +3702,7 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
       if (!ua)
         FATAL(&e->location, "type '%s' not supported by '%s'", Type_name(pt).s, Type_name(e->construct->type).s);
       e->construct->p.p[0].name = (const char *)ua; // unsafe
-    } else if (e->construct->type->kind == StructT) {
+    } else if (e->construct->type->kind == StructT || e->construct->type->kind == CStructT) {
       for (int i = 0; i < e->construct->p.len; ++i) {
         Parameter *pa = &e->construct->p.p[i];
         Type *pt = c_Expression_make_variables_typed(s, p, m, pa->p);
@@ -4467,7 +4469,7 @@ void write_symbols(Module *m) {
     first = false;
     fprintf(f, "{");
     fprintf(f, "\"name\":\"%s\",", l->type->name);
-    if (l->type->kind == StructT || l->type->kind == UnionT)
+    if (l->type->kind == StructT || l->type->kind == CStructT || l->type->kind == UnionT)
       fprintf(f, "\"kind\":\"struct\",");
     else if (l->type->kind == FnT)
       fprintf(f, "\"kind\":\"fn\",");

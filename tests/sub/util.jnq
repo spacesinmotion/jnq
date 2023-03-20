@@ -1,4 +1,14 @@
 
+ccode {
+
+typedef struct SomeFloats {
+  float a,b;
+} SomeFloats;
+
+}
+
+type SomeFloats cstruct {}
+
 cfn strlen(s *char) int
 
 type Point struct {
@@ -27,7 +37,7 @@ type Some2 struct {
 fn id(s *Some2, m int) int {
   printf("--- id Some2 %d\n", s.xx)
 
-  return s.xx + m 
+  return s.xx + m
 }
 
 fn val(s *Some2) int {

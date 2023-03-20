@@ -1,4 +1,6 @@
 
+use * from tests.sub.util
+
 ccode {
 
 typedef struct Pos2 {
@@ -33,6 +35,8 @@ cfn add_one(p Pos2) Pos2
 fn main() int
 {
   p := add_one(Pos2_new(4,2))
+
+  sf := SomeFloats{}
 
   printf("%d %d ok\n", p.i_(), p.j)
   return 0
