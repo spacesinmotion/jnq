@@ -150,7 +150,7 @@ typedef enum ExpressionType {
   NullA,
   BoolA,
   CharA,
-  IntA,
+  I32A,
   FloatA,
   DoubleA,
   StringA,
@@ -518,6 +518,7 @@ typedef struct Use {
 
 typedef enum TypeKind {
   UseT,
+  BaseT,
   StructT,
   CStructT,
   UnionT,
@@ -536,6 +537,7 @@ typedef enum TypeKind {
 typedef struct Type {
   const char *name;
   union {
+    const char *c_name;
     Struct *structT;
     Enum *enumT;
     Union *unionT;
@@ -549,8 +551,12 @@ typedef struct Type {
   Type *child;
 } Type;
 
+Module *global_module();
+
 Module *Type_defined_module(Type *t) {
   switch (t->kind) {
+  case BaseT:
+    return global_module();
   case StructT:
   case CStructT:
   case UnionT:
@@ -605,6 +611,7 @@ LocationRange *Type_location(Type *t) {
   case PointerT:
   case PlaceHolder:
   case UseT:
+  case BaseT:
     break;
   }
   return NULL;
@@ -643,6 +650,8 @@ typedef struct Program {
 } Program;
 
 Module global = (Module){"", "", NULL, true, NULL};
+
+Module *global_module() { return &global; }
 
 Program Program_new(char *buffer, size_t cap) {
   Program p;
@@ -710,15 +719,15 @@ bool Type_is_import_type(Type *t) {
          t->kind == UnionT || t->kind == FnT || t->kind == EnumT || t->kind == PlaceHolder;
 }
 
-Type Null = (Type){"null_t", .structT = &(Struct){{}, &global, (LocationRange){}}, StructT, NULL};
-Type Bool = (Type){"bool", .structT = &(Struct){{}, &global, (LocationRange){}}, StructT, NULL};
-Type Char = (Type){"char", .structT = &(Struct){{}, &global, (LocationRange){}}, StructT, NULL};
-Type Int = (Type){"int", .structT = &(Struct){{}, &global, (LocationRange){}}, StructT, NULL};
-Type Float = (Type){"float", .structT = &(Struct){{}, &global, (LocationRange){}}, StructT, NULL};
-Type Double = (Type){"double", .structT = &(Struct){{}, &global, (LocationRange){}}, StructT, NULL};
-Type String = (Type){"string", .structT = &(Struct){{}, &global, (LocationRange){}}, StructT, NULL};
+Type Null = (Type){"null_t", .c_name = "null_t", BaseT, NULL};
+Type Bool = (Type){"bool", .c_name = "bool", BaseT, NULL};
+Type Char = (Type){"char", .c_name = "char", BaseT, NULL};
+Type i32 = (Type){"i32", .c_name = "int32_t", BaseT, NULL};
+Type Float = (Type){"float", .c_name = "float", BaseT, NULL};
+Type Double = (Type){"double", .c_name = "double", BaseT, NULL};
+Type String = (Type){"string", .c_name = "const char *", BaseT, NULL};
 
-Type Ellipsis = (Type){"...", .structT = &(Struct){{}, &global, (LocationRange){}}, StructT, NULL};
+Type Ellipsis = (Type){"...", .structT = &(Struct){{}, &global, (LocationRange){}}, BaseT, NULL};
 
 Variable print_param[] = {{null_location, "format", &String}, {null_location, "...", &Ellipsis}};
 Function print =
@@ -731,7 +740,7 @@ Function assert = (Function){{(VariableList){&(Variable){null_location, "cond", 
                              (LocationRange){},
                              true};
 Type Assert = (Type){"ASSERT", .fnT = &assert, FnT, NULL};
-Function SizeOfFn = (Function){{(VariableList){&(Variable){null_location, "...", &Ellipsis}, 1}, &Int, null_location},
+Function SizeOfFn = (Function){{(VariableList){&(Variable){null_location, "...", &Ellipsis}, 1}, &i32, null_location},
                                NULL,
                                &global,
                                (LocationRange){},
@@ -741,8 +750,8 @@ Type SizeOf = (Type){"sizeof", .fnT = &SizeOfFn, FnT, NULL};
 Type *Module_find_type(Module *m, const char *b, const char *e) {
   if (4 == e - b && strncmp(Bool.name, b, 4) == 0)
     return &Bool;
-  if (3 == e - b && strncmp(Int.name, b, 3) == 0)
-    return &Int;
+  if (3 == e - b && (strncmp("int", b, 3) == 0 || strncmp("i32", b, 3) == 0))
+    return &i32;
   if (4 == e - b && strncmp(Char.name, b, 4) == 0)
     return &Char;
   if (5 == e - b && strncmp(Float.name, b, 5) == 0)
@@ -861,6 +870,7 @@ BuffString Type_name(Type *t) {
     case EnumT:
     case UnionTypeT:
     case FnT:
+    case BaseT:
     case PlaceHolder:
       i += snprintf(ss + i, sizeof(s.s) - i, "<>");
       break;
@@ -947,6 +957,9 @@ Type *Program_add_type(Program *p, TypeKind k, const char *name, Module *m) {
   case BufT:
   case ArrayT:
     tt->array_count = 0;
+    break;
+  case BaseT:
+    FATALX("internal error");
     break;
   case PointerT:
     break;
@@ -1066,7 +1079,7 @@ Expression *Program_new_Expression(Program *p, ExpressionType t, Location l) {
   case NullA:
   case BoolA:
   case CharA:
-  case IntA:
+  case I32A:
   case FloatA:
   case DoubleA:
   case StringA:
@@ -1790,7 +1803,7 @@ Expression *Program_parse_atom(Program *p, State *st) {
 
   int temp_i;
   if (read_int(st, &temp_i) && (!is_float || st->c >= f.c)) {
-    Expression *e = Program_new_Expression(p, IntA, old.location);
+    Expression *e = Program_new_Expression(p, I32A, old.location);
     e->i = temp_i;
     return e;
   } else if (is_float) {
@@ -2452,6 +2465,7 @@ BuffString Type_special_cname(Type *t) {
     case UnionTypeT:
     case FnT:
     case PlaceHolder:
+    case BaseT:
       i += snprintf(ss + i, sizeof(s.s) - i, "<>");
       break;
     }
@@ -2501,6 +2515,9 @@ bool c_type_declare(FILE *f, Type *t, Location *l, const char *var) {
   case EnumT:
   case UnionTypeT:
     fprintf(f, "%s%s", Type_defined_module(t)->c_name, t->name);
+    break;
+  case BaseT:
+    fprintf(f, "%s", t->c_name);
     break;
   case FnT:
     if (c_type_declare(f, t->fnT->d.returnType, l, ""))
@@ -2711,6 +2728,8 @@ void c_type(FILE *f, const char *module_name, TypeList *t) {
     break;
   case CStructT:
     break;
+  case BaseT:
+    break;
   case UnionT:
   case StructT:
     c_struct(f, module_name, t->type->name, t->type->kind == UnionT, &t->type->structT->member);
@@ -2765,7 +2784,7 @@ void lisp_expression(FILE *f, Expression *e) {
   case CharA:
     fprintf(f, "'%s'", e->c);
     break;
-  case IntA:
+  case I32A:
     fprintf(f, "%d", e->i);
     break;
   case FloatA:
@@ -2891,7 +2910,7 @@ void c_expression(FILE *f, Expression *e) {
   case CharA:
     fprintf(f, "'%s'", e->c);
     break;
-  case IntA:
+  case I32A:
     fprintf(f, "%d", e->i);
     break;
   case FloatA:
@@ -3006,6 +3025,7 @@ void c_expression(FILE *f, Expression *e) {
       break;
     case EnumT:
     case UseT:
+    case BaseT:
     case StructT:
     case CStructT:
     case InterfaceT:
@@ -3291,6 +3311,7 @@ void c_type_forward(FILE *f, const char *module_name, TypeList *t) {
   c_type_forward(f, module_name, t->next);
 
   switch (t->type->kind) {
+  case BaseT:
   case CStructT:
     break;
   case StructT:
@@ -3456,6 +3477,7 @@ Type *Module_find_member(Type *t, const char *name) {
     FATALX("missing find member implementation for '%s'!", Type_name(t).s);
     break;
 
+  case BaseT:
   case ArrayT:
   case PointerT:
   case FnT:
@@ -3587,8 +3609,8 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
     return &Bool;
   case CharA:
     return &Char;
-  case IntA:
-    return &Int;
+  case I32A:
+    return &i32;
   case FloatA:
     return &Float;
   case DoubleA:
@@ -3762,7 +3784,7 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
   }
   case AccessE: {
     Type *subt = c_Expression_make_variables_typed(s, p, m, e->access->p);
-    if (subt != &Int)
+    if (subt != &i32)
       FATAL(&e->access->p->location, "Expect integral type for array subscription, got '%s'", Type_name(subt).s);
     Type *t = c_Expression_make_variables_typed(s, p, m, e->access->o);
     if (t->kind == StructT && t->structT->member.len > 0) {
@@ -4043,7 +4065,7 @@ void c_build_pool_from(Program *p, Module *m, TypeList *tl) {
   poolS->module = m;
   poolS->member = (VariableList){(Variable *)Program_alloc(p, sizeof(Variable) * 3), 3};
   poolS->member.v[0] = (Variable){null_location, "__d", value_type_array};
-  poolS->member.v[1] = (Variable){null_location, "__l", &Int};
+  poolS->member.v[1] = (Variable){null_location, "__l", &i32};
   poolS->member.v[2] = (Variable){null_location, "__f", value_type_pointer};
 
   tl->type->structT = poolS;
@@ -4139,7 +4161,7 @@ void c_build_buf_from(Program *p, Module *m, TypeList *tl) {
   bufS->module = m;
   bufS->member = (VariableList){(Variable *)Program_alloc(p, sizeof(Variable) * 2), 2};
   bufS->member.v[0] = (Variable){null_location, "__d", value_type_array};
-  bufS->member.v[1] = (Variable){null_location, "len", &Int};
+  bufS->member.v[1] = (Variable){null_location, "len", &i32};
 
   tl->type->structT = bufS;
   tl->type->kind = StructT;
@@ -4204,8 +4226,8 @@ void c_build_vec_from(Program *p, Module *m, TypeList *tl) {
   vecS->module = m;
   vecS->member = (VariableList){(Variable *)Program_alloc(p, sizeof(Variable) * 3), 3};
   vecS->member.v[0] = (Variable){null_location, "__d", value_type_pointer};
-  vecS->member.v[1] = (Variable){null_location, "len", &Int};
-  vecS->member.v[2] = (Variable){null_location, "cap", &Int};
+  vecS->member.v[1] = (Variable){null_location, "len", &i32};
+  vecS->member.v[2] = (Variable){null_location, "cap", &i32};
 
   tl->type->structT = vecS;
   tl->type->kind = StructT;

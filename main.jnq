@@ -32,6 +32,10 @@ cfn i_(p *Pos2) int
 
 cfn add_one(p Pos2) Pos2
 
+fn a_wrapper(v *vec[]int) int {
+  return v.len
+}
+
 fn main() int
 {
   p := add_one(Pos2_new(4,2))
