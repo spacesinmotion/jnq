@@ -722,9 +722,16 @@ bool Type_is_import_type(Type *t) {
 Type Null = (Type){"null_t", .c_name = "null_t", BaseT, NULL};
 Type Bool = (Type){"bool", .c_name = "bool", BaseT, NULL};
 Type Char = (Type){"char", .c_name = "char", BaseT, NULL};
+Type i8 = (Type){"i8", .c_name = "int8_t", BaseT, NULL};
+Type i16 = (Type){"i16", .c_name = "int16_t", BaseT, NULL};
 Type i32 = (Type){"i32", .c_name = "int32_t", BaseT, NULL};
-Type Float = (Type){"float", .c_name = "float", BaseT, NULL};
-Type Double = (Type){"double", .c_name = "double", BaseT, NULL};
+Type i64 = (Type){"i64", .c_name = "int64_t", BaseT, NULL};
+Type u8 = (Type){"u8", .c_name = "uint8_t", BaseT, NULL};
+Type u16 = (Type){"u16", .c_name = "uint16_t", BaseT, NULL};
+Type u32 = (Type){"u32", .c_name = "uint32_t", BaseT, NULL};
+Type u64 = (Type){"u64", .c_name = "uint64_t", BaseT, NULL};
+Type f32 = (Type){"f32", .c_name = "float", BaseT, NULL};
+Type f64 = (Type){"f64", .c_name = "double", BaseT, NULL};
 Type String = (Type){"string", .c_name = "const char *", BaseT, NULL};
 
 Type Ellipsis = (Type){"...", .structT = &(Struct){{}, &global, (LocationRange){}}, BaseT, NULL};
@@ -750,14 +757,32 @@ Type SizeOf = (Type){"sizeof", .fnT = &SizeOfFn, FnT, NULL};
 Type *Module_find_type(Module *m, const char *b, const char *e) {
   if (4 == e - b && strncmp(Bool.name, b, 4) == 0)
     return &Bool;
-  if (3 == e - b && (strncmp("int", b, 3) == 0 || strncmp("i32", b, 3) == 0))
+  if (2 == e - b && strncmp(i8.name, b, 2) == 0)
+    return &i8;
+  if (3 == e - b && strncmp(i16.name, b, 3) == 0)
+    return &i16;
+  if (3 == e - b && (strncmp("int", b, 3) == 0 || strncmp(i32.name, b, 3) == 0))
     return &i32;
+  if (3 == e - b && strncmp(i64.name, b, 3) == 0)
+    return &i64;
+  if (2 == e - b && strncmp(u8.name, b, 2) == 0)
+    return &u8;
+  if (3 == e - b && strncmp(u16.name, b, 3) == 0)
+    return &u16;
+  if (3 == e - b && strncmp(u32.name, b, 3) == 0)
+    return &u32;
+  if (3 == e - b && strncmp(u64.name, b, 3) == 0)
+    return &u64;
+  if (3 == e - b && strncmp(f32.name, b, 3) == 0)
+    return &f32;
+  if (3 == e - b && strncmp(f64.name, b, 3) == 0)
+    return &f64;
   if (4 == e - b && strncmp(Char.name, b, 4) == 0)
     return &Char;
-  if (5 == e - b && strncmp(Float.name, b, 5) == 0)
-    return &Float;
-  if (6 == e - b && strncmp(Double.name, b, 5) == 0)
-    return &Double;
+  if (5 == e - b && strncmp("float", b, 5) == 0)
+    return &f32;
+  if (6 == e - b && strncmp("double", b, 5) == 0)
+    return &f64;
   if (6 == e - b && strncmp(String.name, b, 6) == 0)
     return &String;
   if (6 == e - b && strncmp(Printf.name, b, 6) == 0)
@@ -3612,9 +3637,9 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
   case I32A:
     return &i32;
   case FloatA:
-    return &Float;
+    return &f32;
   case DoubleA:
-    return &Double;
+    return &f64;
   case StringA:
     return &String;
 
@@ -4316,6 +4341,7 @@ void c_Program(FILE *f, Program *p, Module *m) {
   c_build_special_types(p);
 
   fputs("#include <ctype.h>\n", f);
+  fputs("#include <stdint.h>\n", f);
   fputs("#include <stdarg.h>\n", f);
   fputs("#include <stdbool.h>\n", f);
   fputs("#include <stddef.h>\n", f);

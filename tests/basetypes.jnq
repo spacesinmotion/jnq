@@ -1,0 +1,34 @@
+
+type iBaseTypes struct {
+  cc char,
+  bb bool,
+
+  a i8,
+  b i16,
+  c i32,
+  d i64,
+}
+
+type uBaseTypes struct {
+  a u8,
+  b u16,
+  c u32,
+  d u64,
+}
+
+type fBaseTypes struct {
+  a f32,
+  b f64,
+}
+
+type pBaseTypes struct {
+  b *char,
+  x string,
+}
+
+fn main() int {
+  printf("basetypes...\n")
+
+  printf(" ...ok\n")
+  return 0
+}

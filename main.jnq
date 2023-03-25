@@ -36,6 +36,11 @@ fn a_wrapper(v *vec[]int) int {
   return v.len
 }
 
+type fBaseTypes struct {
+  a f32,
+  b f64,
+}
+
 fn main() int
 {
   p := add_one(Pos2_new(4,2))
