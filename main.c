@@ -107,6 +107,7 @@ BuffString str(const char *format, ...) {
   return s;
 }
 
+typedef struct BaseConst BaseConst;
 typedef struct Identifier Identifier;
 typedef struct Variable Variable;
 typedef struct Variable Variable;
@@ -147,13 +148,7 @@ typedef struct Type Type;
 typedef struct Module Module;
 
 typedef enum ExpressionType {
-  NullA,
-  BoolA,
-  CharA,
-  I32A,
-  FloatA,
-  DoubleA,
-  StringA,
+  BaseA,
   IdentifierA,
   AutoTypeE,
   BraceE,
@@ -173,11 +168,7 @@ typedef enum ExpressionType {
 typedef struct Expression {
   Location location;
   union {
-    bool b;
-    char c[3];
-    int i;
-    double f;
-    const char *s;
+    BaseConst *baseconst;
     Identifier *id;
     Variable *var;
     AutoTypeDeclaration *autotype;
@@ -239,6 +230,11 @@ typedef struct Function Function;
 typedef struct EnumEntry EnumEntry;
 
 typedef struct Type Type;
+
+typedef struct BaseConst {
+  const char *text;
+  Type *type;
+} BaseConst;
 
 typedef struct Identifier {
   const char *name;
@@ -1127,13 +1123,8 @@ Expression *Program_new_Expression(Program *p, ExpressionType t, Location l) {
   e->type = t;
   e->location = l;
   switch (t) {
-  case NullA:
-  case BoolA:
-  case CharA:
-  case I32A:
-  case FloatA:
-  case DoubleA:
-  case StringA:
+  case BaseA:
+    e->baseconst = (BaseConst *)Program_alloc(p, sizeof(BaseConst));
     break;
   case IdentifierA:
     e->id = (Identifier *)Program_alloc(p, sizeof(Identifier));
@@ -1797,13 +1788,17 @@ Expression *Program_parse_atom(Program *p, State *st) {
 
     bool isTrue = l == 4 && strncmp(old.c, "true", 4) == 0;
     if (isTrue || (l == 5 && strncmp(old.c, "false", 5) == 0)) {
-      Expression *b = Program_new_Expression(p, BoolA, old.location);
-      b->b = isTrue;
+      Expression *b = Program_new_Expression(p, BaseA, old.location);
+      b->baseconst->text = isTrue ? "true" : "false";
+      b->baseconst->type = &Bool;
       return b;
     }
 
     if (l == 4 && strncmp(old.c, "null", 4) == 0) {
-      return Program_new_Expression(p, NullA, old.location);
+      Expression *nu = Program_new_Expression(p, BaseA, old.location);
+      nu->baseconst->text = "null";
+      nu->baseconst->type = &Null;
+      return nu;
     }
 
     Expression *e = Program_new_Expression(p, IdentifierA, old.location);
@@ -1813,27 +1808,26 @@ Expression *Program_parse_atom(Program *p, State *st) {
   }
 
   if (check_op(st, "'")) {
-    Expression *e = Program_new_Expression(p, CharA, old.location);
+    Expression *e = Program_new_Expression(p, BaseA, old.location);
+    e->baseconst->type = &Char;
     if (!st->c[0])
       FATAL(&st->location, "unclosed char constant");
     if (st->c[0] == '\\') {
-      e->c[0] = st->c[0];
-      e->c[1] = st->c[1];
-      e->c[2] = '\0';
+      e->baseconst->text = Program_copy_str(p, str("%c%c", st->c[0], st->c[1]));
       State_skip(st, 2);
     } else {
-      e->c[0] = st->c[0];
-      e->c[1] = '\0';
+      e->baseconst->text = Program_copy_str(p, str("%c", st->c[0]));
       State_skip(st, 1);
     }
     if (st->c[0] != '\'')
-      FATAL(&st->location, "Wrong char constant '%s' '%c'", e->c, st->c[0]);
+      FATAL(&st->location, "Wrong char constant '%s' '%c'", e->baseconst->text, st->c[0]);
     State_skip(st, 1);
     return e;
   }
 
   if (check_op(st, "\"")) {
-    Expression *e = Program_new_Expression(p, StringA, old.location);
+    Expression *e = Program_new_Expression(p, BaseA, old.location);
+    e->baseconst->type = &String;
     if (st->c[0] != '"') {
       while (st->c[1] != '"') {
         if (!st->c[0])
@@ -1843,7 +1837,7 @@ Expression *Program_parse_atom(Program *p, State *st) {
       State_skip(st, 1);
     }
 
-    e->s = Program_copy_string(p, old.c + 1, st->c - old.c - 1);
+    e->baseconst->text = Program_copy_string(p, old.c + 1, st->c - old.c - 1);
     State_skip(st, 1);
     return e;
   }
@@ -1854,17 +1848,19 @@ Expression *Program_parse_atom(Program *p, State *st) {
 
   int temp_i;
   if (read_int(st, &temp_i) && (!is_float || st->c >= f.c)) {
-    Expression *e = Program_new_Expression(p, I32A, old.location);
-    e->i = temp_i;
+    Expression *e = Program_new_Expression(p, BaseA, old.location);
+    e->baseconst->type = &i32;
+    e->baseconst->text = Program_copy_string(p, old.c, st->c - old.c);
     return e;
   } else if (is_float) {
     *st = f;
-    Expression *e = Program_new_Expression(p, DoubleA, old.location);
+    Expression *e = Program_new_Expression(p, BaseA, old.location);
     if (st->c[0] == 'f') {
-      e->type = FloatA;
+      e->baseconst->type = &f32;
       State_skip(st, 1);
-    }
-    e->f = temp_f;
+    } else
+      e->baseconst->type = &f64;
+    e->baseconst->text = Program_copy_string(p, old.c, st->c - old.c);
     return e;
   }
 
@@ -2827,23 +2823,13 @@ void lisp_expression(FILE *f, Expression *e) {
     return;
 
   switch (e->type) {
-  case NullA:
-    fprintf(f, "%s", "null");
-    break;
-  case BoolA:
-    fprintf(f, "%s", e->b ? "true" : "false");
-  case CharA:
-    fprintf(f, "'%s'", e->c);
-    break;
-  case I32A:
-    fprintf(f, "%d", e->i);
-    break;
-  case FloatA:
-  case DoubleA:
-    fprintf(f, "%g", e->f);
-    break;
-  case StringA:
-    fprintf(f, "\"%s\"", e->s);
+  case BaseA:
+    if (e->baseconst->type == &String)
+      fprintf(f, "\"%s\"", e->baseconst->text);
+    else if (e->baseconst->type == &Char)
+      fprintf(f, "'%s'", e->baseconst->text);
+    else
+      fprintf(f, "%s", e->baseconst->text);
     break;
   case IdentifierA:
     fprintf(f, "%s", e->id->name);
@@ -2952,26 +2938,15 @@ void c_expression(FILE *f, Expression *e) {
     return;
 
   switch (e->type) {
-  case NullA:
-    fprintf(f, "%s", "NULL");
-    break;
-  case BoolA:
-    fprintf(f, "%s", e->b ? "true" : "false");
-    break;
-  case CharA:
-    fprintf(f, "'%s'", e->c);
-    break;
-  case I32A:
-    fprintf(f, "%d", e->i);
-    break;
-  case FloatA:
-    fprintf(f, "%g", e->f);
-    break;
-  case DoubleA:
-    fprintf(f, "%g", e->f);
-    break;
-  case StringA:
-    fprintf(f, "\"%s\"", e->s);
+  case BaseA:
+    if (e->baseconst->type == &String)
+      fprintf(f, "\"%s\"", e->baseconst->text);
+    else if (e->baseconst->type == &Char)
+      fprintf(f, "'%s'", e->baseconst->text);
+    else if (e->baseconst->type == &Null)
+      fprintf(f, "NULL");
+    else
+      fprintf(f, "%s", e->baseconst->text);
     break;
   case IdentifierA:
     if (!e->id->type)
@@ -3659,20 +3634,8 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
     return NULL;
 
   switch (e->type) {
-  case NullA:
-    return &Null;
-  case BoolA:
-    return &Bool;
-  case CharA:
-    return &Char;
-  case I32A:
-    return &i32;
-  case FloatA:
-    return &f32;
-  case DoubleA:
-    return &f64;
-  case StringA:
-    return &String;
+  case BaseA:
+    return e->baseconst->type;
 
   case IdentifierA: {
     if (e->id->type) {
