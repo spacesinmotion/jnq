@@ -2955,6 +2955,11 @@ void c_expression(FILE *f, Expression *e) {
     else if ((e->id->type->kind == StructT || e->id->type->kind == UnionT) && e->id->type->name &&
              strcmp(e->id->name, e->id->type->name) == 0)
       fprintf(f, "%s", Type_defined_module(e->id->type)->c_name);
+    else if (e->id->type->kind == BaseT &&
+             e->id->type == Module_find_type(&global, e->id->name, e->id->name + strlen(e->id->name))) {
+      fprintf(f, "%s", e->id->type->c_name);
+      break;
+    }
     fprintf(f, "%s", e->id->name);
     break;
   case AutoTypeE: {

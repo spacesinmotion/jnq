@@ -29,6 +29,20 @@ type pBaseTypes struct {
 fn main() int {
   printf("basetypes...\n")
 
+  ASSERT(1 == sizeof(i8))
+  ASSERT(1 == sizeof(u8))
+
+  ASSERT(2 == sizeof(i16))
+  ASSERT(2 == sizeof(u16))
+
+  ASSERT(4 == sizeof(i32))
+  ASSERT(4 == sizeof(u32))
+  ASSERT(4 == sizeof(f32))
+
+  ASSERT(8 == sizeof(i64))
+  ASSERT(8 == sizeof(u64))
+  ASSERT(8 == sizeof(f64))
+
   printf(" ...ok\n")
   return 0
 }
