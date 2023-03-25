@@ -26,6 +26,42 @@ type pBaseTypes struct {
   x string,
 }
 
+fn none_narrowing_conversation() {
+  i1 := 12 as i64
+  i1 = 32 as i32
+  i1 = 32 as u32
+  i1 = 32 as i16
+  i1 = 32 as u16
+  i1 = 32 as i8
+  i1 = 32 as u8
+
+  i2 := 12 as i32
+  i2 = 32 as i16
+  i2 = 32 as u16
+  i2 = 32 as i8
+  i2 = 32 as u8
+
+  i3 := 12 as i16
+  i3 = 32 as i8
+  i3 = 32 as u8
+
+  i4 := 12 as u64
+  i4 = 32 as u32
+  i4 = 32 as u16
+  i4 = 32 as u8
+
+  i5 := 12 as u32
+  i5 = 32 as u16
+  i5 = 32 as u8
+
+  i6 := 12 as u16
+  i6 = 32 as u8
+
+  f1 := 25.6 as f64
+  f1 = 45.6f
+  f1 = 4.6 as f32
+}
+
 fn main() int {
   printf("basetypes...\n")
 

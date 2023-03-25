@@ -47,6 +47,11 @@ fn main() int
 
   sf := SomeFloats{}
 
-  printf("%d %d ok\n", p.i_(), p.j)
+  i := 12 as i64
+  i = 32
+  i = 32 as i16
+  i = 32 as i8
+
+  printf("%d %d %lu ok\n", p.i_(), p.j, sizeof(i))
   return 0
 }

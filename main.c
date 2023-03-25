@@ -519,6 +519,7 @@ typedef struct Use {
 typedef enum TypeKind {
   UseT,
   BaseT,
+  BaseConstT,
   StructT,
   CStructT,
   UnionT,
@@ -556,6 +557,7 @@ Module *global_module();
 Module *Type_defined_module(Type *t) {
   switch (t->kind) {
   case BaseT:
+  case BaseConstT:
     return global_module();
   case StructT:
   case CStructT:
@@ -612,6 +614,7 @@ LocationRange *Type_location(Type *t) {
   case PlaceHolder:
   case UseT:
   case BaseT:
+  case BaseConstT:
     break;
   }
   return NULL;
@@ -826,6 +829,11 @@ Type *Module_type_or_placeholder(Program *p, Module *m, const char *b, const cha
 }
 
 bool Type_equal(Type *t1, Type *t2) {
+  if (t1->kind == BaseConstT)
+    t1 = t1->child;
+  if (t2->kind == BaseConstT)
+    t2 = t2->child;
+
   if (!t1 || !t2)
     FATALX("there should be no null type pointer?!");
   if (t1 == &Null)
@@ -848,6 +856,35 @@ bool Type_equal(Type *t1, Type *t2) {
     return true;
 
   return t1 == t2;
+}
+
+bool Type_convertable(Type *expect, Type *got) {
+  if (Type_equal(expect, got))
+    return true;
+
+  if (got->kind == BaseConstT)
+    got = got->child;
+
+  if (expect->kind == BaseT && got->kind == BaseT) {
+    if (expect == &f64 && got == &f32)
+      return true;
+
+    if (expect == &i64 && (got == &i32 || got == &i16 || got == &i8 || got == &u32 || got == &u16 || got == &u8))
+      return true;
+    if (expect == &i32 && (got == &i16 || got == &i8 || got == &u16 || got == &u8))
+      return true;
+    if (expect == &i16 && (got == &i8 || got == &u8))
+      return true;
+
+    if (expect == &u64 && (got == &u32 || got == &u16 || got == &u8))
+      return true;
+    if (expect == &u32 && (got == &u16 || got == &u8))
+      return true;
+    if (expect == &u16 && got == &u8)
+      return true;
+  }
+
+  return false;
 }
 
 BuffString Type_name(Type *t) {
@@ -898,6 +935,8 @@ BuffString Type_name(Type *t) {
     case BaseT:
     case PlaceHolder:
       i += snprintf(ss + i, sizeof(s.s) - i, "<>");
+      break;
+    case BaseConstT:
       break;
     }
     t = t->child;
@@ -984,6 +1023,7 @@ Type *Program_add_type(Program *p, TypeKind k, const char *name, Module *m) {
     tt->array_count = 0;
     break;
   case BaseT:
+  case BaseConstT:
     FATALX("internal error");
     break;
   case PointerT:
@@ -2491,6 +2531,7 @@ BuffString Type_special_cname(Type *t) {
     case FnT:
     case PlaceHolder:
     case BaseT:
+    case BaseConstT:
       i += snprintf(ss + i, sizeof(s.s) - i, "<>");
       break;
     }
@@ -2540,6 +2581,8 @@ bool c_type_declare(FILE *f, Type *t, Location *l, const char *var) {
   case EnumT:
   case UnionTypeT:
     fprintf(f, "%s%s", Type_defined_module(t)->c_name, t->name);
+    break;
+  case BaseConstT:
     break;
   case BaseT:
     fprintf(f, "%s", t->c_name);
@@ -2754,6 +2797,7 @@ void c_type(FILE *f, const char *module_name, TypeList *t) {
   case CStructT:
     break;
   case BaseT:
+  case BaseConstT:
     break;
   case UnionT:
   case StructT:
@@ -3056,6 +3100,7 @@ void c_expression(FILE *f, Expression *e) {
     case EnumT:
     case UseT:
     case BaseT:
+    case BaseConstT:
     case StructT:
     case CStructT:
     case InterfaceT:
@@ -3342,6 +3387,7 @@ void c_type_forward(FILE *f, const char *module_name, TypeList *t) {
 
   switch (t->type->kind) {
   case BaseT:
+  case BaseConstT:
   case CStructT:
     break;
   case StructT:
@@ -3508,6 +3554,7 @@ Type *Module_find_member(Type *t, const char *name) {
     break;
 
   case BaseT:
+  case BaseConstT:
   case ArrayT:
   case PointerT:
   case FnT:
@@ -3628,6 +3675,20 @@ Type *AdaptParameter_for(Program *p, Type *got, Type *expect, Parameter *param) 
   return got;
 }
 
+Type BoolConst = (Type){"", .c_name = "bool", BaseConstT, &Bool};
+Type CharConst = (Type){"", .c_name = "char", BaseConstT, &Char};
+Type i8Const = (Type){"", .c_name = "int8_t", BaseConstT, &i8};
+Type i16Const = (Type){"", .c_name = "int16_t", BaseConstT, &i16};
+Type i32Const = (Type){"", .c_name = "int32_t", BaseConstT, &i32};
+Type i64Const = (Type){"", .c_name = "int64_t", BaseConstT, &i64};
+Type u8Const = (Type){"", .c_name = "uint8_t", BaseConstT, &u8};
+Type u16Const = (Type){"", .c_name = "uint16_t", BaseConstT, &u16};
+Type u32Const = (Type){"", .c_name = "uint32_t", BaseConstT, &u32};
+Type u64Const = (Type){"", .c_name = "uint64_t", BaseConstT, &u64};
+Type f32Const = (Type){"", .c_name = "float", BaseConstT, &f32};
+Type f64Const = (Type){"", .c_name = "double", BaseConstT, &f64};
+Type StringConst = (Type){"", .c_name = "const char *", BaseConstT, &String};
+
 Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m, Expression *e) {
   if (!e)
     return NULL;
@@ -3636,17 +3697,17 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
   case NullA:
     return &Null;
   case BoolA:
-    return &Bool;
+    return &BoolConst;
   case CharA:
-    return &Char;
+    return &CharConst;
   case I32A:
-    return &i32;
+    return &i32Const;
   case FloatA:
-    return &f32;
+    return &f32Const;
   case DoubleA:
-    return &f64;
+    return &f64Const;
   case StringA:
-    return &String;
+    return &StringConst;
 
   case IdentifierA: {
     if (e->id->type) {
@@ -3661,9 +3722,9 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
   }
   case AutoTypeE: {
     Type *t = c_Expression_make_variables_typed(s, p, m, e->autotype->e);
-    e->autotype->type = t;
-    VariableStack_push(s, e->autotype->name, t);
-    return t;
+    e->autotype->type = t->kind == BaseConstT ? t->child : t;
+    VariableStack_push(s, e->autotype->name, e->autotype->type);
+    return e->autotype->type;
   }
   case BraceE:
     return c_Expression_make_variables_typed(s, p, m, e->brace->o);
@@ -3814,7 +3875,7 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
   }
   case AccessE: {
     Type *subt = c_Expression_make_variables_typed(s, p, m, e->access->p);
-    if (subt != &i32)
+    if (!Type_convertable(&u64, subt) && Type_convertable(&u64, subt))
       FATAL(&e->access->p->location, "Expect integral type for array subscription, got '%s'", Type_name(subt).s);
     Type *t = c_Expression_make_variables_typed(s, p, m, e->access->o);
     if (t->kind == StructT && t->structT->member.len > 0) {
@@ -3901,7 +3962,7 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
       e->binop->o2 = Interface_construct(p, t2, t1, e->binop->o2);
       return t1;
     }
-    if (!Type_equal(t1, t2)) {
+    if (!Type_convertable(t1, t2)) {
       lisp_expression(stderr, e);
       fprintf(stderr, "\n");
       lisp_expression(stderr, e->binop->o1);
@@ -4282,7 +4343,7 @@ void c_build_vec_from(Program *p, Module *m, TypeList *tl) {
 
     BuffString pushfn = str("if(v.len >= v.cap){\n"
                             "v.cap+=%d\n"
-                            "v.__d=realloc(v.__d as *char, v.cap*sizeof(val)) as %s\n"
+                            "v.__d=realloc(v.__d as *char, v.cap*sizeof(val) as i32) as %s\n"
                             "}\n"
                             "v.__d[v.len++]=val\n"
                             "}",
