@@ -749,7 +749,7 @@ Function assert = (Function){{(VariableList){&(Variable){"cond", &Bool, null_loc
                              (LocationRange){},
                              true};
 Type Assert = (Type){"ASSERT", .fnT = &assert, FnT, NULL};
-Function SizeOfFn = (Function){{(VariableList){&(Variable){"...", &Ellipsis, null_location}, 1}, &i32, null_location},
+Function SizeOfFn = (Function){{(VariableList){&(Variable){"...", &Ellipsis, null_location}, 1}, &u64, null_location},
                                NULL,
                                &global,
                                (LocationRange){},
@@ -1306,6 +1306,10 @@ bool read_int(State *st, int *i, Type **t) {
   if (*end == 'u') {
     *t = &u32;
     end++;
+    if (*end == 'l') {
+      *t = &u64;
+      end++;
+    }
   } else if (*end == 'l') {
     *t = &i64;
     end++;

@@ -5,9 +5,13 @@ use * from Statement
 use State, StartState from State
 
 cfn strncpy(d *char, s *char, l int) *char
+
 cfn strcpy(d *char, s *char) *char
+
 cfn strcat(d *char, s *char)
+
 cfn strcmp(a *char, b *char) int
+
 cfn strlen(a *char) int
 
 type MemoryArena struct {
@@ -18,7 +22,7 @@ type MemoryArena struct {
 
 type Program struct {
   arena MemoryArena
-  modules *Module 
+  modules *Module
 }
 
 fn new(buffer *char, cap int) Program {
@@ -30,22 +34,21 @@ fn new(buffer *char, cap int) Program {
   return p;
 }
 
-fn alloc(p *Program, size int) *char {
-  if (p.arena.len + size >= p.arena.cap)
+fn alloc(p *Program, size u64) *char {
+  if (p.arena.len + size as i32 >= p.arena.cap)
     ASSERT(false)//FATALX("Out of memory");
   c := &p->arena.len
   d := &p->arena.buffer[p->arena.len]
-  p->arena.len += size;
+  p->arena.len += size as i32;
   return d;
 }
 
 fn copy_string(p *Program, s *char, l int) *char {
-  id := p.alloc(l + 1);
+  id := p.alloc((l + 1) as u64 );
   strncpy(id, s, l);
   id[l] = '\0';
   return id;
 }
-
 
 fn find_module(p *Program, path *char) *Module  {
   for (m := p->modules; m; m = m->next)
