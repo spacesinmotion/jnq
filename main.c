@@ -744,12 +744,6 @@ Function assert = (Function){{(VariableList){&(Variable){"cond", &Bool, null_loc
                              (LocationRange){},
                              true};
 Type Assert = (Type){"ASSERT", .fnT = &assert, FnT, NULL};
-Function SizeOfFn = (Function){{(VariableList){&(Variable){"...", &Ellipsis, null_location}, 1}, &u64, null_location},
-                               NULL,
-                               &global,
-                               (LocationRange){},
-                               true};
-Type SizeOf = (Type){"sizeof", .fnT = &SizeOfFn, FnT, NULL};
 
 Type *Module_find_type(Module *m, const char *b, const char *e) {
   if (4 == e - b && strncmp(Bool.name, b, 4) == 0)
@@ -784,8 +778,6 @@ Type *Module_find_type(Module *m, const char *b, const char *e) {
     return &String;
   if (6 == e - b && strncmp(Assert.name, b, 6) == 0)
     return &Assert;
-  if (6 == e - b && strncmp(SizeOf.name, b, 6) == 0)
-    return &SizeOf;
 
   for (TypeList *tl = m->types; tl; tl = tl->next) {
     if (tl->type->kind == UseT && tl->type->useT->take_all) {
@@ -4427,6 +4419,7 @@ void c_Program(FILE *f, Program *p, Module *m) {
 }
 
 void Program_add_defaults(Program *p) {
+  Program_parse_fn(p, &global, &(State){"sizeof(...) u64\n", null_location}, true);
   Program_parse_fn(p, &global, &(State){"printf(d *char, ...) *char\n", null_location}, true);
   Program_parse_fn(p, &global, &(State){"realloc(d *char, s int) *char\n", null_location}, true);
   Program_parse_fn(p, &global, &(State){"free(d *char)\n", null_location}, true);
