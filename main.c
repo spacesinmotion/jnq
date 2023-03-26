@@ -738,11 +738,6 @@ Type String = (Type){"string", .c_name = "const char *", BaseT, NULL};
 
 Type Ellipsis = (Type){"...", .structT = &(Struct){{}, &global, (LocationRange){}}, BaseT, NULL};
 
-Variable print_param[] = {{"format", &String, null_location}, {"...", &Ellipsis, null_location}};
-Function print =
-    (Function){{(VariableList){print_param, 2}, NULL, null_location}, NULL, &global, (LocationRange){}, true};
-Type Printf = (Type){"printf", .fnT = &print, FnT, NULL};
-
 Function assert = (Function){{(VariableList){&(Variable){"cond", &Bool, null_location}, 1}, NULL, null_location},
                              NULL,
                              &global,
@@ -787,8 +782,6 @@ Type *Module_find_type(Module *m, const char *b, const char *e) {
     return &f64;
   if (6 == e - b && strncmp(String.name, b, 6) == 0)
     return &String;
-  if (6 == e - b && strncmp(Printf.name, b, 6) == 0)
-    return &Printf;
   if (6 == e - b && strncmp(Assert.name, b, 6) == 0)
     return &Assert;
   if (6 == e - b && strncmp(SizeOf.name, b, 6) == 0)
@@ -4434,6 +4427,7 @@ void c_Program(FILE *f, Program *p, Module *m) {
 }
 
 void Program_add_defaults(Program *p) {
+  Program_parse_fn(p, &global, &(State){"printf(d *char, ...) *char\n", null_location}, true);
   Program_parse_fn(p, &global, &(State){"realloc(d *char, s int) *char\n", null_location}, true);
   Program_parse_fn(p, &global, &(State){"free(d *char)\n", null_location}, true);
 }
