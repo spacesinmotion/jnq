@@ -79,6 +79,21 @@ fn main() int {
   ASSERT(8 == sizeof(u64))
   ASSERT(8 == sizeof(f64))
 
+  // ASSERT(1 == sizeof(i8))
+  // ASSERT(1 == sizeof(u8))
+
+  // ASSERT(2 == sizeof(i16))
+  // ASSERT(2 == sizeof(u16))
+
+  ASSERT(4 == sizeof(42))
+  ASSERT(4 == sizeof(42u))
+  ASSERT(4 == sizeof(2.4f))
+
+  ASSERT(8 == sizeof(42l))
+  ASSERT(8 == sizeof(76lu))
+  ASSERT(8 == sizeof(0.5))
+  // ASSERT(8 == sizeof(0.5d))
+
   printf(" ...ok\n")
   return 0
 }

@@ -1298,11 +1298,23 @@ bool check_identifier(State *st) {
   return false;
 }
 
-bool read_int(State *st, int *i) {
+bool read_int(State *st, int *i, Type **t) {
   char *end;
   *i = strtol(st->c, &end, 10);
   if (end == st->c)
     return false;
+  if (*end == 'u') {
+    *t = &u32;
+    end++;
+  } else if (*end == 'l') {
+    *t = &i64;
+    end++;
+    if (*end == 'u') {
+      *t = &u64;
+      end++;
+    }
+  } else
+    *t = &i32;
   st->location.column += end - st->c;
   st->c = end;
   return true;
@@ -1462,7 +1474,8 @@ bool Program_check_declared_type(Program *p, State *st) {
   TypeKind vec_t = check_vec_special(st);
   if (vec_t != PlaceHolder && check_op(st, "[")) {
     int dummy;
-    read_int(st, &dummy);
+    Type *t_dummy;
+    read_int(st, &dummy, &t_dummy);
     if (check_op(st, "]") && Program_check_declared_type(p, st))
       return true;
     *st = old;
@@ -1470,7 +1483,8 @@ bool Program_check_declared_type(Program *p, State *st) {
 
   if (check_op(st, "[")) {
     int count = -1;
-    read_int(st, &count);
+    Type *t_count;
+    read_int(st, &count, &t_count);
     if (check_op(st, "]")) {
       if (Program_check_declared_type(p, st))
         return true;
@@ -1538,7 +1552,8 @@ Type *Program_parse_declared_type(Program *p, Module *m, State *st) {
   if (vec_t != PlaceHolder) {
     if (check_op(st, "[")) {
       int count = 0;
-      read_int(st, &count);
+      Type *t_count;
+      read_int(st, &count, &t_count);
       if (check_op(st, "]")) {
         Type *c = Program_parse_declared_type(p, m, st);
         if (c) {
@@ -1560,7 +1575,8 @@ Type *Program_parse_declared_type(Program *p, Module *m, State *st) {
 
   if (check_op(st, "[")) {
     int count = -1;
-    read_int(st, &count);
+    Type *t_count;
+    read_int(st, &count, &t_count);
     if (check_op(st, "]")) {
       Type *c = Program_parse_declared_type(p, m, st);
       if (c) {
@@ -1665,7 +1681,8 @@ EnumEntry *Program_parse_enum_entry_list(Program *p, State *st) {
       if (check_op(st, "=")) {
         e->valueSet = true;
         int value;
-        if (!read_int(st, &value))
+        Type *t_value;
+        if (!read_int(st, &value, &t_value))
           FATAL(&st->location, "missing enum entry value ");
         e->value = value;
       }
@@ -1855,9 +1872,10 @@ Expression *Program_parse_atom(Program *p, State *st) {
   bool is_float = read_float(&f, &temp_f);
 
   int temp_i;
-  if (read_int(st, &temp_i) && (!is_float || st->c >= f.c)) {
+  Type *t_temp_i;
+  if (read_int(st, &temp_i, &t_temp_i) && (!is_float || st->c >= f.c)) {
     Expression *e = Program_new_Expression(p, BaseA, old.location);
-    e->baseconst->type = &i32;
+    e->baseconst->type = t_temp_i;
     e->baseconst->text = Program_copy_string(p, old.c, st->c - old.c);
     return e;
   } else if (is_float) {
@@ -1866,8 +1884,9 @@ Expression *Program_parse_atom(Program *p, State *st) {
     if (st->c[0] == 'f') {
       e->baseconst->type = &f32;
       State_skip(st, 1);
-    } else
+    } else {
       e->baseconst->type = &f64;
+    }
     e->baseconst->text = Program_copy_string(p, old.c, st->c - old.c);
     return e;
   }
@@ -4499,9 +4518,10 @@ int compile(Program *p, Module *m, const char *main_file, int jnq_len, int argc,
 #endif
 
   int percent = (int)(100.0 * (double)p->arena.len / (double)p->arena.cap);
-  printf("-------------------------------------\n");
-  printf("       memory usage %3d%% (%zu/%zu)\n", percent, p->arena.len, p->arena.cap);
-
+  if (percent > 90) {
+    printf("-------------------------------------\n");
+    printf("       memory usage %3d%% (%zu/%zu)\n", percent, p->arena.len, p->arena.cap);
+  }
   return error;
 }
 
@@ -4592,8 +4612,6 @@ int main(int argc, char *argv[]) {
   Module *m = Program_parse_file(&p, main_mod);
   if (!m)
     FATALX("Cant find input file! '%s'", main_file);
-
-  printf("%lu\n", sizeof(Use));
 
   return compile(&p, m, main_file, jnq_len, argc, argv);
 }
