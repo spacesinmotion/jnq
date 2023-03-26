@@ -3,6 +3,7 @@
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -21,20 +22,26 @@
 #define JNQ_BIN "jnq_bin.exe"
 #endif
 
+#ifdef __GNUC__
+#define PACK(__Declaration__) __Declaration__ __attribute__((__packed__))
+#elif _MSC_VER
+#define PACK(__Declaration__) __pragma(pack(push, 1)) __Declaration__ __pragma(pack(pop))
+#endif
+
 char lib_path[256] = {0};
 
-typedef struct Location {
+typedef PACK(struct Location {
   const char *file;
-  unsigned short line;
-  unsigned short column;
-} Location;
+  uint16_t line;
+  uint16_t column;
+}) Location;
 
 typedef struct LocationRange {
   const char *file;
-  unsigned short start_line;
-  unsigned short start_column;
-  unsigned short end_line;
-  unsigned short end_column;
+  uint16_t start_line;
+  uint16_t start_column;
+  uint16_t end_line;
+  uint16_t end_column;
 } LocationRange;
 
 LocationRange NewRange(Location s, Location e) {
@@ -165,8 +172,7 @@ typedef enum ExpressionType {
   CDelegateE,
 } ExpressionType;
 
-typedef struct Expression {
-  Location location;
+typedef PACK(struct Expression {
   union {
     BaseConst *baseconst;
     Identifier *id;
@@ -185,8 +191,9 @@ typedef struct Expression {
     TernaryOperation *ternop;
     CDelegate *cdelegate;
   };
-  ExpressionType type;
-} Expression;
+  Location location;
+  uint8_t type;
+}) Expression;
 
 typedef enum StatementType {
   ExpressionS,
@@ -205,7 +212,7 @@ typedef enum StatementType {
 } StatementType;
 
 typedef struct Statement Statement;
-typedef struct Statement {
+typedef PACK(struct Statement {
   union {
     DeclarationStatement *declare;
     ExpressionStatement *express;
@@ -223,8 +230,8 @@ typedef struct Statement {
     SwitchStatement *switchS;
   };
   Statement *next;
-  StatementType type;
-} Statement;
+  uint8_t type;
+}) Statement;
 
 typedef struct Function Function;
 typedef struct EnumEntry EnumEntry;
@@ -241,16 +248,16 @@ typedef struct Identifier {
   Type *type;
 } Identifier;
 
-typedef struct Variable {
-  Location location;
+typedef PACK(struct Variable {
   const char *name;
   Type *type;
-} Variable;
+  Location location;
+}) Variable;
 
-typedef struct VariableList {
+typedef PACK(struct VariableList {
   Variable *v;
-  int len;
-} VariableList;
+  uint16_t len;
+}) VariableList;
 
 typedef struct AutoTypeDeclaration {
   Expression *e;
@@ -263,26 +270,25 @@ typedef struct Parameter {
   const char *name;
 } Parameter;
 
-typedef struct ParameterList {
+typedef PACK(struct ParameterList {
   Parameter *p;
-  int len;
-  int cap;
-} ParameterList;
+  uint16_t len;
+}) ParameterList;
 
 typedef struct Brace {
   Expression *o;
 } Brace;
 
-typedef struct Call {
+typedef PACK(struct Call {
   Expression *o;
   ParameterList p;
-} Call;
+}) Call;
 
-typedef struct Construct {
+typedef PACK(struct Construct {
   Type *type;
   ParameterList p;
   bool pointer;
-} Construct;
+}) Construct;
 
 typedef struct New {
   Expression *o;
@@ -449,68 +455,68 @@ typedef struct Struct {
   LocationRange location;
 } Struct;
 
-typedef struct FunctionDecl {
+typedef PACK(struct FunctionDecl {
   VariableList parameter;
   Type *returnType;
   Location return_type_location;
-} FunctionDecl;
+}) FunctionDecl;
 
-typedef struct FnVec {
+typedef PACK(struct FnVec {
   Type *fns;
-  int len;
-} FnVec;
+  uint16_t len;
+}) FnVec;
 
 typedef struct TypeList TypeList;
 
-typedef struct Interface {
+typedef PACK(struct Interface {
   FnVec methods;
   Module *module;
   LocationRange location;
   TypeList *used_types;
-} Interface;
+}) Interface;
 
-typedef struct EnumEntry {
+typedef PACK(struct EnumEntry {
   const char *name;
   EnumEntry *next;
   int value;
   bool valueSet;
-} EnumEntry;
+}) EnumEntry;
 
-typedef struct Enum {
+typedef PACK(struct Enum {
   EnumEntry *entries;
   Module *module;
   LocationRange location;
-} Enum;
+}) Enum;
 
 typedef struct UnionTypeEntry UnionTypeEntry;
-typedef struct UnionTypeEntry {
+typedef PACK(struct UnionTypeEntry {
   Location location;
   Type *type;
   int index;
   UnionTypeEntry *next;
-} UnionTypeEntry;
+}) UnionTypeEntry;
 
-typedef struct Union {
+typedef PACK(struct Union {
   UnionTypeEntry *member;
   Module *module;
   LocationRange location;
-} Union;
+}) Union;
 
-typedef struct Function {
+typedef PACK(struct Function {
   FunctionDecl d;
   Statement *body;
   Module *module;
   LocationRange location;
   bool is_extern_c;
-} Function;
+}) Function;
 
-typedef struct Use {
+typedef PACK(struct Use {
   Module *module;
-  Location location;
   Type **type;
-  int type_len;
+  uint16_t type_len;
+  Location location;
   bool take_all;
-} Use;
+}) Use;
 
 typedef enum TypeKind {
   UseT,
@@ -530,7 +536,7 @@ typedef enum TypeKind {
   PlaceHolder
 } TypeKind;
 
-typedef struct Type {
+typedef PACK(struct Type {
   const char *name;
   union {
     const char *c_name;
@@ -543,9 +549,9 @@ typedef struct Type {
     Use *useT;
     int array_count;
   };
-  TypeKind kind;
+  uint8_t kind;
   Type *child;
-} Type;
+}) Type;
 
 Module *global_module();
 
@@ -732,18 +738,18 @@ Type String = (Type){"string", .c_name = "const char *", BaseT, NULL};
 
 Type Ellipsis = (Type){"...", .structT = &(Struct){{}, &global, (LocationRange){}}, BaseT, NULL};
 
-Variable print_param[] = {{null_location, "format", &String}, {null_location, "...", &Ellipsis}};
+Variable print_param[] = {{"format", &String, null_location}, {"...", &Ellipsis, null_location}};
 Function print =
     (Function){{(VariableList){print_param, 2}, NULL, null_location}, NULL, &global, (LocationRange){}, true};
 Type Printf = (Type){"printf", .fnT = &print, FnT, NULL};
 
-Function assert = (Function){{(VariableList){&(Variable){null_location, "cond", &Bool}, 1}, NULL, null_location},
+Function assert = (Function){{(VariableList){&(Variable){"cond", &Bool, null_location}, 1}, NULL, null_location},
                              NULL,
                              &global,
                              (LocationRange){},
                              true};
 Type Assert = (Type){"ASSERT", .fnT = &assert, FnT, NULL};
-Function SizeOfFn = (Function){{(VariableList){&(Variable){null_location, "...", &Ellipsis}, 1}, &i32, null_location},
+Function SizeOfFn = (Function){{(VariableList){&(Variable){"...", &Ellipsis, null_location}, 1}, &i32, null_location},
                                NULL,
                                &global,
                                (LocationRange){},
@@ -1603,12 +1609,12 @@ Variable Program_parse_variable_declaration(Program *p, Module *m, State *st) {
     skip_whitespace(st);
     if (!check_whitespace_for_nl(st)) {
       if ((type = Program_parse_declared_type(p, m, st))) {
-        return (Variable){old.location, Program_copy_string(p, old.c, name_end - old.c), type};
+        return (Variable){Program_copy_string(p, old.c, name_end - old.c), type, old.location};
       }
     }
     *st = old;
   }
-  return (Variable){old.location, NULL, NULL};
+  return (Variable){NULL, NULL, old.location};
 }
 
 VariableList Program_parse_variable_declaration_list(Program *p, Module *m, State *st, const char *end) {
@@ -1658,8 +1664,10 @@ EnumEntry *Program_parse_enum_entry_list(Program *p, State *st) {
       e->valueSet = false;
       if (check_op(st, "=")) {
         e->valueSet = true;
-        if (!read_int(st, &e->value))
+        int value;
+        if (!read_int(st, &value))
           FATAL(&st->location, "missing enum entry value ");
+        e->value = value;
       }
     } else
       FATAL(&st->location, "missing enum entry name");
@@ -1887,8 +1895,7 @@ ParameterList Program_parse_parameter_list(Program *p, Module *m, State *st) {
 
   ParameterList pl;
   pl.len = param_len;
-  pl.cap = pl.len + 1;
-  pl.p = (Parameter *)Program_alloc(p, pl.cap * sizeof(Parameter));
+  pl.p = (Parameter *)Program_alloc(p, (pl.len + 1) * sizeof(Parameter));
   for (int i = 0; i < param_len; ++i)
     pl.p[i] = param[i];
 
@@ -1925,8 +1932,7 @@ ParameterList Program_parse_named_parameter_list(Program *p, Module *m, State *s
 
   ParameterList pl;
   pl.len = param_len;
-  pl.cap = pl.len + 1;
-  pl.p = (Parameter *)Program_alloc(p, pl.cap * sizeof(Parameter));
+  pl.p = (Parameter *)Program_alloc(p, (pl.len + 1) * sizeof(Parameter));
   for (int i = 0; i < param_len; ++i)
     pl.p[i] = param[i];
   return pl;
@@ -2361,9 +2367,11 @@ void Program_parse_fn(Program *p, Module *m, State *st, bool extc) {
   const char *b = st->c;
   if (check_identifier(st)) {
     const char *name = Program_copy_string(p, b, st->c - b);
-    Function *fn = Program_add_type(p, FnT, name, m)->fnT;
-    if (!Program_parse_fn_decl(p, m, &fn->d, st))
+    FunctionDecl fnd;
+    if (!Program_parse_fn_decl(p, m, &fnd, st))
       FATAL(&st->location, "Missing parameterlist");
+    Function *fn = Program_add_type(p, FnT, name, m)->fnT;
+    fn->d = fnd;
     fn->is_extern_c = extc;
     if (!extc) {
       if (check_op(st, "{"))
@@ -3543,7 +3551,7 @@ Expression *Interface_construct(Program *p, Type *got, Type *expect, Expression 
   if (got == &Null) {
     Expression *cE = Program_new_Expression(p, ConstructE, pr->location);
     cE->construct->type = expect;
-    cE->construct->p = (ParameterList){NULL, 0, 0};
+    cE->construct->p = (ParameterList){NULL, 0};
     return cE;
   }
 
@@ -3559,7 +3567,7 @@ Expression *Interface_construct(Program *p, Type *got, Type *expect, Expression 
   CheckInterface_for(got, expect, &pr->location);
   Expression *cE = Program_new_Expression(p, ConstructE, pr->location);
   cE->construct->type = expect;
-  cE->construct->p = (ParameterList){Program_alloc(p, sizeof(Parameter) * 2), 2, 2};
+  cE->construct->p = (ParameterList){Program_alloc(p, sizeof(Parameter) * 2), 2};
   cE->construct->p.p[0].name = NULL;
   if (!is_pointer) {
     Expression *deref = Program_new_Expression(p, UnaryPrefixE, pr->location);
@@ -4083,9 +4091,9 @@ void c_build_pool_from(Program *p, Module *m, TypeList *tl) {
   Struct *poolS = (Struct *)Program_alloc(p, sizeof(Struct));
   poolS->module = m;
   poolS->member = (VariableList){(Variable *)Program_alloc(p, sizeof(Variable) * 3), 3};
-  poolS->member.v[0] = (Variable){null_location, "__d", value_type_array};
-  poolS->member.v[1] = (Variable){null_location, "__l", &i32};
-  poolS->member.v[2] = (Variable){null_location, "__f", value_type_pointer};
+  poolS->member.v[0] = (Variable){"__d", value_type_array, null_location};
+  poolS->member.v[1] = (Variable){"__l", &i32, null_location};
+  poolS->member.v[2] = (Variable){"__f", value_type_pointer, null_location};
 
   tl->type->structT = poolS;
   tl->type->kind = StructT;
@@ -4105,8 +4113,8 @@ void c_build_pool_from(Program *p, Module *m, TypeList *tl) {
     create->d.return_type_location = null_location;
     create->is_extern_c = false;
     create->d.parameter = (VariableList){(Variable *)Program_alloc(p, 2 * sizeof(Variable)), 2};
-    create->d.parameter.v[0] = (Variable){null_location, "p", pool_pointer_type};
-    create->d.parameter.v[1] = (Variable){null_location, "val", value_type};
+    create->d.parameter.v[0] = (Variable){"p", pool_pointer_type, null_location};
+    create->d.parameter.v[1] = (Variable){"val", value_type, null_location};
 
     BuffString pushfn = str("if(p.__f){\n"
                             "b := p.__f\n"
@@ -4130,8 +4138,8 @@ void c_build_pool_from(Program *p, Module *m, TypeList *tl) {
     remove->d.return_type_location = null_location;
     remove->is_extern_c = false;
     remove->d.parameter = (VariableList){(Variable *)Program_alloc(p, 2 * sizeof(Variable)), 2};
-    remove->d.parameter.v[0] = (Variable){null_location, "v", pool_pointer_type};
-    remove->d.parameter.v[1] = (Variable){null_location, "b", value_type_pointer};
+    remove->d.parameter.v[0] = (Variable){"v", pool_pointer_type, null_location};
+    remove->d.parameter.v[1] = (Variable){"b", value_type_pointer, null_location};
 
     BuffString removefn = str("fo := b as **%s;\n"
                               "*fo=v.__f\n"
@@ -4148,7 +4156,7 @@ void c_build_pool_from(Program *p, Module *m, TypeList *tl) {
     remove->d.return_type_location = null_location;
     remove->is_extern_c = false;
     remove->d.parameter = (VariableList){(Variable *)Program_alloc(p, 1 * sizeof(Variable)), 1};
-    remove->d.parameter.v[0] = (Variable){null_location, "v", pool_pointer_type};
+    remove->d.parameter.v[0] = (Variable){"v", pool_pointer_type, null_location};
     BuffString removefn = str("if (v.__f) return true;\n"
                               "return v.__l < %d\n"
                               "}",
@@ -4179,8 +4187,8 @@ void c_build_buf_from(Program *p, Module *m, TypeList *tl) {
   Struct *bufS = (Struct *)Program_alloc(p, sizeof(Struct));
   bufS->module = m;
   bufS->member = (VariableList){(Variable *)Program_alloc(p, sizeof(Variable) * 2), 2};
-  bufS->member.v[0] = (Variable){null_location, "__d", value_type_array};
-  bufS->member.v[1] = (Variable){null_location, "len", &i32};
+  bufS->member.v[0] = (Variable){"__d", value_type_array, null_location};
+  bufS->member.v[1] = (Variable){"len", &i32, null_location};
 
   tl->type->structT = bufS;
   tl->type->kind = StructT;
@@ -4200,8 +4208,8 @@ void c_build_buf_from(Program *p, Module *m, TypeList *tl) {
     push->d.return_type_location = null_location;
     push->is_extern_c = false;
     push->d.parameter = (VariableList){(Variable *)Program_alloc(p, 2 * sizeof(Variable)), 2};
-    push->d.parameter.v[0] = (Variable){null_location, "v", buf_pointer_type};
-    push->d.parameter.v[1] = (Variable){null_location, "val", value_type};
+    push->d.parameter.v[0] = (Variable){"v", buf_pointer_type, null_location};
+    push->d.parameter.v[1] = (Variable){"val", value_type, null_location};
 
     BuffString pushfn = str("ASSERT(v.len<%d)\n"
                             "v.__d[v.len++]=val\n"
@@ -4217,7 +4225,7 @@ void c_build_buf_from(Program *p, Module *m, TypeList *tl) {
     pop->d.return_type_location = null_location;
     pop->is_extern_c = false;
     pop->d.parameter = (VariableList){(Variable *)Program_alloc(p, 1 * sizeof(Variable)), 1};
-    pop->d.parameter.v[0] = (Variable){null_location, "v", buf_pointer_type};
+    pop->d.parameter.v[0] = (Variable){"v", buf_pointer_type, null_location};
 
     pop->body = Program_parse_scope(p, m,
                                     &(State){"v.len--\n"
@@ -4244,9 +4252,9 @@ void c_build_vec_from(Program *p, Module *m, TypeList *tl) {
   Struct *vecS = (Struct *)Program_alloc(p, sizeof(Struct));
   vecS->module = m;
   vecS->member = (VariableList){(Variable *)Program_alloc(p, sizeof(Variable) * 3), 3};
-  vecS->member.v[0] = (Variable){null_location, "__d", value_type_pointer};
-  vecS->member.v[1] = (Variable){null_location, "len", &i32};
-  vecS->member.v[2] = (Variable){null_location, "cap", &i32};
+  vecS->member.v[0] = (Variable){"__d", value_type_pointer, null_location};
+  vecS->member.v[1] = (Variable){"len", &i32, null_location};
+  vecS->member.v[2] = (Variable){"cap", &i32, null_location};
 
   tl->type->structT = vecS;
   tl->type->kind = StructT;
@@ -4266,8 +4274,8 @@ void c_build_vec_from(Program *p, Module *m, TypeList *tl) {
     push->d.return_type_location = null_location;
     push->is_extern_c = false;
     push->d.parameter = (VariableList){(Variable *)Program_alloc(p, 2 * sizeof(Variable)), 2};
-    push->d.parameter.v[0] = (Variable){null_location, "v", vec_pointer_type};
-    push->d.parameter.v[1] = (Variable){null_location, "val", value_type};
+    push->d.parameter.v[0] = (Variable){"v", vec_pointer_type, null_location};
+    push->d.parameter.v[1] = (Variable){"val", value_type, null_location};
 
     BuffString pushfn = str("if(v.len >= v.cap){\n"
                             "v.cap+=%d\n"
@@ -4286,7 +4294,7 @@ void c_build_vec_from(Program *p, Module *m, TypeList *tl) {
     pop->d.return_type_location = null_location;
     pop->is_extern_c = false;
     pop->d.parameter = (VariableList){(Variable *)Program_alloc(p, 1 * sizeof(Variable)), 1};
-    pop->d.parameter.v[0] = (Variable){null_location, "v", vec_pointer_type};
+    pop->d.parameter.v[0] = (Variable){"v", vec_pointer_type, null_location};
 
     pop->body = Program_parse_scope(p, m,
                                     &(State){"v.len--\n"
@@ -4302,7 +4310,7 @@ void c_build_vec_from(Program *p, Module *m, TypeList *tl) {
     free->d.return_type_location = null_location;
     free->is_extern_c = false;
     free->d.parameter = (VariableList){(Variable *)Program_alloc(p, 1 * sizeof(Variable)), 1};
-    free->d.parameter.v[0] = (Variable){null_location, "v", vec_pointer_type};
+    free->d.parameter.v[0] = (Variable){"v", vec_pointer_type, null_location};
     free->body = Program_parse_scope(p, m,
                                      &(State){"free (v.__d as *char)\n"
                                               "}",
@@ -4584,6 +4592,8 @@ int main(int argc, char *argv[]) {
   Module *m = Program_parse_file(&p, main_mod);
   if (!m)
     FATALX("Cant find input file! '%s'", main_file);
+
+  printf("%lu\n", sizeof(Use));
 
   return compile(&p, m, main_file, jnq_len, argc, argv);
 }
