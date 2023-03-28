@@ -37,7 +37,7 @@ fn a_wrapper(v *vec[]int) int {
 }
 
 type fBaseTypes struct {
-  a f32,
+  a i8,
   b f64,
 }
 
@@ -54,6 +54,6 @@ fn main() int
 
   x:= 32lu
 
-  printf("%d %d %lu ok\n", p.i_(), p.j, sizeof(i))
+  printf("%d %d %lu %lu ok\n", p.i_(), p.j, offsetof(fBaseTypes.a), offsetof(fBaseTypes.b))
   return 0
 }

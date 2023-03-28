@@ -2949,6 +2949,24 @@ void c_parameter(FILE *f, ParameterList *pl) {
   }
 }
 
+bool c_check_makro(FILE *f, Call *ca, Location *l) {
+  if (ca->o->type == IdentifierA && strcmp(ca->o->id->name, "offsetof") == 0) {
+    if (ca->p.len != 1)
+      FATAL(l, "'offsetof' expects exact 1 parameter!");
+    if (ca->p.p[0].p->type != MemberAccessE)
+      FATAL(&ca->p.p[0].p->location, "'offsetof' expects a member description!");
+    MemberAccess *ma = ca->p.p[0].p->member;
+    if (ma->o->type != IdentifierA)
+      FATAL(&ca->p.p[0].p->location, "'offsetof' expects a struct name!");
+    Module *mam = Type_defined_module(ma->o_type);
+    if (!mam)
+      FATAL(&ca->p.p[0].p->location, "Unknown type!");
+
+    fprintf(f, "offsetof(%s%s, %s)", mam->c_name, ma->o->id->name, ma->member->name);
+    return true;
+  }
+  return false;
+}
 void c_expression(FILE *f, Expression *e) {
   if (!e)
     return;
@@ -2992,6 +3010,9 @@ void c_expression(FILE *f, Expression *e) {
     fprintf(f, ")");
     break;
   case CallE: {
+    if (c_check_makro(f, e->call, &e->location))
+      break;
+
     c_expression(f, e->call->o);
     fprintf(f, "(");
     c_parameter(f, &e->call->p);
@@ -4420,6 +4441,7 @@ void c_Program(FILE *f, Program *p, Module *m) {
 
 void Program_add_defaults(Program *p) {
   Program_parse_fn(p, &global, &(State){"sizeof(...) u64\n", null_location}, true);
+  Program_parse_fn(p, &global, &(State){"offsetof(...) u64\n", null_location}, true);
   Program_parse_fn(p, &global, &(State){"printf(d *char, ...) *char\n", null_location}, true);
   Program_parse_fn(p, &global, &(State){"realloc(d *char, s int) *char\n", null_location}, true);
   Program_parse_fn(p, &global, &(State){"free(d *char)\n", null_location}, true);
