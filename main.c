@@ -738,13 +738,6 @@ Type String = (Type){"string", .c_name = "const char *", BaseT, NULL};
 
 Type Ellipsis = (Type){"...", .structT = &(Struct){{}, &global, (LocationRange){}}, BaseT, NULL};
 
-Function assert = (Function){{(VariableList){&(Variable){"cond", &Bool, null_location}, 1}, NULL, null_location},
-                             NULL,
-                             &global,
-                             (LocationRange){},
-                             true};
-Type Assert = (Type){"ASSERT", .fnT = &assert, FnT, NULL};
-
 Type *Module_find_type(Module *m, const char *b, const char *e) {
   if (4 == e - b && strncmp(Bool.name, b, 4) == 0)
     return &Bool;
@@ -776,8 +769,6 @@ Type *Module_find_type(Module *m, const char *b, const char *e) {
     return &f64;
   if (6 == e - b && strncmp(String.name, b, 6) == 0)
     return &String;
-  if (6 == e - b && strncmp(Assert.name, b, 6) == 0)
-    return &Assert;
 
   for (TypeList *tl = m->types; tl; tl = tl->next) {
     if (tl->type->kind == UseT && tl->type->useT->take_all) {
@@ -2950,7 +2941,17 @@ void c_parameter(FILE *f, ParameterList *pl) {
 }
 
 bool c_check_makro(FILE *f, Call *ca, Location *l) {
-  if (ca->o->type == IdentifierA && strcmp(ca->o->id->name, "offsetof") == 0) {
+  if (ca->o->type != IdentifierA)
+    return false;
+
+  if (strcmp(ca->o->id->name, "ASSERT") == 0) {
+    if (ca->p.len != 1)
+      FATAL(l, "'ASSERT' expects exact 1 parameter!");
+    fprintf(f, "assert_imp_(\"%s\", %d, %d, ", l->file ? l->file : "", l->line, l->column);
+    c_parameter(f, &ca->p);
+    fprintf(f, ")");
+    return true;
+  } else if (strcmp(ca->o->id->name, "offsetof") == 0) {
     if (ca->p.len != 1)
       FATAL(l, "'offsetof' expects exact 1 parameter!");
     if (ca->p.p[0].p->type != MemberAccessE)
@@ -2965,6 +2966,7 @@ bool c_check_makro(FILE *f, Call *ca, Location *l) {
     fprintf(f, "offsetof(%s%s, %s)", mam->c_name, ma->o->id->name, ma->member->name);
     return true;
   }
+
   return false;
 }
 void c_expression(FILE *f, Expression *e) {
@@ -4360,6 +4362,13 @@ void c_build_special_types(Program *p) {
   }
 }
 
+void assert_imp_(const char *f, int l, int c, bool condition) {
+  if (!condition) {
+    fprintf(stderr, "%s:%d:%d: failed:\n", f, l, c);
+    abort();
+  }
+}
+
 void c_Program(FILE *f, Program *p, Module *m) {
   Program_reset_module_finished(p);
   c_check_types(&global);
@@ -4378,6 +4387,13 @@ void c_Program(FILE *f, Program *p, Module *m) {
   fputs("#include <string.h>\n", f);
   fputs("#include <math.h>\n", f);
   fputs("\n", f);
+
+  fputs("void assert_imp_(const char *f, int l, int c, bool condition) {\n", f);
+  fputs("  if (!condition) {\n", f);
+  fputs("    fprintf(stderr, \"%s:%d:%d: failed:\\n\", f, l, c);\n", f);
+  fputs("    abort();\n", f);
+  fputs("  }\n", f);
+  fputs("}\n", f);
 
   fputs("#define ASSERT(EXP)                          \\\n", f);
   fputs("  do {                                       \\\n", f);
@@ -4439,6 +4455,7 @@ void c_Program(FILE *f, Program *p, Module *m) {
 void Program_add_defaults(Program *p) {
   Program_parse_fn(p, &global, &(State){"sizeof(...) u64\n", null_location}, true);
   Program_parse_fn(p, &global, &(State){"offsetof(...) u64\n", null_location}, true);
+  Program_parse_fn(p, &global, &(State){"ASSERT(...)\n", null_location}, true);
   Program_parse_fn(p, &global, &(State){"printf(d *char, ...) *char\n", null_location}, true);
   Program_parse_fn(p, &global, &(State){"realloc(d *char, s int) *char\n", null_location}, true);
   Program_parse_fn(p, &global, &(State){"free(d *char)\n", null_location}, true);

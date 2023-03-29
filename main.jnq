@@ -54,6 +54,8 @@ fn main() int
 
   x:= 32lu
 
+  ASSERT(32 == x as i32)
+
   printf("%d %d %lu %lu ok\n", p.i_(), p.j, offsetof(fBaseTypes.a), offsetof(fBaseTypes.b))
   return 0
 }
