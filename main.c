@@ -556,7 +556,7 @@ typedef PACK(struct Type {
 Module *global_module();
 
 Module *Type_defined_module(Type *t) {
-  switch (t->kind) {
+  switch ((TypeKind)t->kind) {
   case BaseT:
     return global_module();
   case StructT:
@@ -593,7 +593,7 @@ Module *Type_defined_module(Type *t) {
 }
 
 LocationRange *Type_location(Type *t) {
-  switch (t->kind) {
+  switch ((TypeKind)t->kind) {
   case StructT:
   case CStructT:
   case UnionT:
@@ -862,7 +862,7 @@ BuffString Type_name(Type *t) {
   char *ss = s.s;
   int i = 0;
   while (t->child) {
-    switch (t->kind) {
+    switch ((TypeKind)t->kind) {
     case ArrayT:
       if (t->array_count > 0)
         i += snprintf(ss + i, sizeof(s.s) - i, "[%d]", t->array_count);
@@ -941,7 +941,7 @@ Type *Program_add_type(Program *p, TypeKind k, const char *name, Module *m) {
 
   tt->name = name;
   tt->kind = k;
-  switch (k) {
+  switch ((TypeKind)k) {
   case UseT:
     tt->useT = (Use *)Program_alloc(p, sizeof(Use));
     tt->useT->type = NULL;
@@ -1054,7 +1054,7 @@ Type *Program_add_type_after(Program *p, TypeKind k, Module *m, Type *child) {
 Statement *Program_new_Statement(Program *p, StatementType t, Statement *n) {
   Statement *s = (Statement *)Program_alloc(p, sizeof(Statement));
   s->type = t;
-  switch (t) {
+  switch ((StatementType)t) {
   case ExpressionS:
     s->express = (ExpressionStatement *)Program_alloc(p, sizeof(ExpressionStatement));
     break;
@@ -1104,7 +1104,7 @@ Expression *Program_new_Expression(Program *p, ExpressionType t, Location l) {
   Expression *e = (Expression *)Program_alloc(p, sizeof(Expression));
   e->type = t;
   e->location = l;
-  switch (t) {
+  switch ((ExpressionType)t) {
   case BaseA:
     e->baseconst = (BaseConst *)Program_alloc(p, sizeof(BaseConst));
     break;
@@ -2481,7 +2481,7 @@ BuffString Type_special_cname(Type *t) {
   char *ss = s.s;
   int i = 0;
   while (t->child) {
-    switch (t->kind) {
+    switch ((TypeKind)t->kind) {
     case ArrayT:
       if (t->array_count > 0)
         i += snprintf(ss + i, sizeof(s.s) - i, "_%d_", t->array_count);
@@ -2538,7 +2538,7 @@ bool c_type_declare(FILE *f, Type *t, Location *l, const char *var) {
   while (tt && tt->kind == ArrayT)
     tt = tt->child;
   hasVarWritten = c_type_declare(f, tt, l, var);
-  switch (t->kind) {
+  switch ((TypeKind)t->kind) {
   case ArrayT:
     fprintf(f, " %s", var);
     while (t && t->kind == ArrayT) {
@@ -2777,7 +2777,7 @@ void c_type(FILE *f, const char *module_name, TypeList *t) {
 
   c_type(f, module_name, t->next);
 
-  switch (t->type->kind) {
+  switch ((TypeKind)t->type->kind) {
   case UseT:
     break;
   case CStructT:
@@ -2829,7 +2829,7 @@ void lisp_expression(FILE *f, Expression *e) {
   if (!e)
     return;
 
-  switch (e->type) {
+  switch ((ExpressionType)e->type) {
   case BaseA:
     if (e->baseconst->type == &String)
       fprintf(f, "\"%s\"", e->baseconst->text);
@@ -2940,6 +2940,99 @@ void c_parameter(FILE *f, ParameterList *pl) {
   }
 }
 
+void jnq_expression(FILE *f, Expression *e) {
+  if (!e)
+    return;
+
+  switch ((ExpressionType)e->type) {
+  case BaseA:
+    fprintf(f, "%s", e->baseconst->text);
+    break;
+
+  case IdentifierA:
+    fprintf(f, "%s", e->id->name);
+    break;
+
+  case AutoTypeE:
+    fprintf(f, "%s := ", e->autotype->name);
+    jnq_expression(f, e->autotype->e);
+    break;
+
+  case BraceE:
+    fprintf(f, "(");
+    jnq_expression(f, e->brace->o);
+    fprintf(f, ")");
+    break;
+
+  case CallE:
+    jnq_expression(f, e->call->o);
+    fprintf(f, "(");
+    for (int i = 0; i < e->call->p.len; ++i) {
+      if (i > 0)
+        fprintf(f, ", ");
+      jnq_expression(f, e->call->p.p[i].p);
+    }
+    fprintf(f, ")");
+    break;
+  case ConstructE:
+    if (e->construct->pointer)
+      fprintf(f, "&");
+    fprintf(f, "%s{", e->construct->type->name);
+    for (int i = 0; i < e->construct->p.len; ++i) {
+      if (i > 0)
+        fprintf(f, ", ");
+      jnq_expression(f, e->construct->p.p[i].p);
+    }
+    fprintf(f, "}");
+    break;
+  case NewE:
+    fprintf(f, " new ");
+    jnq_expression(f, e->newE->o);
+    break;
+  case AccessE:
+    jnq_expression(f, e->access->o);
+    fprintf(f, "[");
+    jnq_expression(f, e->access->p);
+    fprintf(f, "]");
+    break;
+  case MemberAccessE:
+    jnq_expression(f, e->member->o);
+    fprintf(f, ".%s", e->member->member->name);
+    break;
+  case AsCast:
+    jnq_expression(f, e->cast->o);
+    fprintf(f, " as %s", Type_name(e->cast->type).s);
+    break;
+
+  case UnaryPrefixE:
+    fprintf(f, "%s", e->unpre->op);
+    jnq_expression(f, e->unpre->o);
+    break;
+
+  case UnaryPostfixE:
+    jnq_expression(f, e->unpost->o);
+    fprintf(f, "%s", e->unpost->op);
+    break;
+
+  case BinaryOperationE:
+    jnq_expression(f, e->binop->o1);
+    fprintf(f, " %s ", e->binop->op->op);
+    jnq_expression(f, e->binop->o2);
+    break;
+
+  case TernaryOperationE:
+    jnq_expression(f, e->ternop->condition);
+    fprintf(f, " ? ");
+    jnq_expression(f, e->ternop->if_e);
+    fprintf(f, " : ");
+    jnq_expression(f, e->ternop->else_e);
+    break;
+
+  case CDelegateE:
+    break;
+  }
+}
+
 bool c_check_makro(FILE *f, Call *ca, Location *l) {
   if (ca->o->type != IdentifierA)
     return false;
@@ -2949,7 +3042,9 @@ bool c_check_makro(FILE *f, Call *ca, Location *l) {
       FATAL(l, "'ASSERT' expects exact 1 parameter!");
     fprintf(f, "assert_imp_(\"%s\", %d, %d, ", l->file ? l->file : "", l->line, l->column);
     c_parameter(f, &ca->p);
-    fprintf(f, ")");
+    fprintf(f, ", \"'");
+    jnq_expression(f, ca->p.p[0].p);
+    fprintf(f, "'\")");
     return true;
   } else if (strcmp(ca->o->id->name, "offsetof") == 0) {
     if (ca->p.len != 1)
@@ -2973,7 +3068,7 @@ void c_expression(FILE *f, Expression *e) {
   if (!e)
     return;
 
-  switch (e->type) {
+  switch ((ExpressionType)e->type) {
   case BaseA:
     if (e->baseconst->type == &String)
       fprintf(f, "\"%s\"", e->baseconst->text);
@@ -3089,7 +3184,7 @@ void c_expression(FILE *f, Expression *e) {
     }
     if (!e->member->member->type)
       FATAL(&e->location, "unknown type for member '%s'", e->member->member->name);
-    switch (e->member->member->type->kind) {
+    switch ((TypeKind)e->member->member->type->kind) {
     case PlaceHolder:
       FATAL(&e->location, "Use of unknow type '%s'", Type_name(e->member->member->type).s);
       break;
@@ -3178,7 +3273,7 @@ void c_statements(FILE *f, Statement *s, int indent) {
 
   c_statements(f, s->next, indent);
   fprintf(f, "%.*s", indent, SPACE);
-  switch (s->type) {
+  switch ((StatementType)s->type) {
   case ExpressionS:
     c_expression(f, s->express->e);
     fprintf(f, ";\n");
@@ -3380,7 +3475,7 @@ void c_type_forward(FILE *f, const char *module_name, TypeList *t) {
 
   c_type_forward(f, module_name, t->next);
 
-  switch (t->type->kind) {
+  switch ((ExpressionType)t->type->kind) {
   case BaseT:
   case CStructT:
     break;
@@ -3512,7 +3607,7 @@ bool is_member_fn_for(Type *ot, Type *ft, const char *name) {
 }
 
 Type *Module_find_member(Type *t, const char *name) {
-  switch (t->kind) {
+  switch ((TypeKind)t->kind) {
   case UnionT:
   case CStructT:
   case StructT: {
@@ -3672,7 +3767,7 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
   if (!e)
     return NULL;
 
-  switch (e->type) {
+  switch ((ExpressionType)e->type) {
   case BaseA:
     return e->baseconst->type;
 
@@ -3971,7 +4066,7 @@ void c_Statement_make_variables_typed(VariableStack *s, Program *p, Module *m, S
 
   c_Statement_make_variables_typed(s, p, m, st->next);
 
-  switch (st->type) {
+  switch ((StatementType)st->type) {
   case ExpressionS:
     c_Expression_make_variables_typed(s, p, m, st->express->e);
     break;
@@ -4362,13 +4457,6 @@ void c_build_special_types(Program *p) {
   }
 }
 
-void assert_imp_(const char *f, int l, int c, bool condition) {
-  if (!condition) {
-    fprintf(stderr, "%s:%d:%d: failed:\n", f, l, c);
-    abort();
-  }
-}
-
 void c_Program(FILE *f, Program *p, Module *m) {
   Program_reset_module_finished(p);
   c_check_types(&global);
@@ -4388,21 +4476,13 @@ void c_Program(FILE *f, Program *p, Module *m) {
   fputs("#include <math.h>\n", f);
   fputs("\n", f);
 
-  fputs("void assert_imp_(const char *f, int l, int c, bool condition) {\n", f);
+  fputs("void assert_imp_(const char *f, int l, int c, bool condition, const char *code) {\n", f);
   fputs("  if (!condition) {\n", f);
-  fputs("    fprintf(stderr, \"%s:%d:%d: failed:\\n\", f, l, c);\n", f);
+  fputs("    fprintf(stderr, \"%s:%d:%d: failed: %s\\n\", f, l, c, code);\n", f);
   fputs("    abort();\n", f);
   fputs("  }\n", f);
   fputs("}\n", f);
 
-  fputs("#define ASSERT(EXP)                          \\\n", f);
-  fputs("  do {                                       \\\n", f);
-  fputs("    if (!(EXP)) {                                \\\n", f);
-  fputs("      fprintf(stderr, \"FAILED: '%s'\\n \", #EXP); \\\n", f);
-  fputs("      abort(); \\\n", f);
-  fputs("    } \\\n", f);
-  fputs("  } while (0)\n", f);
-  fputs("\n", f);
   fputs("#define __NEW_(T, src) ((T *)memcpy(malloc(sizeof(T)), src, sizeof(T)))\n", f);
 
   for (CBlock *cb = p->cblocks; cb; cb = cb->next)
