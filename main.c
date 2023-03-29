@@ -3741,7 +3741,7 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
         FATAL(&e->call->p.p[i].p->location, "Type missmatch got 'void', expect '%s'",
               Type_name(t->fnT->d.parameter.v[j].type).s);
       pt = AdaptParameter_for(p, pt, t->fnT->d.parameter.v[j].type, &e->call->p.p[i]);
-      if (!Type_equal(pt, t->fnT->d.parameter.v[j].type))
+      if (!Type_convertable(t->fnT->d.parameter.v[j].type, pt))
         FATAL(&e->call->p.p[i].p->location, "Type missmatch got '%s', expect '%s'", Type_name(pt).s,
               Type_name(t->fnT->d.parameter.v[j].type).s);
     }

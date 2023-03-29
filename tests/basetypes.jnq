@@ -26,6 +26,58 @@ type pBaseTypes struct {
   x string,
 }
 
+fn i64_call(v i64) {}
+
+fn i32_call(v i32) {}
+
+fn i16_call(v i16) {}
+
+fn i8_call(v i8) {}
+
+fn u64_call(v u64) {}
+
+fn u32_call(v u32) {}
+
+fn u16_call(v u16) {}
+
+fn u8_call(v u8) {}
+
+fn none_narrowing_conversation_call() {
+  i64_call(12l)
+  i64_call(12)
+  i64_call(12u)
+  i64_call(12 as i16)
+  i64_call(12 as u16)
+  i64_call(12 as i8)
+  i64_call(12 as u8)
+
+  i32_call(12)
+  i32_call(12 as i16)
+  i32_call(12 as u16)
+  i32_call(12 as i8)
+  i32_call(12 as u8)
+
+  i16_call(12 as i16)
+  i16_call(12 as i8)
+  i16_call(12 as u8)
+
+  i8_call(12 as i8)
+
+  u64_call(12lu)
+  u64_call(12u)
+  u64_call(12 as u16)
+  u64_call(12 as u8)
+
+  u32_call(12u)
+  u32_call(12 as u16)
+  u32_call(12 as u8)
+
+  u16_call(12 as u16)
+  u16_call(12 as u8)
+
+  u8_call(12 as u8)
+}
+
 fn none_narrowing_conversation() {
   i1 := 12 as i64
   i1 = 32 as i32
