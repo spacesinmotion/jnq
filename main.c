@@ -3675,9 +3675,6 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
     return e->baseconst->type;
 
   case IdentifierA: {
-    if (e->id->type) {
-      return e->id->type;
-    }
     if ((e->id->type = VariableStack_find(s, e->id->name)))
       return e->id->type;
     if ((e->id->type = Module_find_type(m, e->id->name, e->id->name + strlen(e->id->name))))
@@ -3899,7 +3896,7 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
       return td;
     } else if (strcmp(e->unpre->op, "*") == 0) {
       if (st->kind != PointerT)
-        FATAL(&e->location, "dereferenceing none pointer type!");
+        FATAL(&e->location, "dereferenceing none pointer type '%s'!", Type_name(st).s);
       return st->child;
     }
     return st;
