@@ -3789,7 +3789,7 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
           if (!vt)
             FATAL(&pa->p->location, "Type '%s' has no member '%s'!", Type_name(e->construct->type).s, pa->name);
           pt = AdaptParameter_for(p, pt, vt, &e->construct->p.p[i]);
-          if (!Type_equal(pt, vt))
+          if (!Type_convertable(vt, pt))
             FATAL(&pa->p->location, "Type missmatch for member '%s' of '%s'!\n  expect '%s', got '%s' ", pa->name,
                   Type_name(e->construct->type).s, Type_name(vt).s, Type_name(pt).s);
         } else {

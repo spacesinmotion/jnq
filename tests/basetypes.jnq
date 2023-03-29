@@ -26,6 +26,42 @@ type pBaseTypes struct {
   x string,
 }
 
+fn none_narrowing_conversation_construct() {
+  s := iBaseTypes{d: 12l}
+  s = iBaseTypes{d: 12}
+  s = iBaseTypes{d: 12u}
+  s = iBaseTypes{d: 12 as i16}
+  s = iBaseTypes{d: 12 as u16}
+  s = iBaseTypes{d: 12 as i8}
+  s = iBaseTypes{d: 12 as u8}
+
+  s = iBaseTypes{c: 12}
+  s = iBaseTypes{c: 12 as i16}
+  s = iBaseTypes{c: 12 as u16}
+  s = iBaseTypes{c: 12 as i8}
+  s = iBaseTypes{c: 12 as u8}
+
+  s = iBaseTypes{b: 12 as i16}
+  s = iBaseTypes{b: 12 as i8}
+  s = iBaseTypes{b: 12 as u8}
+
+  s = iBaseTypes{a: 12 as i8}
+
+  t := uBaseTypes{d: 12lu}
+  t = uBaseTypes{d: 12u}
+  t = uBaseTypes{d: 12 as u16}
+  t = uBaseTypes{d: 12 as u8}
+
+  t = uBaseTypes{c: 12 as u16}
+  t = uBaseTypes{c: 12 as u8}
+
+  t = uBaseTypes{b: 12 as u8}
+
+  u := fBaseTypes{a: 1.4f}
+  u = fBaseTypes{b: 1.4f}
+  u = fBaseTypes{b: 1.4}
+}
+
 fn i64_call(v i64) {}
 
 fn i32_call(v i32) {}
@@ -41,6 +77,10 @@ fn u32_call(v u32) {}
 fn u16_call(v u16) {}
 
 fn u8_call(v u8) {}
+
+fn f32_call(v f32) {}
+
+fn f64_call(v f64) {}
 
 fn none_narrowing_conversation_call() {
   i64_call(12l)
@@ -76,6 +116,10 @@ fn none_narrowing_conversation_call() {
   u16_call(12 as u8)
 
   u8_call(12 as u8)
+
+  f32_call(1.54f)
+  f64_call(1.54f)
+  f64_call(1.54)
 }
 
 fn none_narrowing_conversation() {
