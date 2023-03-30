@@ -1,73 +1,18 @@
 
 use * from tests.sub.util
 
-ccode {
-
-typedef enum Selec {
-  D,G,H,kl
-} Selec;
-
-typedef struct Pos2 {
-  int i, j;
-} Pos2;
-
-Pos2 Pos2_new(int i, int j) {
-  return (Pos2){i,j};
-}
-
-int i_(Pos2 *p) {
-  return p->i;
-}
-
-Pos2 add_one(Pos2 p) {
-  return (Pos2){p.i+1, p.j+1};
-}
-}
-
-type Selec cenum {
-  D,G,H,kl
-}
-
-type Pos2 cstruct {
-  i int,
-  j int,
-}
-
-cfn Pos2_new(i int , i int) Pos2
-
-cfn i_(p *Pos2) int
-
-cfn add_one(p Pos2) Pos2
-
 fn a_wrapper(v *vec[]int) int {
   return v.len
 }
 
-type fBaseTypes struct {
-  a i8,
-  b f64,
+type X struct {
+  a f32,
+
+  type int
 }
 
 fn main() int
 {
-  p := add_one(Pos2_new(4,2))
-
-  sf := SomeFloats{}
-
-  i := 12 as i64
-  i = 32
-  i = 32 as i16
-  i = 32 as i8
-
-  x:= 32lu
-
-  ASSERT(32 == x as i32)
-
-  ASSERT(Selec.H != Selec.kl)
-
-  pp := Pos2{i:13, j:4}
-
-  printf("%d\n", Selec.H)
-  printf("%d %d %lu %lu ok\n", p.i_(), p.j, offsetof(fBaseTypes.a), offsetof(Pos2.j))
+  printf("%d %d %lu %lu ok\n", 1, 2, offsetof(X.type), offsetof(X.a))
   return 0
 }
