@@ -3058,7 +3058,8 @@ bool c_check_makro(FILE *f, Call *ca, Location *l) {
     if (!mam)
       FATAL(&ca->p.p[0].p->location, "Unknown type!");
 
-    fprintf(f, "offsetof(%s%s, %s)", mam->c_name, ma->o->id->name, ma->member->name);
+    fprintf(f, "offsetof(%s%s, %s)", (ma->o_type->kind == CStructT ? "" : mam->c_name), ma->o->id->name,
+            ma->member->name);
     return true;
   }
 
