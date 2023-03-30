@@ -5,14 +5,8 @@ fn a_wrapper(v *vec[]int) int {
   return v.len
 }
 
-type X struct {
-  a f32,
-
-  type int
-}
-
 fn main() int
 {
-  printf("%d %d %lu %lu ok\n", 1, 2, offsetof(X.type), offsetof(X.a))
+  printf("%d %d ok\n", 1, 2)
   return 0
 }
