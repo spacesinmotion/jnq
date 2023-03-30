@@ -3846,7 +3846,8 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
     return t->fnT->d.returnType;
   }
   case ConstructE: {
-    if (e->construct->type->kind != StructT && e->construct->type->kind != UnionT)
+    if (e->construct->type->kind != StructT && e->construct->type->kind != CStructT &&
+        e->construct->type->kind != UnionT)
       for (int i = 0; i < e->construct->p.len; ++i) {
         Parameter *pa = &e->construct->p.p[i];
         if (pa->name)

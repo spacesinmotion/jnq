@@ -56,6 +56,8 @@ fn main() int
 
   ASSERT(32 == x as i32)
 
+  pp := Pos2{i:13, j:4}
+
   printf("%d %d %lu %lu ok\n", p.i_(), p.j, offsetof(fBaseTypes.a), offsetof(Pos2.j))
   return 0
 }
