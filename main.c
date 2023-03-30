@@ -525,6 +525,7 @@ typedef enum TypeKind {
   CStructT,
   UnionT,
   EnumT,
+  CEnumT,
   InterfaceT,
   UnionTypeT,
   ArrayT,
@@ -564,6 +565,7 @@ Module *Type_defined_module(Type *t) {
   case UnionT:
     return t->structT->module;
   case EnumT:
+  case CEnumT:
     return t->enumT->module;
   case UnionTypeT:
     return t->unionT->module;
@@ -599,6 +601,7 @@ LocationRange *Type_location(Type *t) {
   case UnionT:
     return &t->structT->location;
   case EnumT:
+  case CEnumT:
     return &t->enumT->location;
   case UnionTypeT:
     return &t->unionT->location;
@@ -897,6 +900,7 @@ BuffString Type_name(Type *t) {
     case InterfaceT:
     case UnionT:
     case EnumT:
+    case CEnumT:
     case UnionTypeT:
     case FnT:
     case BaseT:
@@ -957,6 +961,7 @@ Type *Program_add_type(Program *p, TypeKind k, const char *name, Module *m) {
     tt->structT->module = m;
     break;
   case EnumT:
+  case CEnumT:
     tt->enumT = (Enum *)Program_alloc(p, sizeof(Enum));
     tt->enumT->entries = NULL;
     tt->enumT->module = m;
@@ -1771,6 +1776,10 @@ void Program_parse_type(Program *p, Module *m, State *st) {
       Enum *e = Program_add_type(p, EnumT, name, m)->enumT;
       e->entries = Program_parse_enum_entry_list(p, st);
       e->location = NewRange(old.location, st->location);
+    } else if (check_word(st, "cenum") && check_op(st, "{")) {
+      Enum *e = Program_add_type(p, CEnumT, name, m)->enumT;
+      e->entries = Program_parse_enum_entry_list(p, st);
+      e->location = NewRange(old.location, st->location);
     } else if (check_word(st, "uniontype") && check_op(st, "{")) {
       Union *u = Program_add_type(p, UnionTypeT, name, m)->unionT;
       u->member = Program_parse_union_entry_list(p, m, st);
@@ -2516,6 +2525,7 @@ BuffString Type_special_cname(Type *t) {
     case InterfaceT:
     case UnionT:
     case EnumT:
+    case CEnumT:
     case UnionTypeT:
     case FnT:
     case PlaceHolder:
@@ -2561,6 +2571,7 @@ bool c_type_declare(FILE *f, Type *t, Location *l, const char *var) {
     FATAL(l, "Can't use module '%s' as type!", Type_name(t).s);
     break;
   case CStructT:
+  case CEnumT:
     fprintf(f, "%s", t->name);
     break;
   case StructT:
@@ -2789,6 +2800,7 @@ void c_type(FILE *f, const char *module_name, TypeList *t) {
     c_struct(f, module_name, t->type->name, t->type->kind == UnionT, &t->type->structT->member);
     break;
   case EnumT:
+  case CEnumT:
     break;
   case InterfaceT:
     break;
@@ -3176,9 +3188,11 @@ void c_expression(FILE *f, Expression *e) {
   case MemberAccessE: {
     if (!e->member->o_type)
       FATAL(&e->location, "missing type for access");
-    if (e->member->o_type->kind == EnumT) {
+    if (e->member->o_type->kind == EnumT || e->member->o_type->kind == CEnumT) {
       if (e->member->member->type->kind == EnumT)
         fprintf(f, "%s%s", Type_defined_module(e->member->member->type)->c_name, e->member->member->name);
+      else if (e->member->member->type->kind == CEnumT)
+        fprintf(f, "%s", e->member->member->name);
       else
         FATAL(&e->location, "Missing implementation!");
       break;
@@ -3190,6 +3204,7 @@ void c_expression(FILE *f, Expression *e) {
       FATAL(&e->location, "Use of unknow type '%s'", Type_name(e->member->member->type).s);
       break;
     case EnumT:
+    case CEnumT:
     case UseT:
     case BaseT:
     case StructT:
@@ -3476,9 +3491,10 @@ void c_type_forward(FILE *f, const char *module_name, TypeList *t) {
 
   c_type_forward(f, module_name, t->next);
 
-  switch ((ExpressionType)t->type->kind) {
+  switch ((TypeKind)t->type->kind) {
   case BaseT:
   case CStructT:
+  case CEnumT:
     break;
   case StructT:
     fprintf(f, "typedef struct %s%s %s%s;\n", module_name, t->type->name, module_name, t->type->name);
@@ -3618,6 +3634,7 @@ Type *Module_find_member(Type *t, const char *name) {
       }
     break;
   }
+  case CEnumT:
   case EnumT: {
     for (EnumEntry *ee = t->enumT->entries; ee; ee = ee->next)
       if (strcmp(ee->name, name) == 0)
@@ -3795,7 +3812,7 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
     if (t->kind == PointerT)
       t = t->child;
     if (t->kind != StructT && t->kind != CStructT && t->kind != UnionT && t->kind != InterfaceT && t->kind != EnumT &&
-        t->kind != UnionTypeT)
+        t->kind != CEnumT && t->kind != UnionTypeT)
       FATAL(&e->location, "Expect non pointer type for member access got '%s'", Type_name(t).s);
     if (!(e->member->member->type = Module_find_member(t, e->member->member->name)))
       FATAL(&e->location, "unknown member '%s' for '%s'", e->member->member->name, Type_name(t).s);

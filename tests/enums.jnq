@@ -3,8 +3,20 @@ use strcmp from C.str
 
 use Nix from sub.util
 
+ccode {
+
+typedef enum Selec {
+  D,G,H,kl
+} Selec;
+
+}
+
 type Days enum {
   Mon, Tue, Wed, Thu = 4, Fri, Sat = -4, Sun
+}
+
+type Selec cenum {
+  D,G,H,kl
 }
 
 fn tostring(d Days) *char {
@@ -34,6 +46,8 @@ fn main() int {
 
   ASSERT(strcmp("Tue", e.tostring()) == 0)
   ASSERT(strcmp("Fri", Days.Fri.tostring()) == 0)
+
+  ASSERT(Selec.H != Selec.kl)
 
   printf(" ..ok\n")
   return 0

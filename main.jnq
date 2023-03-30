@@ -3,6 +3,10 @@ use * from tests.sub.util
 
 ccode {
 
+typedef enum Selec {
+  D,G,H,kl
+} Selec;
+
 typedef struct Pos2 {
   int i, j;
 } Pos2;
@@ -18,7 +22,10 @@ int i_(Pos2 *p) {
 Pos2 add_one(Pos2 p) {
   return (Pos2){p.i+1, p.j+1};
 }
+}
 
+type Selec cenum {
+  D,G,H,kl
 }
 
 type Pos2 cstruct {
@@ -56,8 +63,11 @@ fn main() int
 
   ASSERT(32 == x as i32)
 
+  ASSERT(Selec.H != Selec.kl)
+
   pp := Pos2{i:13, j:4}
 
+  printf("%d\n", Selec.H)
   printf("%d %d %lu %lu ok\n", p.i_(), p.j, offsetof(fBaseTypes.a), offsetof(Pos2.j))
   return 0
 }
