@@ -854,6 +854,11 @@ bool Type_convertable(Type *expect, Type *got) {
       return true;
   }
 
+  if (expect->kind == ArrayT && got->kind == ArrayT && expect->child == got->child) {
+    if (got->array_count <= expect->array_count)
+      return true;
+  }
+
   return false;
 }
 
@@ -1978,6 +1983,23 @@ Expression *Program_parse_construction(Program *p, Module *m, State *st) {
   return NULL;
 }
 
+Expression *Program_parse_array_construction(Program *p, Module *m, State *st) {
+  skip_whitespace(st);
+  State old = *st;
+
+  if (check_op(st, "[")) {
+    Expression *construct = Program_new_Expression(p, ConstructE, old.location);
+    construct->construct->p = Program_parse_parameter_list(p, m, st);
+    if (!check_op(st, "]"))
+      FATAL(&st->location, "unfinished constructor call, missing '}'");
+    construct->construct->type = NULL;
+    return construct;
+  }
+
+  *st = old;
+  return NULL;
+}
+
 Expression *Program_parse_suffix_expression(Program *p, Module *m, State *st, Expression *e) {
   skip_whitespace(st);
   State old = *st;
@@ -2073,7 +2095,6 @@ Expression *Program_parse_unary_operand(Program *p, Module *m, State *st) {
   }
 
   Expression *e = NULL;
-  // Variable temp_v;
   if (check_op(st, "(")) {
     e = Program_new_Expression(p, BraceE, back(st, 1));
     e->brace->o = Program_parse_expression(p, m, st);
@@ -2082,6 +2103,8 @@ Expression *Program_parse_unary_operand(Program *p, Module *m, State *st) {
     if (!check_op(st, ")"))
       FATAL(&st->location, "missing closing ')'");
   } else if ((e = Program_parse_construction(p, m, st))) {
+    ;
+  } else if ((e = Program_parse_array_construction(p, m, st))) {
     ;
   } else if ((e = Program_parse_auto_declaration_(p, m, st))) {
     ;
@@ -3863,6 +3886,28 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
     return t->fnT->d.returnType;
   }
   case ConstructE: {
+    if (!e->construct->type) {
+      Type *first = NULL;
+      for (Parameter *pa = e->construct->p.p; pa < e->construct->p.p + e->construct->p.len; ++pa) {
+        Type *pt = c_Expression_make_variables_typed(s, p, m, pa->p);
+        if (first && !Type_equal(pt, first))
+          FATAL(&e->location, "Type missmatch for array element of '%s'!", Type_name(first).s);
+        if (!first)
+          first = pt;
+      }
+      if (e->construct->p.len == 0 || !first)
+        FATAL(&e->location, "empty array construction");
+
+      Module *first_m = Type_defined_module(first);
+      if (!first_m)
+        FATAL(&e->location, "unknown module for type '%s'", Type_name(first).s);
+      e->construct->type = Module_find_array_type(first_m, 0, first);
+      if (!e->construct->type) {
+        e->construct->type = Program_add_type(p, ArrayT, "", first_m);
+        e->construct->type->array_count = 0;
+        e->construct->type->child = first;
+      }
+    }
     if (e->construct->type->kind != StructT && e->construct->type->kind != CStructT &&
         e->construct->type->kind != UnionT)
       for (int i = 0; i < e->construct->p.len; ++i) {
@@ -3910,7 +3955,7 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
             FATAL(&e->location, "Too many initializer for struct '%s'", Type_name(e->construct->type).s);
           Variable *ma = &e->construct->type->structT->member.v[i];
           pt = AdaptParameter_for(p, pt, ma->type, &e->construct->p.p[i]);
-          if (!Type_equal(pt, ma->type))
+          if (!Type_convertable(ma->type, pt))
             FATAL(&pa->p->location, "Type missmatch for member '%s' of '%s'!\n  expect '%s', got '%s' ", ma->name,
                   Type_name(e->construct->type).s, Type_name(ma->type).s, Type_name(pt).s);
         }

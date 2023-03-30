@@ -12,7 +12,7 @@ fn simple() {
   ASSERT(a[2] == 4)
 
   d := []int{10,20,30}
-  for (i := 0; i < 3; ++i) 
+  for (i := 0; i < 3; ++i)
     ASSERT(d[i] == (i+1)*10)
 }
 
@@ -58,14 +58,58 @@ fn matrix_test() {
   ASSERT(m[0][3] == 3)
 }
 
+type Dec struct {
+  f [3]f32,
+}
+
+type Comp struct {
+  name string,
+  tri [3]Dec,
+}
+
+fn array_construct_test() {
+  printf(" .array_construct_test\n")
+
+  d := [1,2,3]
+  ASSERT(d[0] == 1)
+  ASSERT(d[1] == 2)
+  ASSERT(d[2] == 3)
+
+  com := [
+    Comp{
+      name: "Karl",
+      tri: [
+        Dec{[0.1f,0.3f,0.5f]},
+        Dec{[0.1f,0.3f,0.5f]},
+        Dec{[0.1f,0.3f,0.5f]},
+      ]
+    },
+    Comp{
+      name: "Fred",
+      tri: [
+        Dec{[0.2f,0.4f,0.6f]},
+        Dec{[0.2f,0.4f,0.6f]},
+        Dec{[0.2f,0.4f,0.6f]},
+      ]
+    }
+  ]
+
+  ASSERT(com[0].tri[0].f[0] == 0.1f)
+  ASSERT(com[0].tri[0].f[1] == 0.3f)
+  ASSERT(com[0].tri[2].f[2] == 0.5f)
+  ASSERT(com[1].tri[1].f[1] == 0.4f)
+  ASSERT(com[1].tri[2].f[0] == 0.2f)
+}
+
 fn main() int {
   printf("array test\n")
-  
+
   simple()
   construct_assign()
   multidimension()
   matrix_test()
-  
+  array_construct_test()
+
   printf(" ...ok\n")
   return 0
 }

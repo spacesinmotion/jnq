@@ -1,12 +1,31 @@
 
-use * from tests.sub.util
+type Dec struct {
+  f [3]f32,
+}
 
-fn a_wrapper(v *vec[]int) int {
-  return v.len
+type Comp struct {
+  name string,
+  tri [3]Dec,
 }
 
 fn main() int
 {
+  d := [1,2,3]
+  ASSERT(d[0] == 1)
+  ASSERT(d[1] == 2)
+  ASSERT(d[2] == 3)
+
+  com := [
+    Comp{
+      name: "Karl",
+      tri: [
+        Dec{[0.1f,0.3f,0.5f]},
+        Dec{[0.1f,0.3f,0.5f]},
+        Dec{[0.1f,0.3f,0.5f]},
+      ]
+    }
+  ]
+
   printf("%d %d ok\n", 1, 2)
   return 0
 }
