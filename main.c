@@ -4710,16 +4710,33 @@ void write_symbols(Module *m) {
     first = false;
     fprintf(f, "{");
     fprintf(f, "\"name\":\"%s\",", l->type->name);
-    if (l->type->kind == StructT || l->type->kind == CStructT || l->type->kind == UnionT)
+    switch ((TypeKind)l->type->kind) {
+    case StructT:
+    case CStructT:
+    case UnionT:
       fprintf(f, "\"kind\":\"struct\",");
-    else if (l->type->kind == FnT)
+      break;
+    case FnT:
       fprintf(f, "\"kind\":\"fn\",");
-    else if (l->type->kind == EnumT)
+      break;
+    case EnumT:
+    case CEnumT:
       fprintf(f, "\"kind\":\"enum\",");
-    else if (l->type->kind == InterfaceT)
+      break;
+    case InterfaceT:
       fprintf(f, "\"kind\":\"interface\",");
-    else
-      FATALX("missing implementation %d!", l->type->kind);
+      break;
+    case UseT:
+    case BaseT:
+    case UnionTypeT:
+    case ArrayT:
+    case PointerT:
+    case VecT:
+    case PoolT:
+    case BufT:
+    case PlaceHolder:
+      break;
+    }
     fprintf(f, "\"uri\":\"file://%s\",", ll->file);
     fprintf(f, "\"line\":%d,", ll->start_line);
     fprintf(f, "\"column\":%d,", ll->start_column);
@@ -4755,6 +4772,20 @@ int symbols(Program *p) {
   return 0;
 }
 
+int symbols_file(Program *p, const char *file) {
+  p->single_file_mode = true;
+  char *code = readFile(file);
+  if (!code)
+    return 1;
+  State st = State_new(code, "dummy");
+  Module *m = Program_add_module(p, "dummy");
+  Program_parse_module(p, m, &st);
+  write_symbols(m);
+  free(code);
+
+  return 0;
+}
+
 int main(int argc, char *argv[]) {
   if (argc <= 1)
     FATALX("missing input file\n");
@@ -4764,6 +4795,8 @@ int main(int argc, char *argv[]) {
 
   const char *main_file = argv[1];
   if (strcmp(main_file, "symbols") == 0) {
+    if (argc > 2)
+      return symbols_file(&p, argv[2]);
     return symbols(&p);
   }
 
