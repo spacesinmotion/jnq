@@ -1626,7 +1626,7 @@ Variable Program_parse_variable_declaration(Program *p, Module *m, State *st) {
 VariableList Program_parse_variable_declaration_list(Program *p, Module *m, State *st, const char *end) {
   skip_whitespace(st);
 
-  Variable v[32];
+  Variable v[256];
   int v_len = 0;
 
   while (*st->c) {
@@ -1637,7 +1637,7 @@ VariableList Program_parse_variable_declaration_list(Program *p, Module *m, Stat
       return vl;
     }
 
-    if (v_len >= 32)
+    if (v_len >= 256)
       FATALX("Out of internal memory for variable list!");
     v[v_len] = Program_parse_variable_declaration(p, m, st);
     if (!v[v_len].name && check_op(st, "...")) {
