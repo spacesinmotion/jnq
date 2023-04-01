@@ -1,8 +1,12 @@
 
 cfn qsort(base any, num size_t, size size_t, comp fn_ptr)
 
-fn comp_int(a any, b any) int {
+fn comp_int(const a any, const b any) int {
   return *(a as *int) - *(b as *int);
+}
+
+fn early_out_apply(x *int) {
+  *x += 4
 }
 
 fn main() int
@@ -12,6 +16,10 @@ fn main() int
 
   qsort(v, 3ul, sizeof(i32), comp_int)
   printf("%d %d %d\n", v[0], v[1], v[2])
+
+  a := 38
+  early_out_apply(a)
+  ASSERT(a == 42)
 
   printf("%d %d ok\n", 1, 2)
   return 0

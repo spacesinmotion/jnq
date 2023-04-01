@@ -1,5 +1,4 @@
 
-
 fn some_bugs() {
   printf(" .some_bugs\n")
   a := 1
@@ -25,7 +24,7 @@ fn early_out(x *int) {
   if (*x == 0)
     return
   early_out_apply(x)
-} 
+}
 
 fn early_out_bug() {
   printf(" .early_out_bug\n")
