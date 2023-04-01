@@ -1,0 +1,22 @@
+
+ccode {
+void higher_order(void(*x)())
+{
+  x();
+}
+}
+
+cfn higher_order(x fn_ptr)
+
+fn call_back() {
+  printf("hallo\n")
+}
+
+fn main() int {
+  printf("functions\n")
+
+  higher_order(call_back)
+
+  printf(" ...ok\n")
+  return 0
+}

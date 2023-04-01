@@ -1,30 +1,20 @@
 
-type Dec struct {
-  f [3]f32,
+ccode {
+void higher_order(void(*x)())
+{
+  x();
+}
 }
 
-type Comp struct {
-  name string,
-  tri [3]Dec,
+cfn higher_order(x fn_ptr)
+
+fn call_back() {
+  printf("hallo\n")
 }
 
 fn main() int
 {
-  d := [1,2,3]
-  ASSERT(d[0] == 1)
-  ASSERT(d[1] == 2)
-  ASSERT(d[2] == 3)
-
-  com := [
-    Comp{
-      name: "Karl",
-      tri: [
-        Dec{[0.1f,0.3f,0.5f]},
-        Dec{[0.1f,0.3f,0.5f]},
-        Dec{[0.1f,0.3f,0.5f]},
-      ]
-    }
-  ]
+  higher_order(call_back)
 
   printf("%d %d ok\n", 1, 2)
   return 0
