@@ -1,20 +1,17 @@
 
-ccode {
-void higher_order(void(*x)())
-{
-  x();
-}
-}
+cfn qsort(base any, num u64 size u64, comp fn_ptr)
 
-cfn higher_order(x fn_ptr)
-
-fn call_back() {
-  printf("hallo\n")
+fn comp_int(a any, b any) int {
+  return *(a as *int) - *(b as *int);
 }
 
 fn main() int
 {
-  higher_order(call_back)
+  v := [3,1,2]
+  printf("%d %d %d\n", v[0], v[1], v[2])
+
+  qsort(v, 3ul, sizeof(i32), comp_int)
+  printf("%d %d %d\n", v[0], v[1], v[2])
 
   printf("%d %d ok\n", 1, 2)
   return 0

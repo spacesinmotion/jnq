@@ -12,10 +12,36 @@ fn call_back() {
   printf("hallo\n")
 }
 
+fn fn_ptr_test() {
+  printf("..fn_ptr_test\n")
+
+  higher_order(call_back)
+}
+
+cfn qsort(base any, num u64 size u64, comp fn_ptr)
+
+fn comp_int(a any, b any) int {
+  return *(a as *int) - *(b as *int);
+}
+
+fn qsort_any_test() {
+  printf("..qsort_any_test\n")
+
+  v := [3,1,2]
+  ASSERT(v[0] == 3)
+  ASSERT(v[1] == 1)
+  ASSERT(v[2] == 2)
+  qsort(v, 3ul, sizeof(i32), comp_int)
+  ASSERT(v[0] == 1)
+  ASSERT(v[1] == 2)
+  ASSERT(v[2] == 3)
+}
+
 fn main() int {
   printf("functions\n")
 
-  higher_order(call_back)
+  fn_ptr_test()
+  qsort_any_test()
 
   printf(" ...ok\n")
   return 0

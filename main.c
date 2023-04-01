@@ -739,6 +739,7 @@ Type f32 = (Type){"f32", .c_name = "float", BaseT, NULL};
 Type f64 = (Type){"f64", .c_name = "double", BaseT, NULL};
 Type String = (Type){"string", .c_name = "const char *", BaseT, NULL};
 Type FnPtr = (Type){"fn_ptr", .c_name = "const void *", BaseT, NULL};
+Type Any = (Type){"any", .c_name = "const void *", BaseT, NULL};
 
 Type Ellipsis = (Type){"...", .structT = &(Struct){{}, &global, (LocationRange){}}, BaseT, NULL};
 
@@ -775,6 +776,8 @@ Type *Module_find_type(Module *m, const char *b, const char *e) {
     return &String;
   if (6 == e - b && strncmp(FnPtr.name, b, 6) == 0)
     return &FnPtr;
+  if (3 == e - b && strncmp(Any.name, b, 3) == 0)
+    return &Any;
 
   for (TypeList *tl = m->types; tl; tl = tl->next) {
     if (tl->type->kind == UseT && tl->type->useT->take_all) {
@@ -863,6 +866,10 @@ bool Type_convertable(Type *expect, Type *got) {
   }
 
   if (expect == &FnPtr && (TypeKind)got->kind == FnT) {
+    return true;
+  }
+
+  if (expect == &Any && (TypeKind)got->kind == ArrayT) {
     return true;
   }
 
