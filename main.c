@@ -762,6 +762,8 @@ Type *Module_find_type(Module *m, const char *b, const char *e) {
     return &u32;
   if (3 == e - b && strncmp(u64.name, b, 3) == 0)
     return &u64;
+  if (6 == e - b && strncmp("size_t", b, 6) == 0)
+    return &u64;
   if (3 == e - b && strncmp(f32.name, b, 3) == 0)
     return &f32;
   if (3 == e - b && strncmp(f64.name, b, 3) == 0)

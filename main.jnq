@@ -1,5 +1,5 @@
 
-cfn qsort(base any, num u64 size u64, comp fn_ptr)
+cfn qsort(base any, num size_t, size size_t, comp fn_ptr)
 
 fn comp_int(a any, b any) int {
   return *(a as *int) - *(b as *int);
