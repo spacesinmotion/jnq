@@ -1,4 +1,10 @@
 
+cfn a_c_fn_with_return() 
+
+type Stuff struct {
+  type int
+}
+
 cfn qsort(base any, num size_t, size size_t, comp fn_ptr)
 
 fn comp_int(const a any, const b any) int {

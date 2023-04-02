@@ -1265,27 +1265,32 @@ bool check_key_word(const char *b, const char *e) {
     return true;
   if ((e - b) == 2 && strncmp(b, "if", 2) == 0)
     return true;
-  if ((e - b) == 2 && strncmp(b, "fn", 2) == 0)
-    return true;
+  // if ((e - b) == 2 && strncmp(b, "fn", 2) == 0)
+  //   return true;
   if ((e - b) == 2 && strncmp(b, "do", 2) == 0)
     return true;
-  if ((e - b) == 3 && strncmp(b, "cfn", 3) == 0)
-    return true;
+  // if ((e - b) == 3 && strncmp(b, "cfn", 3) == 0)
+  //   return true;
   if ((e - b) == 3 && strncmp(b, "for", 3) == 0)
     return true;
   if ((e - b) == 3 && strncmp(b, "vec", 3) == 0)
     return true;
   if ((e - b) == 3 && strncmp(b, "buf", 3) == 0)
     return true;
-  if ((e - b) == 3 && strncmp(b, "use", 3) == 0)
-    return true;
-  if ((e - b) == 4 && strncmp(b, "type", 4) == 0)
-    return true;
+  // if ((e - b) == 3 && strncmp(b, "use", 3) == 0)
+  //   return true;
+  // if ((e - b) == 4 && strncmp(b, "type", 4) == 0)
+  //   return true;
   if ((e - b) == 4 && strncmp(b, "pool", 4) == 0)
     return true;
   if ((e - b) == 5 && strncmp(b, "while", 5) == 0)
     return true;
   return false;
+}
+
+bool check_type_key_word_at(const char *b) {
+  return strncmp(b, "fn", 2) == 0 || strncmp(b, "cfn", 3) == 0 || strncmp(b, "use", 3) == 0 ||
+         strncmp(b, "type", 4) == 0;
 }
 
 bool check_identifier(State *st) {
@@ -1739,7 +1744,8 @@ bool Program_parse_fn_decl(Program *p, Module *m, FunctionDecl *fnd, State *st) 
     fnd->parameter = Program_parse_variable_declaration_list(p, m, st, ")");
     skip_whitespace(st);
     fnd->return_type_location = st->location;
-    fnd->returnType = Program_parse_declared_type(p, m, st);
+    if (!check_type_key_word_at(st->c))
+      fnd->returnType = Program_parse_declared_type(p, m, st);
     return true;
   }
 
