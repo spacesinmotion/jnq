@@ -1913,12 +1913,12 @@ Expression *Program_parse_atom(Program *p, State *st) {
 Expression *Program_parse_expression(Program *p, Module *m, State *st);
 
 ParameterList Program_parse_parameter_list(Program *p, Module *m, State *st) {
-  Parameter param[32];
+  Parameter param[256];
   int param_len = 0;
 
   Expression *e = NULL;
   while ((e = Program_parse_expression(p, m, st))) {
-    if (param_len >= 32)
+    if (param_len >= 256)
       FATALX("out of local memory for parameter list");
     Parameter *pp = &param[param_len++];
     pp->p = e;
