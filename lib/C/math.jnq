@@ -1,33 +1,62 @@
 
-cfn sin(a double) double 
-cfn asin(a double) double 
-cfn cos(a double) double 
-cfn acos(a double) double 
-cfn tan(a double) double 
-cfn atan(a double) double 
-cfn atan2(y double, x double) double 
-cfn sinf(a float) float 
-cfn asinf(a float) float 
-cfn cosf(a float) float 
-cfn acosf(a float) float 
-cfn tanf(a float) float 
-cfn atanf(a float) float 
-cfn atan2f(y float, x float) float 
+cfn sin(a double) double
 
-cfn floor(d double) double 
-cfn ceil(d double) double 
-cfn round(d double) double 
-cfn trunc(d double) double 
-cfn floorf(d float) float 
-cfn ceilf(d float) float 
-cfn roundf(d float) float 
-cfn truncf(d float) float 
+cfn asin(a double) double
 
-cfn fabs(d double) double 
-cfn fabsf(d float) float 
-cfn abs(i int) int 
+cfn cos(a double) double
 
-cfn pow(d double, c double) double 
+cfn acos(a double) double
+
+cfn tan(a double) double
+
+cfn atan(a double) double
+
+cfn atan2(y double, x double) double
+
+cfn sinf(a float) float
+
+cfn asinf(a float) float
+
+cfn cosf(a float) float
+
+cfn acosf(a float) float
+
+cfn tanf(a float) float
+
+cfn atanf(a float) float
+
+cfn atan2f(y float, x float) float
+
+cfn floor(d double) double
+
+cfn ceil(d double) double
+
+cfn round(d double) double
+
+cfn trunc(d double) double
+
+cfn floorf(d float) float
+
+cfn ceilf(d float) float
+
+cfn roundf(d float) float
+
+cfn truncf(d float) float
+
+cfn fabs(d double) double
+
+cfn fabsf(d float) float
+
+cfn abs(i int) int
+
+cfn pow(d double, c double) double
+
 cfn sqrt(a double) double
-cfn powf(d float, c float) float 
-cfn sqrtf(a float) float 
+
+cfn powf(d float, c float) float
+
+cfn sqrtf(a float) float
+
+cfn fmod(a double, b double) double
+
+cfn fmodf(a float, b float) float

@@ -1,5 +1,5 @@
 
-cfn a_c_fn_with_return() 
+cfn a_c_fn_with_return()
 
 type Stuff struct {
   type int
@@ -15,6 +15,13 @@ fn early_out_apply(x *int) {
   *x += 4
 }
 
+type RenderObject interface {
+  fn draw(r *RenderObject)
+  fn dist(r *RenderObject) float
+  fn dead(r *RenderObject) bool
+  fn destroy(r *RenderObject)
+}
+
 fn main() int
 {
   v := [3,1,2]
@@ -27,6 +34,6 @@ fn main() int
   early_out_apply(a)
   ASSERT(a == 42)
 
-  printf("%d %d ok\n", 1, 2)
+  printf("%d %d %lu ok\n", 1, 2, sizeof(RenderObject))
   return 0
 }

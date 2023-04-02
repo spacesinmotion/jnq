@@ -3149,8 +3149,8 @@ void c_expression(FILE *f, Expression *e) {
       FATAL(&e->location, "unknown type for id '%s'", e->id->name);
     if (e->id->type->kind == FnT && !e->id->type->fnT->is_extern_c)
       fprintf(f, "%s", Type_defined_module(e->id->type)->c_name);
-    else if ((e->id->type->kind == StructT || e->id->type->kind == UnionT) && e->id->type->name &&
-             strcmp(e->id->name, e->id->type->name) == 0)
+    else if ((e->id->type->kind == StructT || e->id->type->kind == InterfaceT || e->id->type->kind == UnionT) &&
+             e->id->type->name && strcmp(e->id->name, e->id->type->name) == 0)
       fprintf(f, "%s", Type_defined_module(e->id->type)->c_name);
     else if (e->id->type->kind == BaseT &&
              e->id->type == Module_find_type(&global, e->id->name, e->id->name + strlen(e->id->name))) {
