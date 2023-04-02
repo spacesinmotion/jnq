@@ -862,7 +862,7 @@ bool Type_convertable(Type *expect, Type *got) {
       return true;
   }
 
-  if (expect->kind == ArrayT && got->kind == ArrayT && expect->child == got->child) {
+  if (expect->kind == ArrayT && got->kind == ArrayT && Type_convertable(expect->child, got->child)) {
     if (got->array_count <= expect->array_count)
       return true;
   }
