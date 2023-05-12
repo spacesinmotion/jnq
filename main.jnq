@@ -1,9 +1,9 @@
 
-cfn a_c_fn_with_return()
-
 type Stuff struct {
   type int
 }
+
+cfn a_c_fn_with_return()
 
 cfn qsort(base any, num size_t, size size_t, comp fn_ptr)
 

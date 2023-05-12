@@ -514,7 +514,7 @@ typedef PACK(struct Use {
   Module *module;
   Type **type;
   uint16_t type_len;
-  Location location;
+  LocationRange location;
   bool take_all;
 }) Use;
 
@@ -609,13 +609,14 @@ LocationRange *Type_location(Type *t) {
     return &t->interfaceT->location;
   case FnT:
     return &t->fnT->location;
+  case UseT:
+    return &t->useT->location;
   case VecT:
   case PoolT:
   case BufT:
   case ArrayT:
   case PointerT:
   case PlaceHolder:
-  case UseT:
   case BaseT:
     break;
   }
@@ -1377,8 +1378,9 @@ typedef struct StringView {
 } StringView;
 
 bool Program_parse_use_path(Program *p, Module *m, State *st) {
+  Location sl = back(st, 3);
   skip_whitespace(st);
-  State start = *st, old = *st;
+  State old = *st;
 
   StringView imp[32];
   int imp_len = 0;
@@ -1445,7 +1447,8 @@ bool Program_parse_use_path(Program *p, Module *m, State *st) {
   const char *n = Program_copy_string(p, name, strlen(name));
   Use *u = Program_add_type(p, UseT, n, m)->useT;
   u->module = use;
-  u->location = start.location;
+  u->location = NewRange(sl, st->location);
+
   u->take_all = take_all;
   if (!take_all) {
     u->type_len = imp_len;
@@ -1793,33 +1796,34 @@ FnVec Program_parse_interface_fns(Program *p, Module *m, Type *in, State *st) {
 }
 
 void Program_parse_type(Program *p, Module *m, State *st) {
+  Location old = back(st, 4);
   skip_whitespace(st);
-  State old = *st;
 
+  const char *name_start = st->c;
   if (check_identifier(st)) {
-    const char *name = Program_copy_string(p, old.c, st->c - old.c);
+    const char *name = Program_copy_string(p, name_start, st->c - name_start);
     bool is_union = check_word(st, "union");
     bool is_c_struct = !is_union && check_word(st, "cstruct");
     if ((is_union || is_c_struct || check_word(st, "struct")) && check_op(st, "{")) {
       Struct *s = Program_add_type(p, is_union ? UnionT : (is_c_struct ? CStructT : StructT), name, m)->structT;
       s->member = Program_parse_variable_declaration_list(p, m, st, "}");
-      s->location = NewRange(old.location, st->location);
+      s->location = NewRange(old, st->location);
     } else if (check_word(st, "enum") && check_op(st, "{")) {
       Enum *e = Program_add_type(p, EnumT, name, m)->enumT;
       e->entries = Program_parse_enum_entry_list(p, st);
-      e->location = NewRange(old.location, st->location);
+      e->location = NewRange(old, st->location);
     } else if (check_word(st, "cenum") && check_op(st, "{")) {
       Enum *e = Program_add_type(p, CEnumT, name, m)->enumT;
       e->entries = Program_parse_enum_entry_list(p, st);
-      e->location = NewRange(old.location, st->location);
+      e->location = NewRange(old, st->location);
     } else if (check_word(st, "uniontype") && check_op(st, "{")) {
       Union *u = Program_add_type(p, UnionTypeT, name, m)->unionT;
       u->member = Program_parse_union_entry_list(p, m, st);
-      u->location = NewRange(old.location, st->location);
+      u->location = NewRange(old, st->location);
     } else if (check_word(st, "interface") && check_op(st, "{")) {
       Type *in = Program_add_type(p, InterfaceT, name, m);
       in->interfaceT->methods = Program_parse_interface_fns(p, m, in, st);
-      in->interfaceT->location = NewRange(old.location, st->location);
+      in->interfaceT->location = NewRange(old, st->location);
     } else
       FATAL(&st->location, "Missing type declaration");
   } else
@@ -2419,8 +2423,8 @@ Statement *Program_parse_scope_block(Program *p, Module *m, State *st) {
 }
 
 void Program_parse_fn(Program *p, Module *m, State *st, bool extc) {
+  Location start = back(st, extc ? 3 : 2);
   skip_whitespace(st);
-  State old = *st;
 
   const char *b = st->c;
   if (check_identifier(st)) {
@@ -2437,7 +2441,7 @@ void Program_parse_fn(Program *p, Module *m, State *st, bool extc) {
       else
         FATAL(&st->location, "Missing function body");
     }
-    fn->location = NewRange(old.location, st->location);
+    fn->location = NewRange(start, st->location);
   } else
     FATAL(&st->location, "Missing type name");
 }
@@ -4270,9 +4274,11 @@ void c_check_types(Module *m) {
       continue;
 
     for (Type **t = tl->type->useT->type; t < (tl->type->useT->type + tl->type->useT->type_len); ++t) {
-      if ((*t)->kind == PlaceHolder)
-        FATAL(&tl->type->useT->location, "include unkown type '%s' in module '%s'", Type_name(*t).s,
-              tl->type->useT->module->path);
+      if ((*t)->kind == PlaceHolder) {
+        LocationRange *r = &tl->type->useT->location;
+        Location l = (Location){r->file, r->start_line, r->start_column};
+        FATAL(&l, "include unkown type '%s' in module '%s'", Type_name(*t).s, tl->type->useT->module->path);
+      }
     }
   }
   for (TypeList *tl = m->types; tl; tl = tl->next) {
@@ -4756,6 +4762,8 @@ void write_symbols(Module *m) {
       fprintf(f, "\"kind\":\"interface\",");
       break;
     case UseT:
+      fprintf(f, "\"kind\":\"import\",");
+      break;
     case BaseT:
     case UnionTypeT:
     case ArrayT:
