@@ -4631,13 +4631,14 @@ void c_Program(FILE *f, Program *p, Module *m) {
   }
 }
 
+#define fn_location ((Location){.file = "", .line = 1, .column = 3})
 void Program_add_defaults(Program *p) {
-  Program_parse_fn(p, &global, &(State){"sizeof(...) u64\n", null_location}, true);
-  Program_parse_fn(p, &global, &(State){"offsetof(...) u64\n", null_location}, true);
-  Program_parse_fn(p, &global, &(State){"ASSERT(...)\n", null_location}, true);
-  Program_parse_fn(p, &global, &(State){"printf(d *char, ...) *char\n", null_location}, true);
-  Program_parse_fn(p, &global, &(State){"realloc(d *char, s int) *char\n", null_location}, true);
-  Program_parse_fn(p, &global, &(State){"free(d *char)\n", null_location}, true);
+  Program_parse_fn(p, &global, &(State){"sizeof(...) u64\n", fn_location}, true);
+  Program_parse_fn(p, &global, &(State){"offsetof(...) u64\n", fn_location}, true);
+  Program_parse_fn(p, &global, &(State){"ASSERT(...)\n", fn_location}, true);
+  Program_parse_fn(p, &global, &(State){"printf(d *char, ...) *char\n", fn_location}, true);
+  Program_parse_fn(p, &global, &(State){"realloc(d *char, s int) *char\n", fn_location}, true);
+  Program_parse_fn(p, &global, &(State){"free(d *char)\n", fn_location}, true);
 }
 
 void init_lib_path() {
