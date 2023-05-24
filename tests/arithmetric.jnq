@@ -1,5 +1,4 @@
 
-
 fn on_float() {
   printf(" .on_float\n")
 
@@ -23,16 +22,16 @@ fn on_int() {
   ASSERT(14 == 4 + 5 * 2)
   ASSERT(17 != 4 + 5 * 2)
   ASSERT(!(14 != 4 + 5 * 2))
-  
+
   ASSERT(18 == (4 + 5) * 2)
 }
 
 fn main() int {
   printf("arithmetric\n")
 
-  on_int()
+  on_int(     )
   on_float()
-  
+
   printf(" ...ok\n")
   return 0
 }

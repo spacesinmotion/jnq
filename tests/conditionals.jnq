@@ -5,20 +5,29 @@ fn main() int {
   a := 3
   b := 42
 
-  if (a == 2) 
+  if (a == 2)
     b = 42
-  
+
   ASSERT(b == 42)
 
   if (b == 42) {
-      b /= 2 
+    b /= 2
   }
   ASSERT(b == 21)
 
-  if (b == 42) 
-    b *= b 
+  if (b == 42)
+    b *= b
   else
     b = b * 3
+
+  b = 21
+  if (b == 42) {
+    b *= b
+  } else if (b!=6) {
+    b = b * 3
+  } else {
+    b = b * 3
+  }
 
   ASSERT(b == 21 * 3)
 

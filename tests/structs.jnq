@@ -17,7 +17,7 @@ type Spold struct {
 }
 
 fn set_a(s *Stuff, x int) {
-  s->a = x
+  s.a = x
 }
 
 fn swap_a_b(s Stuff) Stuff {
@@ -238,3 +238,17 @@ fn main() int {
   printf(" ...ok\n")
   return 0
 }
+
+fn compined_check_format()  {
+  printf(" .compined_check_format\n")
+
+  sa := Spold{  x: Stuff{  a: 3, b: 12 }, y: Swoll{b: 4.2} }
+
+  sb := Spold{
+    x: Stuff{
+      a: 3,
+      b: 12
+    },
+    y: Swoll{b: 4.2}
+  }
+  }

@@ -1,7 +1,9 @@
 
 use State from src.State
 use Type from src.Type
+
 use Statement from src.Statement
+
 use Program from src.Program
 
 fn main() int {

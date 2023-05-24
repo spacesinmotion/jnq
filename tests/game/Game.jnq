@@ -1,13 +1,13 @@
 
-use base.Camera
-use base.Object
-use base.Clock
-use base.HealthBar
-use base.HealthOverlayBar
-use base.XPOverlayBar
-use base.Menu
-use base.Log
-use base.Inventory
+use * from base.Camera
+use * from base.Object
+use * from base.Clock
+use * from base.HealthBar
+use * from base.HealthOverlayBar
+use * from base.XPOverlayBar
+use * from base.Menu
+use * from base.Log
+use * from base.Inventory
 
 type Game struct {
 
