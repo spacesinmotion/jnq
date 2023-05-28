@@ -9,6 +9,4 @@ use * from base.Menu
 use * from base.Log
 use * from base.Inventory
 
-type Game struct {
-
-}
+type Game struct {}

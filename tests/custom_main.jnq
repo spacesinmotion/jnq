@@ -6,7 +6,7 @@ ccode {
 
 type Thing struct {
   x int
-} 
+}
 
 fn increment(t *Thing) {
   t.x++

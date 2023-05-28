@@ -1,8 +1,8 @@
 
 type Vec3 struct {
-  x float, 
-  y float, 
-  z float, 
+  x float,
+  y float,
+  z float,
 }
 
 fn add(v1 Vec3, v2 Vec3) Vec3 {

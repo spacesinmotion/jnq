@@ -2,17 +2,17 @@
 use Point, Nix from sub.util
 
 type Vec2 struct {
-  x float, 
+  x float,
   y float,
 }
 
 type Vec3 struct {
-  x float 
+  x float
   y float
-  z float 
+  z float
 }
 
-type VecU uniontype { Vec3, Vec2, Point, Nix }
+type VecU uniontype {Vec3, Vec2, Point, Nix}
 
 fn main() int {
   printf("uniontypes\n")

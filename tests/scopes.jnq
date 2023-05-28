@@ -11,7 +11,7 @@ fn main() int {
   }
 
   ASSERT(a == 5)
-  
+
   printf(" ...ok\n")
   return 0
 }

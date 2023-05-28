@@ -6,15 +6,15 @@ use Graphics from tests.game.gfx.Graphics
 type Object struct {
   c Vec2
   r float
-} 
+}
 
 fn create(cx float, cy float, r float) Object {
-  return Object{Vec2{x:cx, y:cy}, r}
+  return Object{Vec2{x: cx, y: cy}, r}
 }
 
 fn update(self *Object, dt float) {
   ASSERT(false)
-} 
+}
 
 fn draw(self *Object, g *Graphics) {
 }

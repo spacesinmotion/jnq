@@ -1,5 +1,5 @@
 
-use OverlayText from tests.game.gfx.OverlayText 
+use OverlayText from tests.game.gfx.OverlayText
 use Graphics from tests.game.gfx.Graphics
 use floor, pow from C.math
 
@@ -7,7 +7,7 @@ type Clock struct {
   display *OverlayText
   time float
   minute int
-  second int 
+  second int
 }
 
 fn NewClock(gfx *Graphics, W int) Clock {
@@ -19,7 +19,7 @@ fn NewClock(gfx *Graphics, W int) Clock {
   }
   cl.display.set_scale(3.0f, 3.0f)
   cl.display.set_position((W - 6 * 24) as float, 8.0f)
-  cl.display.set_color(224.0f/255.0f, 53.0f/255.0f, 34.0f/255.0f, 1.0f)
+  cl.display.set_color(224.0f / 255.0f, 53.0f / 255.0f, 34.0f / 255.0f, 1.0f)
   cl.display.set_text("00:00")
   return cl
 }

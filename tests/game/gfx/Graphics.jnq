@@ -7,9 +7,7 @@ use BillboardImage from BillboardImage
 
 type Graphics struct {}
 
-fn look_at(gfx *Graphics, eye Vec3, target Vec3, up Vec3) {
-  
-}
+fn look_at(gfx *Graphics, eye Vec3, target Vec3, up Vec3) {}
 
 fn new_overlay_text(gfx *Graphics) *OverlayText {
   return null as *OverlayText

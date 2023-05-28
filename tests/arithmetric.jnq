@@ -29,7 +29,7 @@ fn on_int() {
 fn main() int {
   printf("arithmetric\n")
 
-  on_int(     )
+  on_int()
   on_float()
 
   printf(" ...ok\n")

@@ -1041,6 +1041,8 @@ void format_dowhile_like(Formatter *f, State *st, int indent) {
 }
 
 void format_scopex(Formatter *f, State *st, int indent, char end, bool skip_end) {
+  if (after_space_line(*st) != '\n')
+    expect_l_space(f, st, "");
   const char *t = NULL;
   while (*st->c) {
     if (*st->c == end) {
@@ -1090,6 +1092,21 @@ void format_scopex(Formatter *f, State *st, int indent, char end, bool skip_end)
       format_else_like(f, st, indent);
     } else if (expect_word(f, st, "do")) {
       format_dowhile_like(f, st, indent);
+    } else if (expect_word(f, st, "ccode") || expect_word(f, st, "cmain")) {
+      expect_l_space(f, st, " ");
+      if (*st->c == '{') {
+        State_skip(st);
+        int c = 1;
+        while (*st->c) {
+          if (*st->c == '{')
+            ++c;
+          if (*st->c == '}')
+            --c;
+          State_skip(st);
+          if (c == 0)
+            break;
+        }
+      }
     } else if (expect_unary_pre(f, st)) {
       if (after_space_line(*st) == '\n')
         expect_indent_line(f, st, 0);
@@ -1106,16 +1123,23 @@ void format_scopex(Formatter *f, State *st, int indent, char end, bool skip_end)
       if (after_space_line(*st) != '\n')
         expect_l_space(f, st, " ");
     } else if (expect_string(f, st) || expect_number(f, st) || expect_identifier(f, st)) {
-      if (op_after_space(*st, ":="))
+      if (op_after_space(*st, "++") || op_after_space(*st, "--"))
+        expect_l_space(f, st, "");
+      else if (op_after_space(*st, ":="))
         expect_l_space(f, st, " ");
       else {
         const char n = after_space_line(*st);
         if (n == '{' && end != '\0')
           expect_l_space(f, st, "");
-        else if (n == '(' || n == '[' || n == ')' || n == ']' || n == '}' || n == ';' || n == ':' || n == ',' ||
-                 n == '.' || n == '\n')
+        else if (n == '(' || n == '[' || n == ')' || n == ']' || n == '}' || n == ';' || n == ',' || n == '.' ||
+                 n == '\n')
           expect_l_space(f, st, "");
-        else
+        else if (n == ':') {
+          if (isspace(*st->c))
+            expect_l_space(f, st, " ");
+          else
+            expect_l_space(f, st, "");
+        } else
           expect_l_space(f, st, " ");
       }
     } else

@@ -2,8 +2,8 @@
 use sqrt from C.math
 
 type Vec2 struct {
-  x float, 
-  y float, 
+  x float,
+  y float,
 }
 
 fn distance(self Vec2, o Vec2) float {

@@ -13,7 +13,7 @@ type XPOverlayBar struct {
   current_xp float
   xp float
   max_xp float
-  
+
   level int
   all_xp float
 }
@@ -26,7 +26,7 @@ fn NewXPOverlayBar(gfx *Graphics, max_xp float) XPOverlayBar {
   back.set_position(64.0f, 16.0f + 8.0f + 16.0f)
   back.set_color_rgb(4, 3, 34)
   back.set_size(w, h)
-  
+
   bar := back.clone()
   bar.set_color_rgb(240, 233, 26)
 

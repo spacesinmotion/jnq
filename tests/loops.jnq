@@ -44,7 +44,7 @@ fn do_while_loops()
   ASSERT(a == 0)
 
   do {
-    --a;
+    --a
   } while (a > 0)
 }
 

@@ -2,15 +2,15 @@
 use rand from C.stdlib
 
 fn random() float {
-  return (rand() % 100000) as double / 1000000.0
+  return(rand() % 100000) as double / 1000000.0
 }
 
 fn rand_in(mi float, ma float) float {
-  return mi + random() * (ma-mi) 
+  return mi + random() * (ma -mi)
 }
 
 fn lerp(a float, b float, t float) float {
-  return (1.0f-t) * a + t * b
+  return(1.0f - t) * a + t * b
 }
 
 fn min(a float, b float) float {

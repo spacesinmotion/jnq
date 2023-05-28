@@ -161,19 +161,19 @@ fn none_narrowing_conversation() {
 fn main() int {
   printf("basetypes...\n")
 
-  ASSERT(1ul = = sizeof(i8))
-  ASSERT(1ul = = sizeof(u8))
+  ASSERT(1ul == sizeof(i8))
+  ASSERT(1ul == sizeof(u8))
 
-  ASSERT(2ul = = sizeof(i16))
-  ASSERT(2ul = = sizeof(u16))
+  ASSERT(2ul == sizeof(i16))
+  ASSERT(2ul == sizeof(u16))
 
-  ASSERT(4ul = = sizeof(i32))
-  ASSERT(4ul = = sizeof(u32))
-  ASSERT(4ul = = sizeof(f32))
+  ASSERT(4ul == sizeof(i32))
+  ASSERT(4ul == sizeof(u32))
+  ASSERT(4ul == sizeof(f32))
 
-  ASSERT(8ul = = sizeof(i64))
-  ASSERT(8ul = = sizeof(u64))
-  ASSERT(8ul = = sizeof(f64))
+  ASSERT(8ul == sizeof(i64))
+  ASSERT(8ul == sizeof(u64))
+  ASSERT(8ul == sizeof(f64))
 
   // ASSERT(1ul == sizeof(i8))
   // ASSERT(1ul == sizeof(u8))
@@ -181,18 +181,18 @@ fn main() int {
   // ASSERT(2ul == sizeof(i16))
   // ASSERT(2ul == sizeof(u16))
 
-  ASSERT(4ul = = sizeof(42))
-  ASSERT(4ul = = sizeof(42u))
-  ASSERT(4ul = = sizeof(2.4f))
+  ASSERT(4ul == sizeof(42))
+  ASSERT(4ul == sizeof(42u))
+  ASSERT(4ul == sizeof(2.4f))
 
-  ASSERT(8ul = = sizeof(42l))
-  ASSERT(8ul = = sizeof(76lu))
-  ASSERT(8ul = = sizeof(0.5))
+  ASSERT(8ul == sizeof(42l))
+  ASSERT(8ul == sizeof(76lu))
+  ASSERT(8ul == sizeof(0.5))
   // ASSERT(8ul == sizeof(0.5d))
 
-  ASSERT(16ul = = sizeof(fBaseTypes))
-  ASSERT(0ul = = offsetof(fBaseTypes.a))
-  ASSERT(8ul = = offsetof(fBaseTypes.b))
+  ASSERT(16ul == sizeof(fBaseTypes))
+  ASSERT(0ul == offsetof(fBaseTypes.a))
+  ASSERT(8ul == offsetof(fBaseTypes.b))
 
   printf(" ...ok\n")
   return 0

@@ -153,7 +153,7 @@ fn member_call_with_args()  {
   ASSERT(s.a == 11)
 }
 
-type Kool enum { KoolA, KoolB, KoolC}
+type Kool enum {KoolA, KoolB, KoolC}
 
 type Vec struct {
   v[3]double
@@ -216,7 +216,7 @@ fn structs_from_c()
 {
   printf(" .structs_from_c\n")
 
-  p := add_one(Pos2_new(4,2))
+  p := add_one(Pos2_new(4, 2))
 
   ASSERT(5 == p.i_())
   ASSERT(3 == p.j)
@@ -242,7 +242,7 @@ fn main() int {
 fn compined_check_format()  {
   printf(" .compined_check_format\n")
 
-  sa := Spold{  x: Stuff{  a: 3, b: 12}, y: Swoll{b: 4.2} }
+  sa := Spold{x: Stuff{a: 3, b: 12}, y: Swoll{b: 4.2} }
 
   sb := Spold{
     x: Stuff{

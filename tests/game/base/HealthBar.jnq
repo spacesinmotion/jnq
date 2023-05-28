@@ -48,7 +48,7 @@ fn change_intensitiy(hb *HealthBar) float {
 }
 
 fn update(hb *HealthBar, dt float) bool {
-  if (hb.changed_time > 0.0f) 
+  if (hb.changed_time > 0.0f)
     hb.changed_time = hb.changed_time - dt
   else
     hb.changed_time = 0.0f

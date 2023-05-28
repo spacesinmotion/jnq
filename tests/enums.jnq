@@ -16,18 +16,18 @@ type Days enum {
 }
 
 type Selec cenum {
-  D,G,H,kl
+  D, G, H, kl
 }
 
 fn tostring(d Days) *char {
-  switch(d) {
-    case Days.Mon: return "Mon"
-    case Days.Tue: return "Tue"
-    case Days.Wed: return "Wed"
-    case Days.Thu: return "Thu"
-    case Days.Fri: return "Fri"
-    case Days.Sat: return "Sat"
-    case Days.Sun: return "Sun"
+  switch (d) {
+  case Days.Mon: return "Mon"
+  case Days.Tue: return "Tue"
+  case Days.Wed: return "Wed"
+  case Days.Thu: return "Thu"
+  case Days.Fri: return "Fri"
+  case Days.Sat: return "Sat"
+  case Days.Sun: return "Sun"
   }
 }
 

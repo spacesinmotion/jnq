@@ -1,6 +1,6 @@
 
 use Item, ItemItem, NewItem from Item
-use Image from tests.game.gfx.Image 
+use Image from tests.game.gfx.Image
 use OverlayText from tests.game.gfx.OverlayText
 use Graphics from tests.game.gfx.Graphics
 use strcmp from C.str
@@ -15,35 +15,35 @@ fn NewInventory() Inventory {
 }
 
 fn destroy(inv *Inventory) {
-  for (i := 0; i< inv.items.len; ++i ) {
+  for (i := 0; i < inv.items.len; ++i) {
     m := &inv.items[i]
     m.text.destroy()
     if (m.img)
-      m.img.destroy() 
+      m.img.destroy()
   }
-  for (i := 0; i< inv.tools.len; ++i ) {
+  for (i := 0; i < inv.tools.len; ++i) {
     m := &inv.tools[i]
     m.text.destroy()
     if (m.img)
-      m.img.destroy() 
+      m.img.destroy()
   }
   inv.items.free()
   inv.tools.free()
 }
 
 fn find_item(l *vec[]Item, name *char) *Item {
-  for (i := 0; i < l.len; ++i ) 
+  for (i := 0; i < l.len; ++i)
     if (strcmp(l[i].item.name, name) == 0)
       return &l[i]
   return null
 }
 
-fn add_to(l *vec[]Item, itit *ItemItem, row int) *Item{
+fn add_to(l *vec[]Item, itit *ItemItem, row int) *Item {
   it := find_item(l, itit.name);
   if (!it) {
     l.push(NewItem(null as *Graphics, 0, row, itit))
-    it := &l[l.len-1];
-  } 
+    it := &l[l.len - 1];
+  }
   return it
 }
 
@@ -65,29 +65,29 @@ fn count_thing(inv *Inventory, item *ItemItem) int {
   if (it)
     return it.count
   it = find_item(&inv.tools, item.name);
-  if (it != null && it.percent > 0.0f) 
+  if (it != null && it.percent > 0.0f)
     return 1
 
   return 0
 }
 
 fn remove(inv *Inventory, depends *Item, count int) {
-  for (i:=0; i<count; ++i) {
+  for (i := 0; i < count; ++i) {
     d := &depends[i]
     n := d.item.name
     it := find_item(&inv.items, n);
     if (it)
-      it.add_count(-d.count) 
+      it.add_count(-d.count)
     it = find_item(&inv.tools, n);
     if (it)
-      it.add_percent(-d.item.usage) 
+      it.add_percent(-d.item.usage)
   }
 }
 
 fn update(inv *Inventory, dt float) {
-  for (i := 0; i< inv.items.len; ++i ) 
+  for (i := 0; i < inv.items.len; ++i)
     inv.items[i].update(i);
-  for (i := 0; i< inv.tools.len; ++i ) 
+  for (i := 0; i < inv.tools.len; ++i)
     inv.tools[i].update(i);
 }
 

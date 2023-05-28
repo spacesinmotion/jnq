@@ -12,37 +12,37 @@ type Robot struct {
   alive bool
 }
 
-type Field enum { EmptyC, CoinC, WallC, RobotC }
+type Field enum {EmptyC, CoinC, WallC, RobotC}
 
 fn as_char(f Field, robi *Robot) char {
-  switch(f) {
-    case Field.EmptyC: return ' ' 
-    case Field.CoinC: return 'c' 
-    case Field.WallC: return 'W' 
-    case Field.RobotC: 
-      if (robi.dir == 0)
-        return '>'
-      else if (robi.dir == 1)
-        return '.'
-      else if (robi.dir == 2)
-        return '<'
-      else if (robi.dir == 3)
-        return '\''
-      else 
-        return 'X'
+  switch (f) {
+  case Field.EmptyC: return ' '
+  case Field.CoinC: return 'c'
+  case Field.WallC: return 'W'
+  case Field.RobotC:
+    if (robi.dir == 0)
+      return '>'
+    else if (robi.dir == 1)
+      return '.'
+    else if (robi.dir == 2)
+      return '<'
+    else if (robi.dir == 3)
+      return '\''
+    else
+      return 'X'
 
-    default: return ':' 
+  default: return ':'
   }
 }
 
 type Game struct {
-  fields [6][6]Field
+  fields[6][6]Field
   robi Robot
 }
 
 fn clear_field(g *Game) {
-  for (i := 0; i<6; ++i)
-    for (j := 0; j<6; ++j)
+  for (i := 0; i < 6; ++i)
+    for (j := 0; j < 6; ++j)
       g.fields[i][j] = Field.EmptyC
 }
 
@@ -83,8 +83,7 @@ fn rand_field(g *Game) {
     if (c < 6) {
       x := rand() % 6
       y := rand() % 6
-      if (g.fields[x][y] == Field.EmptyC)
-      {
+      if (g.fields[x][y] == Field.EmptyC) {
         g.fields[x][y] = Field.CoinC
         c++
       }
@@ -92,8 +91,7 @@ fn rand_field(g *Game) {
     if (w < 6) {
       x := rand() % 6
       y := rand() % 6
-      if (g.fields[x][y] == Field.EmptyC)
-      {
+      if (g.fields[x][y] == Field.EmptyC) {
         g.fields[x][y] = Field.WallC
         w++
       }
@@ -102,9 +100,9 @@ fn rand_field(g *Game) {
 }
 
 fn print_field(g *Game, prog *char, pos int) {
-  for (i := 0; i<6; ++i) {
+  for (i := 0; i < 6; ++i) {
     printf(" -----------------------\n")
-    for (j := 0; j<6; ++j)
+    for (j := 0; j < 6; ++j)
       printf("| %c ", g.fields[i][j].as_char(&g.robi))
     printf("|\n")
   }
@@ -114,12 +112,12 @@ fn print_field(g *Game, prog *char, pos int) {
 }
 
 fn dreh_links(g *Game) {
-  g->robi.dir = (g->robi.dir + 3) % 4
-} 
+  g.robi.dir = (g.robi.dir + 3) % 4
+}
 
 fn dreh_rechts(g *Game) {
-  g->robi.dir = (g->robi.dir + 1) % 4
-} 
+  g.robi.dir = (g.robi.dir + 1) % 4
+}
 
 fn beweg_dich(g *Game) bool {
   x := g.robi.x
@@ -132,29 +130,28 @@ fn beweg_dich(g *Game) bool {
     y--
   else if (g.robi.dir == 3)
     x--
-  
-  if (x<0 || y<0 || x>=6 || y>=6)
+
+  if (x < 0 || y < 0 || x >= 6 || y >= 6)
     return false
-  
+
   if (g.fields[x][y] == Field.CoinC)
     g.robi.coins++
   if (g.fields[x][y] == Field.WallC)
     return true
-  
+
   g.fields[g.robi.x][g.robi.y] = Field.EmptyC
   g.fields[x][y] = Field.RobotC
   g.robi.x = x
   g.robi.y = y
   return true
-} 
+}
 
 fn start(g *Game, prog *char) {
   all := prog
   pos := 0
 
   ok := true
-  while (ok && prog[0] != '\0')
-  {
+  while (ok && prog[0] != '\0') {
     system("clear")
     g.print_field(all, pos++)
     //c char;
@@ -187,13 +184,13 @@ fn start(g *Game, prog *char) {
   }
 
   system("clear")
-  printf("Du hast %d Rubine eingesammelt!\nEs fehlen dir %d!\nNA JA\n", g.robi.coins, 6-g.robi.coins);
+  printf("Du hast %d Rubine eingesammelt!\nEs fehlen dir %d!\nNA JA\n", g.robi.coins, 6 -g.robi.coins);
 }
 
 fn as_number(c *char) int {
   n := 0
   x := 0
-  while(c[0] != '\0') {
+  while (c[0] != '\0') {
     if (x % 3 == 0)
       n += c[0] as int
     else if (x % 3 == 1)
@@ -215,7 +212,4 @@ fn new_Game(name *char) Game {
   game.robi = Robot{0, 0, 0, 0, true};
   return game
 }
-
-
-
 

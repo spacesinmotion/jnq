@@ -23,7 +23,7 @@ fn main() int {
   b = 21
   if (b == 42) {
     b *= b
-  } else if (b!=6) {
+  } else if (b != 6) {
     b = b * 3
   } else {
     b = b * 3

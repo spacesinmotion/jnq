@@ -1,6 +1,6 @@
 
-use Vec2 from tests.game.math.Vec2 
-use Vec3 from tests.game.math.Vec3 
+use Vec2 from tests.game.math.Vec2
+use Vec3 from tests.game.math.Vec3
 
 type OverlayText struct {
   text *char

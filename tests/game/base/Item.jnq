@@ -34,9 +34,9 @@ fn NewItem(gfx *Graphics, pos int, row int, it *ItemItem) Item {
   imgd.set_color(1.0f, 1.0f, 1.0f, 1.0f)
   imgd.set_image(it.img)
 
-  x := 200.0f + pos as float * 64.0f 
+  x := 200.0f + pos as float * 64.0f
   y := 10.0f
-  return Item {
+  return Item{
     text: text,
     img: imgd,
 
@@ -52,7 +52,7 @@ fn update(it *Item, p int) {
   it.x = lerp(it.fx, it.x, 0.9f)
   it.y = lerp(it.fy, it.y, 0.9f)
   it.text.set_position(it.x + 24.0f, it.y)
-  if (it.img) 
+  if (it.img)
     it.img.set_position(it.x, it.y - 6.0f)
 }
 

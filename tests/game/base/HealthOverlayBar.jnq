@@ -14,7 +14,6 @@ type HealthOverlayBar struct {
   max_lp float
 }
 
-
 fn NewHealthOverlayBar(gfx *Graphics, max_lp float) HealthOverlayBar {
   w := 320.0f
   h := 16.0f // constants ?
@@ -29,7 +28,7 @@ fn NewHealthOverlayBar(gfx *Graphics, max_lp float) HealthOverlayBar {
   text.set_scale(2.0f, 2.0f)
   text.set_color_rgb(224, 53, 34)
   // text.set_text(hob.lp .. '/' .. hob.max_lp)
-  
+
   return HealthOverlayBar{bar, back, text, 0.0f, max_lp, max_lp}
 }
 

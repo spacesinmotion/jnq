@@ -1,4 +1,4 @@
-use Some2 from sub.util 
+use Some2 from sub.util
 
 type SomeAble interface {
   fn id(s *SomeAble, f int) int

@@ -25,11 +25,11 @@ fn int_vec()
   ASSERT(16 == v.cap)
   ASSERT(21 == x)
 
-  for (i:=0; i<100; ++i)
+  for (i := 0; i < 100; ++i)
     v.push(i + 1)
-  
+
   ASSERT(100 == v.len)
-  ASSERT(16*7 == v.cap)
+  ASSERT(16 * 7 == v.cap)
   ASSERT(1 == v[0])
   ASSERT(33 == v[32])
 
@@ -44,7 +44,7 @@ fn vec_Point()
   ASSERT(0 == v.len)
   ASSERT(0 == v.cap)
 
-  v.push(Point{3,6})
+  v.push(Point{3, 6})
   ASSERT(1 == v.len)
   ASSERT(128 == v.cap)
   ASSERT(3 == v[0].x)
@@ -72,8 +72,7 @@ fn vec_float_int()
   vf.free()
 }
 
-fn vec_of_pointer()
-{
+fn vec_of_pointer() {
   printf(" .vec_of_pointer\n")
 
   i := 42;
@@ -105,7 +104,7 @@ fn pointer_to_vec()
 
   ASSERT(v1.len == a_wrapper(&v1))
   ASSERT(v2.len == a_wrapper(&v2))
-  ASSERT(a_wrapper(&v1) !=  a_wrapper(&v2))
+  ASSERT(a_wrapper(&v1) != a_wrapper(&v2))
 
   v1.free()
   v2.free()

@@ -27,7 +27,7 @@ fn comp_int(const a any, const b any) int {
 fn qsort_any_test() {
   printf("..qsort_any_test\n")
 
-  v := [3,1,2]
+  v := [3, 1, 2]
   ASSERT(v[0] == 3)
   ASSERT(v[1] == 1)
   ASSERT(v[2] == 2)
