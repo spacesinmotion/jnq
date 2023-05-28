@@ -12,15 +12,25 @@ type Depend struct {
   img *OverlayImage,
   text *OverlayText,
   pos int,
-  available bool
+  available bool,
+
+  // xx
 }
 
-fn move_alpha(e *Depend, rx float, ry float, a float){
+fn move_alpha(e *Depend, rx float, ry float, a float) {
   e.img.set_position(rx + 8.0f + e.pos as float * 40.0f, ry + 40.0f - 16.0f)
   e.text.set_position(rx + 24.0f + e.pos as float * 40.0f, ry + 40.0f - 8.0f)
   v := 0.2f
+
   if (e.available)
     v = 0.9f
+
+  if (e.available) v = 0.9f
+
+  if (e.available) {
+    v = 0.9f
+  }
+
   e.img.set_color(0.9f, 0.9f, 0.9f, a)
   e.text.set_color(0.9f, v, v, a)
 }
@@ -31,32 +41,32 @@ fn destroyDepend(e *Depend) {
 }
 
 type Entry struct {
-  text *OverlayText
-  img *OverlayImage
-  back *OverlayImage
+  text *OverlayText,
+  img *OverlayImage,
+  back *OverlayImage,
 
-  key *char
-  x float
-  y float
-  a float
-  fx float
-  fy float
-  fa float
-  available bool
-  needed vec[]Depend
+  key *char,
+  x float,
+  y float,
+  a float,
+  fx float,
+  fy float,
+  fa float,
+  available bool,
+  needed vec[]Depend,
 }
 
 fn destroyEntry(e *Entry) {
   e.back.destroy()
   e.img.destroy()
   e.text.destroy()
-  for (i:=0; i<e.needed.len; ++i) 
-    e.needed[i].destroyDepend() 
+  for (i := 0; i < e.needed.len; ++i)
+    e.needed[i].destroyDepend()
   e.needed.free()
 }
 
 fn apply(e *Entry) {
-  for (i:=0; i<e.needed.len; ++i) 
+  for (i := 0; i < e.needed.len; ++i)
     e.needed[i].move_alpha(e.x, e.y, e.a)
 
   e.text.set_position(e.x + 48.0f, e.y + 8.0f)
@@ -77,70 +87,68 @@ fn updateEntry(e *Entry) {
   e.apply()
 }
 
-
-
 fn set_option(e *Entry, o int, g int, jump bool) {
-  e.fx = 240.0f + g as float * 188.0f 
+  e.fx = 240.0f + g as float * 188.0f
   e.fy = 240.0f + o as float * 48.0f
-  if (g == 0) 
+  if (g == 0)
     e.fa = max(0.0f, 1.0f - abs(o as float) / 2.0f)
   else
     e.fa = 0.0f
-  
-  if (jump) { 
+
+  if (jump) {
     e.x = e.fx
     e.y = e.fy
-    e.a = e.fa 
+    e.a = e.fa
   }
 }
 
 type Group struct {
-  text *OverlayText
-  entries vec[]Entry
+  text *OverlayText,
+  entries vec[]Entry,
 
-  fa float
-  a float
-  name *char
+  fa float,
+  a float,
+  name *char,
 }
 
 fn destroyGroup(g *Group) {
   g.text.destroy()
-  for (i := 0; i<g.entries.len; ++i)
+  for (i := 0; i < g.entries.len; ++i)
     g.entries[i].destroyEntry()
   g.entries.free()
 }
 
-
 fn updateGroup(g *Group, on bool) {
-  if (on)
+  if (on) {
     g.fa = 1.0f
-  else  
+  } else {
     g.fa = 0.0f
+  }
   g.a = lerp(g.fa, g.a, 0.9f)
   g.text.set_color(0.9f, 0.9f, 0.2f, g.a)
 }
 
 type Menu struct {
-  groups vec[]Group
+  groups vec[]Group,
 
-  selected_group int
-  selected_entry int
+  selected_group int,
+  selected_entry int,
 
-  marker *OverlayImage
-  marker_a float
+  marker *OverlayImage,
+  marker_a float,
 
-  done_init bool
-  dead bool
+  done_init bool,
+  dead bool,
 }
 
 fn NewMenu(gfx *Graphics) Menu {
   m := Menu{
-    selected_group: 0,
-    selected_entry: 0,
-    marker: gfx.new_overlay_image(),
-    marker_a: 0.3f,
-    done_init: false,
-    dead: false,
+    selected_group : 0,
+    selected_entry : 0,
+    marker : gfx.new_overlay_image(),
+    marker_a : 0.3f,
+    done_init : false,
+    dead : false,
   }
   m.marker.set_color(0.9f, 0.87f, 0.1f, 1.0f)
   m.marker.set_position(240.0f - 3.0f, 240.0f - 1.0f)
@@ -150,8 +158,8 @@ fn NewMenu(gfx *Graphics) Menu {
 
 fn destroy(m *Menu) {
   m.marker.destroy()
-  for (i := 0; i<m.groups.len; ++i) 
-    m.groups[i].destroyGroup() 
+  for (i := 0; i < m.groups.len; ++i)
+    m.groups[i].destroyGroup()
   m.groups.free()
 }
 
@@ -170,9 +178,10 @@ fn die(m *Menu) {
 fn confirm_choice(m *Menu) {
   e := m.entry()
   if (e.available
-   // && e.on_confirm
-   ) {
+    // && e.on_confirm
+  ) {
     // e.on_confirm()
+
     m.die()
   }
 }
@@ -180,21 +189,21 @@ fn confirm_choice(m *Menu) {
 fn update(m *Menu, dt float) {
   // if (KEYS_DOWN.pressed("tab"))
   //   return m.die()
-  // if (KEYS_DOWN.pressed("e")) 
-  //   return m.confirm_choice() 
+  // if (KEYS_DOWN.pressed("e"))
+  //   return m.confirm_choice()
   // if (KEYS_DOWN.pressed("w"))
   //   m.select(m.selected_group, m.selected_entry - 1)
   // if (KEYS_DOWN.pressed("s"))
   //   m.select(m.selected_group, m.selected_entry + 1)
   // if (KEYS_DOWN.pressed("a"))
   //   m.select(m.selected_group - 1, m.selected_entry)
-  // if (KEYS_DOWN.pressed("d")) 
+  // if (KEYS_DOWN.pressed("d"))
   //   m.select(m.selected_group + 1, m.selected_entry)
-  
-  for (j:=0; j<m.groups.len; ++j) {
+
+  for (j := 0; j < m.groups.len; ++j) {
     g := &m.groups[j]
     g.updateGroup(m.selected_group == j)
-    for (i:=0; i<g.entries.len; ++i) {
+    for (i := 0; i < g.entries.len; ++i) {
       e := &g.entries[i]
       e.set_option(i - m.selected_entry, j - m.selected_group, !m.done_init)
       e.updateEntry()
@@ -206,34 +215,37 @@ fn update(m *Menu, dt float) {
 }
 
 type NEED struct {
-  item *ItemItem
+  item *ItemItem,
 }
 
 fn need_sub(pos int, needed *NEED) Depend {
   n := Depend{
-    pos: pos,
+    pos : pos,
     // img: gfx.new_overlay_image(),
     // text: gfx.new_overlay_text(),
     // available: needed.item.available(needed.count),
+
   }
   n.img.set_image(needed.item.img)
   n.img.set_size(16.0f, 16.0f)
   // n.text.set_text('x' .. needed.count)
+
   return n
 }
 
 fn new_group(m *Menu, name *char) {
   m.selected_group = m.groups.len
-  g := Group{ 
-    fa: 1.0f,
-    a: 1.0f,
-    name: name,
-    // text: gfx.new_overlay_text() 
+  g := Group{
+    fa : 1.0f,
+    a : 1.0f,
+    name : name,
+    // text: gfx.new_overlay_text()
+
   }
   g.text.set_text(name)
   g.text.set_color(0.9f, 0.9f, 0.9f, 1.0f)
   g.text.set_position(240.0f - 8.0f * (2 + strlen(name)) as float, 248.0f)
-  
+
   m.groups.push(g)
 }
 
@@ -242,27 +254,29 @@ fn select(m *Menu, g int, e int, jump bool) {
   m.selected_entry = clampi(e, 0, m.group().entries.len - 1)
   if (jump)
     m.marker_a = 1.0f
-  else 
+  else
     m.marker_a = 0.1f
 }
 
 fn add_entry(m *Menu, img *Image, text *char, needed vec[]NEED
   //, on_confirm, avail
-  ) *Entry {
+) *Entry {
   e := Entry{
     //back: gfx.new_overlay_image(),
     //img: gfx.new_overlay_image(),
     //text: gfx.new_overlay_text(),
-    key: text,
-    x: 0.0f,
-    y: 0.0f,
-    a: 0.0f,
-    fx: 0.0f,
-    fy: 0.0f,
-    fa: 0.0f,
-    available: true,
+
+    key : text,
+    x : 0.0f,
+    y : 0.0f,
+    a : 0.0f,
+    fx : 0.0f,
+    fy : 0.0f,
+    fa : 0.0f,
+    available : true,
     //on_confirm: on_confirm,
     //needed: needed,
+
   }
   e.back.set_color(0.1f, 0.1f, 0.1f, 1.0f)
   e.back.set_size(180.0f - 2.0f, 48.0f - 4.0f)
@@ -272,7 +286,8 @@ fn add_entry(m *Menu, img *Image, text *char, needed vec[]NEED
   e.text.set_text(text)
   e.text.set_color(0.9f, 0.9f, 0.9f, 1.0f)
   // if avail then e.available = avail() end
-  for (i:=0; i<needed.len; ++i) {
+
+  for (i := 0; i < needed.len; ++i) {
     n := &needed[i]
     x := need_sub(i, n)
     e.available = e.available && x.available
@@ -281,6 +296,6 @@ fn add_entry(m *Menu, img *Image, text *char, needed vec[]NEED
   e.apply()
   g := m.group()
   g.entries.push(e)
-  return &g.entries[g.entries.len-1]
+  return &g.entries[g.entries.len - 1]
 }
 

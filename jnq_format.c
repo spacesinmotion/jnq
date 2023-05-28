@@ -40,9 +40,18 @@ bool skip_whitespace_space(State *st, bool with_newline) {
   return old.c > st->c;
 }
 
-void State_skip(State *s, int c) {
-  s->c += c;
-  s->location.column += c;
+void State_skip(State *st) {
+  if (*st->c == '\n') {
+    st->location.line++;
+    st->location.column = 1;
+  } else
+    ++st->location.column;
+  ++st->c;
+}
+
+void State_skip_n(State *s, int c) {
+  for (int i = 0; i < c; ++i)
+    State_skip(s);
 }
 
 int count_nl_in_whitespace_space(State st) {
@@ -50,7 +59,7 @@ int count_nl_in_whitespace_space(State st) {
   while (*st.c && isspace(*st.c)) {
     if (*st.c == '\n')
       c++;
-    State_skip(&st, 1);
+    State_skip(&st);
   }
   return c;
 }
@@ -59,7 +68,7 @@ bool check_identifier(State *st) {
   State old = *st;
   if (st->c[0] && (isalpha(st->c[0]) || st->c[0] == '_')) {
     while (st->c[0] && (isalnum(st->c[0]) || st->c[0] == '_'))
-      State_skip(st, 1);
+      State_skip(st);
   }
   if (old.c < st->c)
     return true;
@@ -70,7 +79,7 @@ bool check_identifier(State *st) {
 bool check_word(State *st, const char *word) {
   State old = *st;
   while (st->c[0] && *word && *word == st->c[0]) {
-    State_skip(st, 1);
+    State_skip(st);
     ++word;
   }
   if (*word == 0 && !isalnum(st->c[0]) && st->c[0] != '_')
@@ -82,7 +91,7 @@ bool check_word(State *st, const char *word) {
 bool check_word_s(State st, const char *word) {
   skip_whitespace_space(&st, true);
   while (st.c[0] && *word && *word == st.c[0]) {
-    State_skip(&st, 1);
+    State_skip(&st);
     ++word;
   }
   return *word == 0 && !isalnum(st.c[0]) && st.c[0] != '_';
@@ -90,7 +99,7 @@ bool check_word_s(State st, const char *word) {
 
 bool is_op(State *st, const char *op) {
   while (st->c[0] && op[0] && op[0] == st->c[0]) {
-    State_skip(st, 1);
+    State_skip(st);
     ++op;
   }
   return op[0] == 0;
@@ -214,10 +223,11 @@ bool check_comment(Formatter *f, State *st) {
   if (strncmp(st->c, "//", 2) == 0) {
     while (strncmp(st->c, "//", 2) == 0) {
       while (*st->c != '\n' && *st->c != '\0')
-        State_skip(st, 1);
-      skip_whitespace_space(st, true);
+        State_skip(st);
+      State_skip(st);
     }
     handle_ok(f, &old, st);
+    check_comment(f, st);
     return true;
   }
   *st = old;
@@ -225,8 +235,6 @@ bool check_comment(Formatter *f, State *st) {
 }
 
 void expect_space(Formatter *f, State *st, const char *space) {
-  if (check_comment(f, st))
-    return;
   State old = *st;
   skip_whitespace_space(st, true);
   int len = strlen(space);
@@ -276,21 +284,15 @@ void expect_indent(Formatter *f, State *st, int ind) {
   }
 }
 
-void expect_indent_single(Formatter *f, State *st, int ind) {
-  check_comment(f, st);
+void expect_indent_line(Formatter *f, State *st, int ind) {
   State old = *st;
-  if (check_word_s(*st, "case")) {
-    ind -= 2;
-    *st = old;
-  }
-
-  skip_whitespace_space(st, true);
-  int len = st->c - old.c;
-  if (len == ind + 1 && old.c[0] == '\n' && strncmp(old.c + 1, "                                        ", ind) == 0) {
+  while (*st->c && isspace(*st->c) && *st->c != '\n')
+    State_skip(st);
+  if ((st->c - old.c) == ind && strncmp(old.c, "                                        ", ind) == 0) {
     handle_ok(f, &old, st);
   } else {
-    char s[] = "\n                                              ";
-    s[ind + 1] = '\0';
+    char s[] = "                                              ";
+    s[ind] = '\0';
     handle_replace(f, &old, st, s);
   }
 }
@@ -325,15 +327,15 @@ bool expect_number(Formatter *f, State *st) {
   st->location.column += end - st->c;
   st->c = end;
   if (st->c[0] == 'f')
-    State_skip(st, 1);
+    State_skip(st);
   else if (st->c[0] == 'l' && st->c[1] == 'u')
-    State_skip(st, 2);
+    State_skip_n(st, 2);
   else if (st->c[0] == 'u' && st->c[1] == 'l')
-    State_skip(st, 2);
+    State_skip_n(st, 2);
   else if (st->c[0] == 'l')
-    State_skip(st, 1);
+    State_skip(st);
   else if (st->c[0] == 'u')
-    State_skip(st, 1);
+    State_skip(st);
   handle_ok(f, &old, st);
   return true;
 }
@@ -344,13 +346,13 @@ bool expect_string(Formatter *f, State *st) {
     return false;
 
   State old = *st;
-  State_skip(st, 1);
+  State_skip(st);
   while (st->c[0] != t || st->c[-1] == '\\') {
     if (!st->c[0])
       return true;
-    State_skip(st, 1);
+    State_skip(st);
   }
-  State_skip(st, 1);
+  State_skip(st);
   handle_ok(f, &old, st);
   return true;
 }
@@ -362,7 +364,7 @@ bool expect_op(Formatter *f, State *st, const char *op) {
     return false;
   }
   skip_whitespace_space(st, true);
-  State_skip(st, strlen(op));
+  State_skip_n(st, strlen(op));
   handle_ok(f, &old, st);
   return true;
 }
@@ -385,7 +387,7 @@ void format_use(Formatter *f, State *st) {
   while (check_op(st, ",")) {
     expect_space(f, st, "");
     State old = *st;
-    State_skip(st, 1);
+    State_skip(st);
     handle_ok(f, &old, st);
     old = *st;
     expect_space(f, st, " ");
@@ -468,7 +470,7 @@ void format_member_list(Formatter *f, State *st) {
     expect_op(f, st, "}");
     return;
   } else
-    expect_indent_single(f, st, 2);
+    expect_indent_line(f, st, 2);
 
   while (expect_identifier(f, st)) {
     expect_space(f, st, " ");
@@ -498,7 +500,7 @@ void format_enum_member_list(Formatter *f, State *st) {
     expect_op(f, st, "}");
     return;
   } else
-    expect_indent_single(f, st, 2);
+    expect_indent_line(f, st, 2);
 
   while (expect_identifier(f, st)) {
     if (check_op(st, "=")) {
@@ -516,7 +518,7 @@ void format_enum_member_list(Formatter *f, State *st) {
     }
     check_comment(f, st);
     if (check_op(st, "}")) {
-      expect_indent_single(f, st, 0);
+      expect_indent_line(f, st, 0);
       expect_op(f, st, "}");
       break;
     }
@@ -553,7 +555,7 @@ void format_interface_fn_list(Formatter *f, State *st) {
     expect_op(f, st, "}");
     return;
   } else
-    expect_indent_single(f, st, 2);
+    expect_indent_line(f, st, 2);
 
   while (expect_word(f, st, "fn")) {
     expect_space(f, st, " ");
@@ -572,7 +574,7 @@ void format_interface_fn_list(Formatter *f, State *st) {
       }
     }
     if (check_op(st, "}")) {
-      expect_indent_single(f, st, 0);
+      expect_indent_line(f, st, 0);
       expect_op(f, st, "}");
       break;
     }
@@ -582,7 +584,7 @@ void format_interface_fn_list(Formatter *f, State *st) {
         return;
       check_comment(f, st);
       if (check_op(st, "}")) {
-        expect_indent_single(f, st, 0);
+        expect_indent_line(f, st, 0);
         expect_op(f, st, "}");
         break;
       }
@@ -649,7 +651,7 @@ bool contains_new_line(State st, char a, char b) {
       ++open;
     if (*st.c == b)
       --open;
-    State_skip(&st, 1);
+    State_skip(&st);
     if (open == 0)
       break;
   }
@@ -740,9 +742,9 @@ bool format_expression(Formatter *f, State *st, int ind, bool with_colon) {
     expect_op(f, st, "{");
     expect_expression_list(f, st, ind + 2, ",", '{', '}');
   } else if (expect_l_op(f, st, "(")) {
-    expect_l_space(f, st, "");
+    expect_space(f, st, "");
     if (format_expression(f, st, ind, with_colon)) {
-      expect_l_space(f, st, "");
+      expect_space(f, st, "");
       if (!expect_l_op(f, st, ")"))
         return false;
     }
@@ -767,7 +769,7 @@ bool format_expression(Formatter *f, State *st, int ind, bool with_colon) {
     if (*bin_op == '.')
       expect_space(f, st, "");
     else if (count_nl_in_whitespace_space(*st) == 1)
-      expect_indent_single(f, st, ind + 6);
+      expect_indent_line(f, st, ind + 6);
     else
       expect_space(f, st, " ");
 
@@ -786,7 +788,7 @@ bool format_scope_or_single(Formatter *f, State *st, int ind) {
     format_scope(f, st, ind + 2);
     return true;
   } else {
-    expect_indent_single(f, st, ind + 2);
+    expect_indent_line(f, st, ind + 2);
     format_statement(f, st, ind + 2);
     return true;
   }
@@ -822,7 +824,7 @@ bool format_statement(Formatter *f, State *st, int ind) {
         if (st->c[-1] == '}')
           expect_space(f, st, " ");
         else
-          expect_indent_single(f, st, ind);
+          expect_indent_line(f, st, ind);
         expect_word(f, st, "else");
         if (check_word_s(*st, "if")) {
           expect_space(f, st, " ");
@@ -844,7 +846,7 @@ bool format_statement(Formatter *f, State *st, int ind) {
       if (st->c[-1] == '}')
         expect_space(f, st, " ");
       else
-        expect_indent_single(f, st, ind);
+        expect_indent_line(f, st, ind);
       expect_word(f, st, "while");
       expect_space(f, st, " ");
       expect_op(f, st, "(");
@@ -868,7 +870,7 @@ bool format_statement(Formatter *f, State *st, int ind) {
   } else if (expect_op(f, st, "//")) {
     State old = *st;
     while (*st->c && *st->c != '\n')
-      State_skip(st, 1);
+      State_skip(st);
     handle_ok(f, &old, st);
     return true;
   } else if (format_expression(f, st, ind, true)) {
@@ -884,7 +886,7 @@ bool format_scope(Formatter *f, State *st, int ind) {
     expect_space(f, st, "");
     return expect_op(f, st, "}");
   }
-  expect_indent_single(f, st, ind);
+  expect_indent_line(f, st, ind);
 
   while (format_statement(f, st, ind)) {
     if (check_op(st, "}"))
@@ -892,7 +894,7 @@ bool format_scope(Formatter *f, State *st, int ind) {
     expect_indent(f, st, ind);
   }
 
-  expect_indent_single(f, st, ind - 2);
+  expect_indent_line(f, st, ind - 2);
   return expect_op(f, st, "}");
 }
 
@@ -945,45 +947,134 @@ void format_c_block(Formatter *f, State *st) {
       ++open;
     if (*st->c == '}')
       --open;
-    State_skip(st, 1);
+    State_skip(st);
     if (open == 0)
       break;
   }
   handle_ok(f, &old, st);
 }
 
-void format_file(Formatter *f, State *st) {
-  bool expect_one_new_line = true;
-  while (*st->c) {
-    if (expect_one_new_line)
-      expect_space(f, st, "\n");
-    else
-      expect_space(f, st, "\n\n");
-    expect_one_new_line = false;
-
-    if (expect_op(f, st, "//")) {
-      State old = *st;
-      while (*st->c && *st->c != '\n')
-        State_skip(st, 1);
-      handle_ok(f, &old, st);
-      expect_one_new_line = count_nl_in_whitespace_space(*st) == 1;
-    } else if (expect_word(f, st, "use")) {
-      format_use(f, st);
-      expect_one_new_line = count_nl_in_whitespace_space(*st) == 1 && check_word_s(*st, "use");
-    } else if (expect_word(f, st, "type")) {
-      format_type(f, st);
-    } else if (expect_word(f, st, "fn")) {
-      format_fn(f, st);
-    } else if (expect_word(f, st, "cfn")) {
-      format_fn(f, st);
-      expect_one_new_line = count_nl_in_whitespace_space(*st) == 1 && check_word_s(*st, "cfn");
-    } else if (expect_word(f, st, "ccode") || expect_word(f, st, "cmain")) {
-      format_c_block(f, st);
-    } else
-      break;
-  }
-  expect_space(f, st, "\n");
+void State_skip_line(State *st) {
+  while (*st->c && *st->c != '\n')
+    State_skip(st);
+  State_skip(st);
 }
+
+char after_space_line(State st) {
+  while (*st.c && *st.c != '\n' && isspace(*st.c))
+    State_skip(&st);
+  return *st.c;
+}
+
+char after_space(State st) {
+  while (*st.c && isspace(*st.c))
+    State_skip(&st);
+  return *st.c;
+}
+
+void skip_lines(Formatter *f, State *st, int l) {
+  State old = *st;
+  while (*st->c) {
+    if (*st->c == '\n') {
+      l--;
+      if (l == 0) {
+        State_skip(st);
+        handle_replace(f, &old, st, "");
+        return;
+      }
+    }
+    State_skip(st);
+  }
+}
+
+void format_scopex(Formatter *f, State *st, int indent, char end);
+
+// void one_line_indent(Formatter *f, State *st, int indent) {
+
+// }
+
+void format_if_like(Formatter *f, State *st, int indent) {
+  expect_l_space(f, st, " ");
+  if (*st->c == '(') {
+    State_skip(st);
+    format_scopex(f, st, indent + 2, ')');
+
+    if (after_space(*st) == '{') {
+      expect_space(f, st, " ");
+    } else if (after_space_line(*st) != '\n') {
+      expect_space(f, st, " ");
+    } else {
+      expect_indent_line(f, st, 0);
+      State_skip(st);
+      const int nl = count_nl_in_whitespace_space(*st);
+      if (nl > 0)
+        skip_lines(f, st, nl);
+      expect_indent_line(f, st, indent + 2);
+    }
+  }
+}
+
+void format_else_like(Formatter *f, State *st, int indent) {
+  if (after_space(*st) == '{') {
+    expect_space(f, st, " ");
+  } else if (after_space_line(*st) != '\n') {
+    expect_space(f, st, " ");
+  } else {
+    expect_indent_line(f, st, 0);
+    State_skip(st);
+    const int nl = count_nl_in_whitespace_space(*st);
+    if (nl > 0)
+      skip_lines(f, st, nl);
+    expect_indent_line(f, st, indent + 2);
+  }
+}
+
+void format_scopex(Formatter *f, State *st, int indent, char end) {
+  while (*st->c) {
+    if (*st->c == end) {
+      State_skip(st);
+      return;
+    } else if (*st->c == '\n') {
+      int nl = count_nl_in_whitespace_space(*st);
+      if (nl > 2)
+        skip_lines(f, st, nl - 2);
+      else
+        State_skip(st);
+      char n = after_space_line(*st);
+      if (n == end) {
+        expect_indent_line(f, st, indent < 2 ? 0 : indent - 2);
+        State_skip(st);
+        return;
+      }
+      expect_indent_line(f, st, n == '\n' ? 0 : indent);
+    } else if (isspace(*st->c)) {
+      if (after_space_line(*st) == '\n') {
+        expect_indent_line(f, st, 0);
+      }
+      State_skip(st);
+    } else if (*st->c == '{') {
+      State_skip(st);
+      format_scopex(f, st, indent + 2, '}');
+    } else if (*st->c == '[') {
+      State_skip(st);
+      format_scopex(f, st, indent + 2, ']');
+    } else if (*st->c == '(') {
+      State_skip(st);
+      format_scopex(f, st, indent + 2, ')');
+    } else if (expect_op(f, st, "//")) {
+      while (*st->c && *st->c != '\n')
+        State_skip(st);
+    } else if (expect_word(f, st, "if") || expect_word(f, st, "while") || expect_word(f, st, "for") ||
+               expect_word(f, st, "switch")) {
+      format_if_like(f, st, indent);
+    } else if (expect_word(f, st, "else") || expect_word(f, st, "do")) {
+      format_else_like(f, st, indent);
+    } else
+      State_skip(st);
+  }
+}
+
+void format_file(Formatter *f, State *st) { format_scopex(f, st, 0, '\0'); }
 
 #ifdef WIN32
 #define STDIN_FILENO _fileno(stdin)
