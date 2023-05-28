@@ -7,13 +7,13 @@ fn for_loops()
   for (i := 0; i < 4; ++i)
     a += 3
 
-  ASSERT(a == 4 *3)
+  ASSERT(a == 4 * 3)
 
   a = 0
   for (i := 0; i < 4; ++i) {
     a += 7
   }
-  ASSERT(a == 4 *7)
+  ASSERT(a == 4 * 7)
 }
 
 fn while_loops()
@@ -48,12 +48,11 @@ fn do_while_loops()
   } while (a > 0)
 }
 
-fn continue_loops()
-{
+fn continue_loops() {
   printf(" .continue_loops\n")
 
   a := 0
-  for (i :=0; i <10; ++i) {
+  for (i := 0; i < 10; ++i) {
     if (i % 2 == 0)
       continue
     a += 3
@@ -62,12 +61,11 @@ fn continue_loops()
   ASSERT(a == 5 * 3)
 }
 
-fn break_loops()
-{
+fn break_loops() {
   printf(" .break_loops\n")
 
   a := 0
-  for (i :=0; i <10; ++i) {
+  for (i := 0; i < 10; ++i) {
     if (i > 4)
       break
     a += 3

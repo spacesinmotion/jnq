@@ -2,13 +2,12 @@
 fn simple() {
   b := 5
   a := &b
-  ASSERT(b == *a); 
+  ASSERT(b == *a);
 
   b = 42
-  ASSERT(b == *a); 
-  ASSERT(42 == *a); 
+  ASSERT(b == *a);
+  ASSERT(42 == *a);
 }
-
 
 type Gee struct {
   b int
@@ -28,7 +27,6 @@ fn with_struct() {
   ASSERT(52 == gg.b)
   ASSERT(32 == gp.b)
 }
-
 
 fn main() int {
   printf("pointer\n")

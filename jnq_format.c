@@ -105,13 +105,7 @@ bool is_op(State *st, const char *op) {
   return op[0] == 0;
 }
 
-bool check_op(State *st, const char *op) {
-  State old = *st;
-  skip_whitespace_space(st, true);
-  bool is = is_op(st, op);
-  *st = old;
-  return is;
-}
+bool check_op(State *st, const char *op) { return is_op(st, op); }
 
 void FATAL(Location *l, const char *format, ...) {
   va_list args;
@@ -361,8 +355,6 @@ bool expect_op(Formatter *f, State *st, const char *op) {
     *st = old;
     return false;
   }
-  skip_whitespace_space(st, true);
-  State_skip_n(st, strlen(op));
   handle_ok(f, &old, st);
   return true;
 }
@@ -623,8 +615,6 @@ bool check_l_op(State st, const char *op) {
 }
 
 const char *check_bin_op(State st) {
-  skip_whitespace_space(&st, false);
-
   const char *ops[] = {"<<=", ">>=", "&&", "||", "<<", ">>", ":=", "+=", "-=", "*=", "/=", "%=",
                        "&=",  "|=",  "^=", "==", "!=", "<=", ">=", "->", "=",  "<",  ">",  "+",
                        "-",   "*",   "/",  "%",  "&",  "|",  "^",  ".",  ":",  "?",  NULL};
@@ -1051,6 +1041,7 @@ void format_dowhile_like(Formatter *f, State *st, int indent) {
 }
 
 void format_scopex(Formatter *f, State *st, int indent, char end, bool skip_end) {
+  const char *t = NULL;
   while (*st->c) {
     if (*st->c == end) {
       if (skip_end)
@@ -1099,6 +1090,21 @@ void format_scopex(Formatter *f, State *st, int indent, char end, bool skip_end)
       format_else_like(f, st, indent);
     } else if (expect_word(f, st, "do")) {
       format_dowhile_like(f, st, indent);
+    } else if (expect_unary_pre(f, st)) {
+      if (after_space_line(*st) == '\n')
+        expect_indent_line(f, st, 0);
+      else if (isspace(*st->c))
+        expect_indent_line(f, st, 1);
+    } else if ((t = check_bin_op(*st))) {
+      State_skip_n(st, strlen(t));
+      if (strcmp(".", t) == 0 && after_space_line(*st) != '\n')
+        expect_l_space(f, st, "");
+      else if (after_space_line(*st) != '\n')
+        expect_l_space(f, st, " ");
+    } else if (*st->c == ',' || *st->c == ';') {
+      State_skip(st);
+      if (after_space_line(*st) != '\n')
+        expect_l_space(f, st, " ");
     } else if (expect_string(f, st) || expect_number(f, st) || expect_identifier(f, st)) {
       if (op_after_space(*st, ":="))
         expect_l_space(f, st, " ");

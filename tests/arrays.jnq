@@ -11,9 +11,9 @@ fn simple() {
   ASSERT(a[1] == 2)
   ASSERT(a[2] == 4)
 
-  d := []int{10,20,30}
+  d := []int{10, 20, 30}
   for (i := 0; i < 3; ++i)
-    ASSERT(d[i] == (i +1)*10)
+    ASSERT(d[i] == (i + 1) * 10)
 }
 
 fn multidimension() {
@@ -46,9 +46,9 @@ fn matrix_test() {
   printf(" .matrix_test\n")
 
   m := [4][4]int{}
-  for (i := 0; i <4; ++i)
-    for (j := 0; j <4; ++j)
-      m[i][j] = i *4 +j
+  for (i := 0; i < 4; ++i)
+    for (j := 0; j < 4; ++j)
+      m[i][j] = i * 4 + j
   ASSERT(m[0][0] == 0)
   ASSERT(m[1][0] == 4)
   ASSERT(m[2][0] == 8)
@@ -70,7 +70,7 @@ type Comp struct {
 fn array_construct_test() {
   printf(" .array_construct_test\n")
 
-  d := [1,2,3]
+  d := [1, 2, 3]
   ASSERT(d[0] == 1)
   ASSERT(d[1] == 2)
   ASSERT(d[2] == 3)
@@ -79,17 +79,17 @@ fn array_construct_test() {
     Comp{
       name: "Karl",
       tri: [
-        Dec{[0.1f,0.3f,0.5f]},
-        Dec{[0.1f,0.3f,0.5f]},
-        Dec{[0.1f,0.3f,0.5f]},
+        Dec{[0.1f, 0.3f, 0.5f]},
+        Dec{[0.1f, 0.3f, 0.5f]},
+        Dec{[0.1f, 0.3f, 0.5f]},
       ]
     },
     Comp{
       name: "Fred",
       tri: [
-        Dec{[0.2f,0.4f,0.6f]},
-        Dec{[0.2f,0.4f,0.6f]},
-        Dec{[0.2f,0.4f,0.6f]},
+        Dec{[0.2f, 0.4f, 0.6f]},
+        Dec{[0.2f, 0.4f, 0.6f]},
+        Dec{[0.2f, 0.4f, 0.6f]},
       ]
     }
   ]
