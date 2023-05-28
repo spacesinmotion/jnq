@@ -37,29 +37,29 @@ fn new(buffer *char, cap int) Program {
 fn alloc(p *Program, size u64) *char {
   if (p.arena.len + size as i32 >= p.arena.cap)
     ASSERT(false)//FATALX("Out of memory");
-  c := &p->arena.len
-  d := &p->arena.buffer[p->arena.len]
-  p->arena.len += size as i32;
+  c := &p.arena.len
+  d := &p.arena.buffer[p.arena.len]
+  p.arena.len += size as i32;
   return d;
 }
 
 fn copy_string(p *Program, s *char, l int) *char {
-  id := p.alloc((l + 1) as u64 );
+  id := p.alloc((l + 1) as u64);
   strncpy(id, s, l);
   id[l] = '\0';
   return id;
 }
 
-fn find_module(p *Program, path *char) *Module  {
-  for (m := p->modules; m; m = m->next)
-    if (strcmp(m->path, path) == 0)
+fn find_module(p *Program, path *char) *Module {
+  for (m := p.modules; m; m = m.next)
+    if (strcmp(m.path, path) == 0)
       return m;
   return null;
 }
 
-fn reset_module_finished(p* Program) {
-  for (m := p->modules; m; m = m->next)
-    m->finished = false;
+fn reset_module_finished(p * Program) {
+  for (m := p.modules; m; m = m.next)
+    m.finished = false;
 }
 
 fn add_module(p *Program, pathc *char) *Module {
@@ -72,66 +72,66 @@ fn add_module(p *Program, pathc *char) *Module {
   cname[size - 1] = '_';
   cname[size] = '\0';
   m := p.alloc(sizeof(Module)) as *Module
-  m->path = path;
-  m->c_name = cname;
-  m->types = null;
-  m->next = p->modules;
-  p->modules = m;
+  m.path = path;
+  m.c_name = cname;
+  m.types = null;
+  m.next = p.modules;
+  p.modules = m;
   return m;
 }
 
 fn new_variable(p *Program, l *State, next *Variable) *Variable {
   v := p.alloc(sizeof(Variable)) as *Variable
-  v->next = next;
-  v->location = *l;
+  v.next = next;
+  v.location = *l;
   return v;
 }
 
 fn add_type(p *Program, k TypeKind, name *char, m *Module) *Type {
   tt := m.find_type(name, &name[strlen(name)])
-  if (tt != null && tt->kind != TypeKind.PlaceHolder)
+  if (tt != null && tt.kind != TypeKind.PlaceHolder)
     ASSERT(false) // FATALX("Type '%s' allready defined!", name);
-  was_placeholder := tt != null && tt->kind == TypeKind.PlaceHolder;
+  was_placeholder := tt != null && tt.kind == TypeKind.PlaceHolder;
   if (!tt)
     tt = p.alloc(sizeof(Type)) as *Type;
 
-  tt->name = name;
-  tt->kind = k;
+  tt.name = name;
+  tt.kind = k;
   switch (k) {
   case TypeKind.ModuleT:
-    tt->select.moduleT = null;
+    tt.select.moduleT = null;
 
   case TypeKind.StructT:
-    tt->select.structT = p.alloc(sizeof(Struct)) as *Struct
-    tt->select.structT->member = null;
-    tt->select.structT->module = m;
+    tt.select.structT = p.alloc(sizeof(Struct)) as *Struct
+    tt.select.structT.member = null;
+    tt.select.structT.module = m;
 
   case TypeKind.UnionT:
-    tt->select.structT = p.alloc(sizeof(Struct)) as *Struct
-    tt->select.structT->member = null;
-    tt->select.structT->module = m;
+    tt.select.structT = p.alloc(sizeof(Struct)) as *Struct
+    tt.select.structT.member = null;
+    tt.select.structT.module = m;
 
   case TypeKind.EnumT:
-    tt->select.enumT = p.alloc(sizeof(Enum)) as *Enum
-    tt->select.enumT->entries = null;
-    tt->select.enumT->module = m;
+    tt.select.enumT = p.alloc(sizeof(Enum)) as *Enum
+    tt.select.enumT.entries = null;
+    tt.select.enumT.module = m;
 
   case TypeKind.UnionTypeT:
-    tt->select.unionT = p.alloc(sizeof(UnionType)) as *UnionType
-    tt->select.unionT->member = null;
-    tt->select.unionT->module = m;
+    tt.select.unionT = p.alloc(sizeof(UnionType)) as *UnionType
+    tt.select.unionT.member = null;
+    tt.select.unionT.module = m;
 
   case TypeKind.FnT:
-    tt->select.fnT = p.alloc(sizeof(Function)) as *Function
-    tt->select.fnT->body = null;
-    tt->select.fnT->is_extern_c = false;
-    tt->select.fnT->module = m;
+    tt.select.fnT = p.alloc(sizeof(Function)) as *Function
+    tt.select.fnT.body = null;
+    tt.select.fnT.is_extern_c = false;
+    tt.select.fnT.module = m;
 
   case TypeKind.PlaceHolder:
     break;
 
   case TypeKind.ArrayT:
-    tt->select.array_count = 0;
+    tt.select.array_count = 0;
     ASSERT(false) //FATALX("Only base types are implemented to add types");
 
   case TypeKind.PointerT:
@@ -139,76 +139,76 @@ fn add_type(p *Program, k TypeKind, name *char, m *Module) *Type {
 
   }
   if (was_placeholder) {
-    if (m->types->_type == tt)
+    if (m.types._type == tt)
       return tt;
-    for (tl := m->types; tl->next; tl = tl->next) {
-      if (tl->next->_type == tt) {
-        tlt := tl->next;
-        tl->next = tlt->next;
-        tlt->next = m->types;
-        m->types = tlt;
+    for (tl := m.types; tl.next; tl = tl.next) {
+      if (tl.next._type == tt) {
+        tlt := tl.next;
+        tl.next = tlt.next;
+        tlt.next = m.types;
+        m.types = tlt;
         return tt;
       }
     }
-    ASSERT(false) //FATALX("did not find place holder type '%s'", tt->name);
+    ASSERT(false) //FATALX("did not find place holder type '%s'", tt.name);
     return tt;
   }
 
   tl := p.alloc(sizeof(TypeList)) as *TypeList
-  tl->_type = tt;
-  tl->next = m->types;
-  m->types = tl;
+  tl._type = tt;
+  tl.next = m.types;
+  m.types = tl;
   return tt;
 }
 
-fn new_Statement(p *Program , t StatementType , n *Statement)*Statement {
+fn new_Statement(p *Program, t StatementType, n *Statement)*Statement {
   s := p.alloc(sizeof(Statement)) as *Statement;
-  s->_type = t;
+  s._type = t;
   switch (t) {
   case StatementType.ExpressionS:
-    s->select.express = p.alloc(sizeof(ExpressionStatement)) as *ExpressionStatement
+    s.select.express = p.alloc(sizeof(ExpressionStatement)) as *ExpressionStatement
     break;
   case StatementType.Return:
-    s->select.ret = p.alloc(sizeof(ReturnStatement)) as *ReturnStatement
+    s.select.ret = p.alloc(sizeof(ReturnStatement)) as *ReturnStatement
     break;
   case StatementType.Break:
-    s->select.brk = p.alloc(sizeof(BreakStatement)) as *BreakStatement
+    s.select.brk = p.alloc(sizeof(BreakStatement)) as *BreakStatement
     break;
   case StatementType.Default:
-    s->select.defaultS = p.alloc(sizeof(DefaultStatement)) as *DefaultStatement
+    s.select.defaultS = p.alloc(sizeof(DefaultStatement)) as *DefaultStatement
     break;
   case StatementType.Continue:
-    s->select.cont = p.alloc(sizeof(ContinueStatement)) as *ContinueStatement
+    s.select.cont = p.alloc(sizeof(ContinueStatement)) as *ContinueStatement
     break;
   case StatementType.Case:
-    s->select.caseS = p.alloc(sizeof(CaseStatement)) as *CaseStatement
+    s.select.caseS = p.alloc(sizeof(CaseStatement)) as *CaseStatement
     break;
   case StatementType.Scope:
-    s->select.scope = p.alloc(sizeof(ScopeStatement)) as *ScopeStatement
+    s.select.scope = p.alloc(sizeof(ScopeStatement)) as *ScopeStatement
     break;
   case StatementType.If:
-    s->select.ifS = p.alloc(sizeof(IfStatement)) as *IfStatement
+    s.select.ifS = p.alloc(sizeof(IfStatement)) as *IfStatement
     break;
   case StatementType.For:
-    s->select.forS = p.alloc(sizeof(ForStatement)) as *ForStatement
+    s.select.forS = p.alloc(sizeof(ForStatement)) as *ForStatement
     break;
   case StatementType.While:
-    s->select.whileS = p.alloc(sizeof(WhileStatement)) as *WhileStatement
+    s.select.whileS = p.alloc(sizeof(WhileStatement)) as *WhileStatement
     break;
   case StatementType.DoWhile:
-    s->select.doWhileS = p.alloc(sizeof(DoWhileStatement)) as *DoWhileStatement
+    s.select.doWhileS = p.alloc(sizeof(DoWhileStatement)) as *DoWhileStatement
     break;
   case StatementType.Switch:
-    s->select.switchS = p.alloc(sizeof(SwitchStatement)) as *SwitchStatement
+    s.select.switchS = p.alloc(sizeof(SwitchStatement)) as *SwitchStatement
     break;
   }
-  s->next = n;
+  s.next = n;
   return s;
 }
 
 fn parse_sub_file(p *Program, path *char, parent *Module) *Module {
   tempPath := [256]char{}
-  strcpy(tempPath, parent->path);
+  strcpy(tempPath, parent.path);
   l := strlen(tempPath) - 1;
   while (l >= 0) {
     if (tempPath[l] == '.') {
@@ -241,7 +241,7 @@ fn parse_file(p *Program, path *char) *Module {
 
   st_path := p.copy_string(tempPath, strlen(tempPath));
   st := StartState(code, st_path);
-  m = p.add_module( path);
+  m = p.add_module(path);
   //p.parse_module(p, m, &st);
 
   free(code);

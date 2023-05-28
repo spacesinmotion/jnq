@@ -20,15 +20,15 @@ type StatementType enum {
 
 type StatementSelect union {
   declare *DeclarationStatement
-  express *ExpressionStatement 
+  express *ExpressionStatement
   ret *ReturnStatement
   brk *BreakStatement
   cont *ContinueStatement
-  caseS *CaseStatement 
+  caseS *CaseStatement
   defaultS *DefaultStatement
   scope *ScopeStatement
-  ifS *IfStatement 
-  forS *ForStatement 
+  ifS *IfStatement
+  forS *ForStatement
   whileS *WhileStatement
   doWhileS *DoWhileStatement
   switchS *SwitchStatement
@@ -36,14 +36,14 @@ type StatementSelect union {
 
 type Statement struct {
   select StatementSelect
-  _type StatementType 
+  _type StatementType
   location State
   next *Statement
 }
 
 type DeclarationStatement struct {
   e *Expression
-  v *Variable 
+  v *Variable
 }
 
 type ExpressionStatement struct {
@@ -81,22 +81,22 @@ type IfStatement struct {
 
 type ForStatement struct {
   init *Expression
-  condition *Expression 
+  condition *Expression
   incr *Expression
   body *Statement
 }
 
 type WhileStatement struct {
-  condition *Expression 
+  condition *Expression
   body *Statement
 }
 
 type DoWhileStatement struct {
   body *Statement
-  condition *Expression 
+  condition *Expression
 }
 
 type SwitchStatement struct {
   body *Statement
-  condition *Expression 
+  condition *Expression
 }

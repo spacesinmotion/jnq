@@ -10,18 +10,18 @@ type ExpressionType enum {
 
 type ExpressionSelect union {
   b bool
-  c [3]char
-  i int 
+  c[3]char
+  i int
   f double
   s *char
   id *Identifier
   var *Variable
-  brace *Brace 
+  brace *Brace
   call *Call
-  construct *Construct 
+  construct *Construct
   access *Access
   member *MemberAccess
-  cast *Cast 
+  cast *Cast
   unpre *UnaryPrefix
   unpost *UnaryPostfix
   binop *BinaryOperation
@@ -31,7 +31,7 @@ type Expression struct {
   select ExpressionSelect
   _type ExpressionType
   localtion State
-} 
+}
 
 type Identifier struct {
   name *char
@@ -57,7 +57,6 @@ type Access struct {
   p *Expression
 }
 
-
 type MemberAccess struct {
   o *Expression
   o_type *Type
@@ -69,7 +68,6 @@ type Cast struct {
   o *Expression
   _type *Type
 }
-
 
 type UnaryPrefix struct {
   o *Expression
@@ -87,7 +85,7 @@ type Parameter struct {
   next *Parameter
 }
 
-type Association enum { ASSOC_NONE, ASSOC_LEFT, ASSOC_RIGHT }
+type Association enum {ASSOC_NONE, ASSOC_LEFT, ASSOC_RIGHT}
 
 type BinOp struct {
   op *char

@@ -17,12 +17,12 @@ type State struct {
   column int
 }
 
-fn StartState(c *char, file *char) State { 
+fn StartState(c *char, file *char) State {
   return State{
-    file: file, 
+    file: file,
     c: c,
     line: 1,
-    column: 1 
+    column: 1
   }
 }
 
@@ -43,28 +43,28 @@ fn back(s *State, c int) State {
 
 fn skip_whitespace_space(st *State) bool {
   old := *st;
-  while (*st->c != '\0' && isspace(*st->c)) {
-    if (*st->c == '\n') {
-      st->line++;
-      st->column = 1;
+  while (*st.c != '\0' && isspace(*st.c)) {
+    if (*st.c == '\n') {
+      st.line++;
+      st.column = 1;
     } else
-      ++st->column;
-    ++st->c;
+      ++st.column;
+    ++st.c;
   }
-  return old.c > st->c;
+  return old.c > st.c;
 }
 
 fn skip_line_comment(st *State) bool {
-  if (st->c[0] != '\0' && st->c[0] == '/' && st->c[1] == '/') {
-    while (*st->c) {
-      if (*st->c == '\n') {
-        st->line++;
-        st->column = 1;
-        ++st->c;
+  if (st.c[0] != '\0' && st.c[0] == '/' && st.c[1] == '/') {
+    while (*st.c) {
+      if (*st.c == '\n') {
+        st.line++;
+        st.column = 1;
+        ++st.c;
         break;
       } else {
-        ++st->column;
-        ++st->c;
+        ++st.column;
+        ++st.c;
       }
     }
     return true;
@@ -78,21 +78,21 @@ fn skip_whitespace(st *State) {
 }
 
 fn check_whitespace_for_nl(st *State) bool {
-  if (st->line > 1)
-    for (i := 1; i <= st->column; ++i)
-      if (!isspace(st->c[-i]))
+  if (st.line > 1)
+    for (i := 1; i <= st.column; ++i)
+      if (!isspace(st.c[-i]))
         return false;
-  return st->line > 1;
+  return st.line > 1;
 }
 
-fn check_word(st *State , word *char) bool {
+fn check_word(st *State, word *char) bool {
   st.skip_whitespace();
   old := *st;
-  while (st->c[0] && *word && *word == st->c[0]) {
+  while (st.c[0] && *word && *word == st.c[0]) {
     st.skip(1);
     ++word;
   }
-  if (*word == '\0' && !isalnum(st->c[0]) && st->c[0] != '_')
+  if (*word == '\0' && !isalnum(st.c[0]) && st.c[0] != '_')
     return true;
   *st = old;
   return false;
@@ -101,7 +101,7 @@ fn check_word(st *State , word *char) bool {
 fn check_op(st *State, op *char) bool {
   st.skip_whitespace()
   old := *st;
-  while (st->c[0] != '\0' && op[0] != '\0' && op[0] == st->c[0]) {
+  while (st.c[0] != '\0' && op[0] != '\0' && op[0] == st.c[0]) {
     st.skip(1);
     ++op
   }
@@ -135,13 +135,13 @@ fn check_key_word(b *char, e *char) bool {
   return false;
 }
 
-fn check_identifier(st *State ) bool {
+fn check_identifier(st *State) bool {
   old := *st;
-  if (st->c[0] != '\0' && (isalpha(st->c[0]) || st->c[0] == '_')) {
-    while (st->c[0] != '\0' && (isalnum(st->c[0]) || st->c[0] == '_'))
+  if (st.c[0] != '\0' && (isalpha(st.c[0]) || st.c[0] == '_')) {
+    while (st.c[0] != '\0' && (isalnum(st.c[0]) || st.c[0] == '_'))
       st.skip(1);
   }
-  if (old.c < st->c && !check_key_word(old.c, st->c))
+  if (old.c < st.c && !check_key_word(old.c, st.c))
     return true;
   *st = old;
   return false;
@@ -149,22 +149,21 @@ fn check_identifier(st *State ) bool {
 
 fn read_int(st *State, i *int) bool {
   end := null as *char;
-  *i = strtol(st->c, &end, 10);
-  if (end == st->c)
+  *i = strtol(st.c, &end, 10);
+  if (end == st.c)
     return false;
-  st->column += (end - st->c) as int;
-  st->c = end;
+  st.column += (end - st.c) as int;
+  st.c = end;
   return true;
 }
 
-
 fn read_float(st *State, f *double) bool {
   end := null as *char;
-  *f = strtod(st->c, &end);
-  if (end == st->c)
+  *f = strtod(st.c, &end);
+  if (end == st.c)
     return false;
-  st->column += (end - st->c) as int;
-  st->c = end;
+  st.column += (end - st.c) as int;
+  st.c = end;
   return true;
 }
 

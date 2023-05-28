@@ -3,14 +3,14 @@ use Statement from Statement
 use State from State
 use Module from Module
 
-type TypeKind enum { ModuleT, StructT, UnionT, EnumT, UnionTypeT, ArrayT, PointerT, FnT, PlaceHolder }
+type TypeKind enum {ModuleT, StructT, UnionT, EnumT, UnionTypeT, ArrayT, PointerT, FnT, PlaceHolder}
 
 type TypeSelect union {
   structT *Struct
   enumT *Enum
   unionT *UnionType
   fnT *Function
-  moduleT *Module 
+  moduleT *Module
 
   array_count int
 }
@@ -36,7 +36,7 @@ type EnumEntry struct {
   name *char
   value int
   valueSet bool
-  next *EnumEntry 
+  next *EnumEntry
 }
 
 type UnionType struct {
@@ -53,9 +53,9 @@ type UnionTypeEntry struct {
 type Function struct {
   parameter *Variable
   returnType *Type
-  is_extern_c bool 
+  is_extern_c bool
   body *Statement
-  module *Module 
+  module *Module
 }
 
 type Variable struct {
@@ -74,16 +74,16 @@ fn equals(t1 *Type, t2 *Type) bool {
   if (!t1 && !t2)
     return false;
   if (t1 == &Null)
-    return t2 == &Null || t2->kind == TypeKind.PointerT;
+    return t2 == &Null || t2.kind == TypeKind.PointerT;
   if (t2 == &Null)
-    return t1 == &Null || t1->kind == TypeKind.PointerT;
+    return t1 == &Null || t1.kind == TypeKind.PointerT;
   if ((!t1 && t2) || (t1 && !t2))
     return false;
   if (t1 == t2)
     return true;
-  if (t1->kind != t2->kind)
+  if (t1.kind != t2.kind)
     return false;
-  return equals(t1->child, t2->child);
+  return equals(t1.child, t2.child);
 }
 
 fn defined_module(t *Type) *Module {
