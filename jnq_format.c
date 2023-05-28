@@ -1047,7 +1047,7 @@ void format_scopex(Formatter *f, State *st, int indent, char end) {
       else
         State_skip(st);
       char n = after_space_line(*st);
-      if (n == end) {
+      if (n == end && end != '\0') {
         expect_indent_line(f, st, indent < 2 ? 0 : indent - 2);
         State_skip(st);
         return;
