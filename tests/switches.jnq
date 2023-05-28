@@ -5,27 +5,27 @@ fn main() int {
   a := 0
 
   switch (3) {
-    case 1:
-      ASSERT(false)
-    case 3:
-      a = 42
-    case 5:
-      ASSERT(false)
-    default:
-      ASSERT(false)
+  case 1:
+    ASSERT(false)
+  case 3:
+    a = 42
+  case 5:
+    ASSERT(false)
+  default:
+    ASSERT(false)
   }
 
   ASSERT(a == 42)
 
   switch (9898) {
-    case 1:
-      ASSERT(false)
-    case 3:
-      ASSERT(false)
-    case 5:
-      ASSERT(false)
-    default:
-      a = 63
+  case 1:
+    ASSERT(false)
+  case 3:
+    ASSERT(false)
+  case 5:
+    ASSERT(false)
+  default:
+    a = 63
   }
   ASSERT(a == 63)
 

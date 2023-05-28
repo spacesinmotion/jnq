@@ -1052,7 +1052,10 @@ void format_scopex(Formatter *f, State *st, int indent, char end) {
         State_skip(st);
         return;
       }
-      expect_indent_line(f, st, n == '\n' ? 0 : indent);
+      if (n != '\n' && (word_after_space(*st, "case") || word_after_space(*st, "default")))
+        expect_indent_line(f, st, indent < 2 ? 0 : indent - 2);
+      else
+        expect_indent_line(f, st, n == '\n' ? 0 : indent);
     } else if (isspace(*st->c)) {
       if (after_space_line(*st) == '\n') {
         expect_indent_line(f, st, 0);
