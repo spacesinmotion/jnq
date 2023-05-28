@@ -972,6 +972,12 @@ char after_space(State st) {
   return *st.c;
 }
 
+bool word_after_space(State st, const char *word) {
+  while (*st.c && isspace(*st.c))
+    State_skip(&st);
+  return check_word(&st, word);
+}
+
 void skip_lines(Formatter *f, State *st, int l) {
   State old = *st;
   while (*st->c) {
@@ -1055,6 +1061,9 @@ void format_scopex(Formatter *f, State *st, int indent, char end) {
     } else if (*st->c == '{') {
       State_skip(st);
       format_scopex(f, st, indent + 2, '}');
+      if (word_after_space(*st, "else")) {
+        expect_space(f, st, " ");
+      }
     } else if (*st->c == '[') {
       State_skip(st);
       format_scopex(f, st, indent + 2, ']');
