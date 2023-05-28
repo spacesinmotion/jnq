@@ -997,17 +997,13 @@ void skip_lines(Formatter *f, State *st, int l) {
   }
 }
 
-void format_scopex(Formatter *f, State *st, int indent, char end);
-
-// void one_line_indent(Formatter *f, State *st, int indent) {
-
-// }
+void format_scopex(Formatter *f, State *st, int indent, char end, bool skip_end);
 
 void format_if_like(Formatter *f, State *st, int indent) {
   expect_l_space(f, st, " ");
   if (*st->c == '(') {
     State_skip(st);
-    format_scopex(f, st, indent + 2, ')');
+    format_scopex(f, st, indent + 2, ')', true);
 
     if (after_space(*st) == '{') {
       expect_space(f, st, " ");
@@ -1020,6 +1016,7 @@ void format_if_like(Formatter *f, State *st, int indent) {
       if (nl > 0)
         skip_lines(f, st, nl);
       expect_indent_line(f, st, indent + 2);
+      format_scopex(f, st, indent + 2, '\n', false);
     }
   }
 }
@@ -1043,7 +1040,7 @@ void format_dowhile_like(Formatter *f, State *st, int indent) {
   if (after_space(*st) == '{') {
     expect_space(f, st, " ");
     State_skip(st);
-    format_scopex(f, st, indent + 2, '}');
+    format_scopex(f, st, indent + 2, '}', true);
     if (word_after_space(*st, "while")) {
       expect_space(f, st, " ");
       expect_word(f, st, "while");
@@ -1053,10 +1050,11 @@ void format_dowhile_like(Formatter *f, State *st, int indent) {
   }
 }
 
-void format_scopex(Formatter *f, State *st, int indent, char end) {
+void format_scopex(Formatter *f, State *st, int indent, char end, bool skip_end) {
   while (*st->c) {
     if (*st->c == end) {
-      State_skip(st);
+      if (skip_end)
+        State_skip(st);
       return;
     } else if (*st->c == '\n') {
       int nl = count_nl_in_whitespace_space(*st);
@@ -1081,16 +1079,16 @@ void format_scopex(Formatter *f, State *st, int indent, char end) {
       State_skip(st);
     } else if (*st->c == '{') {
       State_skip(st);
-      format_scopex(f, st, indent + 2, '}');
+      format_scopex(f, st, indent + 2, '}', true);
       if (word_after_space(*st, "else")) {
         expect_space(f, st, " ");
       }
     } else if (*st->c == '[') {
       State_skip(st);
-      format_scopex(f, st, indent + 2, ']');
+      format_scopex(f, st, indent + 2, ']', true);
     } else if (*st->c == '(') {
       State_skip(st);
-      format_scopex(f, st, indent + 2, ')');
+      format_scopex(f, st, indent + 2, ')', true);
     } else if (expect_op(f, st, "//")) {
       while (*st->c && *st->c != '\n')
         State_skip(st);
@@ -1119,7 +1117,7 @@ void format_scopex(Formatter *f, State *st, int indent, char end) {
   }
 }
 
-void format_file(Formatter *f, State *st) { format_scopex(f, st, 0, '\0'); }
+void format_file(Formatter *f, State *st) { format_scopex(f, st, 0, '\0', false); }
 
 #ifdef WIN32
 #define STDIN_FILENO _fileno(stdin)

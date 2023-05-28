@@ -13,7 +13,7 @@ fn simple() {
 
   d := []int{10,20,30}
   for (i := 0; i < 3; ++i)
-    ASSERT(d[i] == (i+1)*10)
+    ASSERT(d[i] == (i +1)*10)
 }
 
 fn multidimension() {
@@ -46,9 +46,9 @@ fn matrix_test() {
   printf(" .matrix_test\n")
 
   m := [4][4]int{}
-  for (i := 0; i<4; ++i)
-    for (j := 0; j<4; ++j)
-      m[i][j] = i*4+j
+  for (i := 0; i <4; ++i)
+    for (j := 0; j <4; ++j)
+      m[i][j] = i *4 +j
   ASSERT(m[0][0] == 0)
   ASSERT(m[1][0] == 4)
   ASSERT(m[2][0] == 8)
@@ -59,12 +59,12 @@ fn matrix_test() {
 }
 
 type Dec struct {
-  f [3]f32,
+  f[3]f32,
 }
 
 type Comp struct {
   name string,
-  tri [3]Dec,
+  tri[3]Dec,
 }
 
 fn array_construct_test() {
