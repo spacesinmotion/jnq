@@ -31,7 +31,7 @@ fn swap_a_b_ptr(s *Stuff) Stuff {
   return Stuff{s.b, s.a}
 }
 
-fn construction()  {
+fn construction() {
   printf(" .construction\n")
   s := Stuff{}
   ASSERT(s.a == 0)
@@ -82,7 +82,7 @@ fn call_member_pointer_or_not()  {
   ASSERT(ss.b == 3)
 }
 
-fn union_check()  {
+fn union_check() {
   printf(" .union_check\n")
 
   s := Swoll{0.4}
@@ -153,10 +153,10 @@ fn member_call_with_args()  {
   ASSERT(s.a == 11)
 }
 
-type Kool enum { KoolA, KoolB, KoolC }
+type Kool enum { KoolA, KoolB, KoolC}
 
 type Vec struct {
-  v [3]double
+  v[3]double
   i int
   n Kool
   x Nix
@@ -183,21 +183,21 @@ fn structs_with_arrays_and_enums()  {
 
 ccode {
 
-typedef struct Pos2 {
-  int i, j;
-} Pos2;
+  typedef struct Pos2{
+    int i, j;
+  } Pos2;
 
-Pos2 Pos2_new(int i, int j) {
-  return (Pos2){i,j};
-}
+  Pos2 Pos2_new(int i, int j) {
+    return(Pos2){i,j};
+  }
 
-int i_(Pos2 *p) {
-  return p->i;
-}
+  int i_(Pos2 *p) {
+    return p ->i;
+  }
 
-Pos2 add_one(Pos2 p) {
-  return (Pos2){p.i+1, p.j+1};
-}
+  Pos2 add_one(Pos2 p) {
+    return(Pos2){p.i +1, p.j +1};
+  }
 
 }
 
@@ -206,7 +206,7 @@ type Pos2 cstruct {
   j int,
 }
 
-cfn Pos2_new(i int , i int) Pos2
+cfn Pos2_new(i int, i int) Pos2
 
 cfn i_(p *Pos2) int
 
@@ -242,7 +242,7 @@ fn main() int {
 fn compined_check_format()  {
   printf(" .compined_check_format\n")
 
-  sa := Spold{  x: Stuff{  a: 3, b: 12 }, y: Swoll{b: 4.2} }
+  sa := Spold{  x: Stuff{  a: 3, b: 12}, y: Swoll{b: 4.2} }
 
   sb := Spold{
     x: Stuff{
@@ -251,4 +251,4 @@ fn compined_check_format()  {
     },
     y: Swoll{b: 4.2}
   }
-  }
+}

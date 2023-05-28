@@ -1,5 +1,4 @@
 
-
 fn main() int {
   printf("switches\n")
   a := 0
@@ -15,9 +14,9 @@ fn main() int {
     ASSERT(false)
   }
 
-  ASSERT(a == 42)
+  ASSERT(a ==   42)
 
-  switch (9898) {
+  switch (  9898) {
   case 1:
     ASSERT(false)
   case 3:

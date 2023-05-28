@@ -245,8 +245,6 @@ void expect_space(Formatter *f, State *st, const char *space) {
 }
 
 void expect_l_space(Formatter *f, State *st, const char *space) {
-  if (check_comment(f, st))
-    return;
   State old = *st;
   skip_whitespace_space(st, false);
   int len = strlen(space);
@@ -978,6 +976,12 @@ bool word_after_space(State st, const char *word) {
   return check_word(&st, word);
 }
 
+bool op_after_space(State st, const char *op) {
+  while (*st.c && isspace(*st.c))
+    State_skip(&st);
+  return check_op(&st, op);
+}
+
 void skip_lines(Formatter *f, State *st, int l) {
   State old = *st;
   while (*st->c) {
@@ -1035,6 +1039,20 @@ void format_else_like(Formatter *f, State *st, int indent) {
   }
 }
 
+void format_dowhile_like(Formatter *f, State *st, int indent) {
+  if (after_space(*st) == '{') {
+    expect_space(f, st, " ");
+    State_skip(st);
+    format_scopex(f, st, indent + 2, '}');
+    if (word_after_space(*st, "while")) {
+      expect_space(f, st, " ");
+      expect_word(f, st, "while");
+      if (after_space(*st) == '(')
+        expect_space(f, st, " ");
+    }
+  }
+}
+
 void format_scopex(Formatter *f, State *st, int indent, char end) {
   while (*st->c) {
     if (*st->c == end) {
@@ -1079,8 +1097,23 @@ void format_scopex(Formatter *f, State *st, int indent, char end) {
     } else if (expect_word(f, st, "if") || expect_word(f, st, "while") || expect_word(f, st, "for") ||
                expect_word(f, st, "switch")) {
       format_if_like(f, st, indent);
-    } else if (expect_word(f, st, "else") || expect_word(f, st, "do")) {
+    } else if (expect_word(f, st, "else")) {
       format_else_like(f, st, indent);
+    } else if (expect_word(f, st, "do")) {
+      format_dowhile_like(f, st, indent);
+    } else if (expect_string(f, st) || expect_number(f, st) || expect_identifier(f, st)) {
+      if (op_after_space(*st, ":="))
+        expect_l_space(f, st, " ");
+      else {
+        const char n = after_space_line(*st);
+        if (n == '{' && end != '\0')
+          expect_l_space(f, st, "");
+        else if (n == '(' || n == '[' || n == ')' || n == ']' || n == '}' || n == ';' || n == ':' || n == ',' ||
+                 n == '.' || n == '\n')
+          expect_l_space(f, st, "");
+        else
+          expect_l_space(f, st, " ");
+      }
     } else
       State_skip(st);
   }
