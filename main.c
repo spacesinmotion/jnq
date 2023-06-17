@@ -2658,10 +2658,6 @@ void c_struct(FILE *f, const char *module_name, const char *name, bool is_union,
 
 void c_fn_decl(FILE *f, const char *module_name, Type *tfn);
 
-typedef struct main_SomeAbleTable {
-  int (*SomeAbleid)(int *s, int f);
-} main_SomeAbleTable;
-
 void c_fn_pointer_decl(FILE *f, Type *tfn, bool named) {
   Function *fn = tfn->fnT;
   if (fn->d.returnType) {
