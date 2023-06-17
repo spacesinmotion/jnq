@@ -482,37 +482,24 @@ typedef PACK(struct EnumEntry {
   bool valueSet;
 }) EnumEntry;
 
-EnumEntry *Enum_reverse(EnumEntry *head) {
-  EnumEntry *current = head;
-  EnumEntry *prev = NULL, *next = NULL;
-  while (current != NULL) {
-    next = current->next;
-    current->next = prev;
-    prev = current;
-    current = next;
+#define reverse_list(T, head)                                                                                          \
+  {                                                                                                                    \
+    EnumEntry *current = head;                                                                                         \
+    EnumEntry *prev = NULL, *next = NULL;                                                                              \
+    while (current != NULL) {                                                                                          \
+      next = current->next;                                                                                            \
+      current->next = prev;                                                                                            \
+      prev = current;                                                                                                  \
+      current = next;                                                                                                  \
+    }                                                                                                                  \
+    head = prev;                                                                                                       \
   }
-  return prev;
-}
 
 typedef PACK(struct Enum {
   EnumEntry *entries;
   Module *module;
   LocationRange location;
 }) Enum;
-
-typedef struct UnionTypeEntry UnionTypeEntry;
-typedef PACK(struct UnionTypeEntry {
-  Location location;
-  Type *type;
-  int index;
-  UnionTypeEntry *next;
-}) UnionTypeEntry;
-
-typedef PACK(struct Union {
-  UnionTypeEntry *member;
-  Module *module;
-  LocationRange location;
-}) Union;
 
 typedef PACK(struct Function {
   FunctionDecl d;
@@ -539,7 +526,6 @@ typedef enum TypeKind {
   EnumT,
   CEnumT,
   InterfaceT,
-  UnionTypeT,
   ArrayT,
   PointerT,
   VecT,
@@ -555,7 +541,6 @@ typedef PACK(struct Type {
     const char *c_name;
     Struct *structT;
     Enum *enumT;
-    Union *unionT;
     Interface *interfaceT;
     Function *fnT;
     Module *placeholerModule;
@@ -579,8 +564,6 @@ Module *Type_defined_module(Type *t) {
   case EnumT:
   case CEnumT:
     return t->enumT->module;
-  case UnionTypeT:
-    return t->unionT->module;
   case InterfaceT:
     return t->interfaceT->module;
   case FnT:
@@ -615,8 +598,6 @@ LocationRange *Type_location(Type *t) {
   case EnumT:
   case CEnumT:
     return &t->enumT->location;
-  case UnionTypeT:
-    return &t->unionT->location;
   case InterfaceT:
     return &t->interfaceT->location;
   case FnT:
@@ -733,8 +714,8 @@ void Program_reset_module_finished(Program *p) {
 }
 
 bool Type_is_import_type(Type *t) {
-  return t->kind == StructT || t->kind == CStructT || t->kind == UnionTypeT || t->kind == InterfaceT ||
-         t->kind == UnionT || t->kind == FnT || t->kind == CEnumT || t->kind == EnumT || t->kind == PlaceHolder;
+  return t->kind == StructT || t->kind == CStructT || t->kind == InterfaceT || t->kind == UnionT || t->kind == FnT ||
+         t->kind == CEnumT || t->kind == EnumT || t->kind == PlaceHolder;
 }
 
 Type Null = (Type){"null_t", .c_name = "null_t", BaseT, NULL};
@@ -935,7 +916,6 @@ BuffString Type_name(Type *t) {
     case UnionT:
     case EnumT:
     case CEnumT:
-    case UnionTypeT:
     case FnT:
     case BaseT:
     case PlaceHolder:
@@ -999,11 +979,6 @@ Type *Program_add_type(Program *p, TypeKind k, const char *name, Module *m) {
     tt->enumT = (Enum *)Program_alloc(p, sizeof(Enum));
     tt->enumT->entries = NULL;
     tt->enumT->module = m;
-    break;
-  case UnionTypeT:
-    tt->unionT = (Union *)Program_alloc(p, sizeof(Union));
-    tt->unionT->member = NULL;
-    tt->unionT->module = m;
     break;
   case InterfaceT:
     tt->interfaceT = (Interface *)Program_alloc(p, sizeof(Interface));
@@ -1700,8 +1675,10 @@ EnumEntry *Program_parse_enum_entry_list(Program *p, State *st) {
   skip_whitespace(st);
   EnumEntry *top = NULL;
   while (*st->c) {
-    if (check_op(st, "}"))
-      return Enum_reverse(top);
+    if (check_op(st, "}")) {
+      reverse_list(EnumEntry, top);
+      return top;
+    }
 
     skip_whitespace(st);
     State old = *st;
@@ -1719,30 +1696,6 @@ EnumEntry *Program_parse_enum_entry_list(Program *p, State *st) {
       }
     } else
       FATAL(&st->location, "missing enum entry name");
-    check_op(st, ",");
-    e->next = top;
-    top = e;
-  }
-  FATAL(&st->location, "Missing closing '}' for enum");
-  return NULL;
-}
-
-UnionTypeEntry *Program_parse_union_entry_list(Program *p, Module *m, State *st) {
-  skip_whitespace(st);
-  UnionTypeEntry *top = NULL;
-  int size = 0;
-  while (*st->c) {
-    if (check_op(st, "}")) {
-      for (UnionTypeEntry *ua = top; ua; ua = ua->next)
-        ua->index = size--;
-      return top;
-    }
-
-    size++;
-    UnionTypeEntry *e = (UnionTypeEntry *)Program_alloc(p, sizeof(UnionTypeEntry));
-    skip_whitespace(st);
-    e->location = st->location;
-    e->type = Program_parse_declared_type(p, m, st);
     check_op(st, ",");
     e->next = top;
     top = e;
@@ -1828,10 +1781,6 @@ void Program_parse_type(Program *p, Module *m, State *st) {
       Enum *e = Program_add_type(p, CEnumT, name, m)->enumT;
       e->entries = Program_parse_enum_entry_list(p, st);
       e->location = NewRange(old, st->location);
-    } else if (check_word(st, "uniontype") && check_op(st, "{")) {
-      Union *u = Program_add_type(p, UnionTypeT, name, m)->unionT;
-      u->member = Program_parse_union_entry_list(p, m, st);
-      u->location = NewRange(old, st->location);
     } else if (check_word(st, "interface") && check_op(st, "{")) {
       Type *in = Program_add_type(p, InterfaceT, name, m);
       in->interfaceT->methods = Program_parse_interface_fns(p, m, in, st);
@@ -2592,7 +2541,6 @@ BuffString Type_special_cname(Type *t) {
     case UnionT:
     case EnumT:
     case CEnumT:
-    case UnionTypeT:
     case FnT:
     case PlaceHolder:
     case BaseT:
@@ -2644,7 +2592,6 @@ bool c_type_declare(FILE *f, Type *t, Location *l, const char *var) {
   case InterfaceT:
   case UnionT:
   case EnumT:
-  case UnionTypeT:
     fprintf(f, "%s%s", Type_defined_module(t)->c_name, t->name);
     break;
   case BaseT:
@@ -2792,61 +2739,6 @@ void c_interface(FILE *f, const char *module_name, const char *name, Interface *
   }
 }
 
-void c_union_enum_entry(FILE *f, const char *module_name, const char *name, UnionTypeEntry *entry) {
-  if (!entry)
-    return;
-
-  c_union_enum_entry(f, module_name, name, entry->next);
-
-  if (entry->next)
-    fprintf(f, ",\n  ");
-  fprintf(f, "%s_%s_u%d_t", module_name, name, entry->index);
-}
-
-void c_uniontype_entry(FILE *f, UnionTypeEntry *entry) {
-  if (!entry)
-    return;
-
-  c_uniontype_entry(f, entry->next);
-
-  if (entry->next)
-    fprintf(f, ";\n    ");
-  if (c_type_declare(f, entry->type, &entry->location, "<u>"))
-    FATALX("I don't know right now how to handle array union entry stuff!");
-  fprintf(f, " _u%d", entry->index);
-}
-
-void c_union_forward(FILE *f, const char *module_name, const char *name, UnionTypeEntry *member) {
-  if (member) {
-    fprintf(f, "typedef enum %s%sType", module_name, name);
-    if (!member) {
-      fprintf(f, " {} %s_%sType;\n\n", module_name, name);
-      return;
-    }
-
-    fprintf(f, " {\n  ");
-    c_union_enum_entry(f, module_name, name, member);
-    fprintf(f, "");
-    fprintf(f, "\n} %s%sType;\n", module_name, name);
-  }
-
-  fprintf(f, "typedef struct %s%s %s%s;\n", module_name, name, module_name, name);
-}
-
-void c_uniontype(FILE *f, const char *module_name, const char *name, UnionTypeEntry *member) {
-  fprintf(f, "typedef struct %s%s", module_name, name);
-  if (!member) {
-    fprintf(f, " {} %s%s;\n\n", module_name, name);
-    return;
-  }
-
-  fprintf(f, " {\n  union {\n    ");
-  c_uniontype_entry(f, member);
-  fprintf(f, ";\n  };\n");
-  fprintf(f, "  %s%sType type;", module_name, name);
-  fprintf(f, "\n} %s%s;\n\n", module_name, name);
-}
-
 void c_type(FILE *f, const char *module_name, TypeList *t) {
   if (!t)
     return;
@@ -2868,9 +2760,6 @@ void c_type(FILE *f, const char *module_name, TypeList *t) {
   case CEnumT:
     break;
   case InterfaceT:
-    break;
-  case UnionTypeT:
-    c_uniontype(f, module_name, t->type->name, t->type->unionT->member);
     break;
   case FnT:
     // todo!??
@@ -3204,16 +3093,7 @@ void c_expression(FILE *f, Expression *e) {
     break;
   }
   case ConstructE: {
-    if (e->construct->type->kind == UnionTypeT) {
-      fprintf(f, "(%s%s){", Type_defined_module(e->construct->type)->c_name, e->construct->type->name);
-      if (e->construct->p.len == 0 || !e->construct->p.p[0].name)
-        FATAL(&e->location, "internal error: no union entry selected");
-      UnionTypeEntry *ua = (UnionTypeEntry *)e->construct->p.p[0].name;
-      fprintf(f, "._u%d = ", ua->index);
-      c_expression(f, e->construct->p.p[0].p);
-      fprintf(f, ", .type = %s_%s_u%d_t}", Type_defined_module(e->construct->type)->c_name, e->construct->type->name,
-              ua->index);
-    } else if (e->construct->type->kind == VecT) {
+    if (e->construct->type->kind == VecT) {
       FATAL(&e->construct->p.p[0].p->location, "vec type should be replaced!");
     } else if (e->construct->type->kind == InterfaceT) {
       if (e->construct->p.len == 0) {
@@ -3276,7 +3156,6 @@ void c_expression(FILE *f, Expression *e) {
     case CStructT:
     case InterfaceT:
     case UnionT:
-    case UnionTypeT:
     case PointerT:
     case ArrayT:
       c_expression(f, e->member->o);
@@ -3638,9 +3517,6 @@ void c_type_forward(FILE *f, const char *module_name, TypeList *t) {
   case EnumT:
     c_enum(f, module_name, t->type->name, t->type->enumT->entries);
     break;
-  case UnionTypeT:
-    c_union_forward(f, module_name, t->type->name, t->type->unionT->member);
-    break;
   case InterfaceT: {
     fprintf(f, "typedef struct %s%sTable %s%sTable;\n", module_name, t->type->name, module_name, t->type->name);
     fprintf(f, "typedef struct %s%s %s%s;\n", module_name, t->type->name, module_name, t->type->name);
@@ -3774,9 +3650,6 @@ Type *Module_find_member(Type *t, const char *name) {
         return t;
     break;
   }
-  case UnionTypeT:
-    // union?? -> some build in ()
-    break;
   case InterfaceT: {
     int offset = strlen(t->name);
     for (int i = 0; i < t->interfaceT->methods.len; ++i)
@@ -3945,7 +3818,7 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
     if (t->kind == PointerT)
       t = t->child;
     if (t->kind != StructT && t->kind != CStructT && t->kind != UnionT && t->kind != InterfaceT && t->kind != EnumT &&
-        t->kind != CEnumT && t->kind != UnionTypeT)
+        t->kind != CEnumT)
       FATAL(&e->location, "Expect non pointer type for member access got '%s'", Type_name(t).s);
     if (!(e->member->member->type = Module_find_member(t, e->member->member->name)))
       FATAL(&e->location, "unknown member '%s' for '%s'", e->member->member->name, Type_name(t).s);
@@ -4035,19 +3908,6 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
         if (!Type_equal(pt, et))
           FATAL(&e->location, "Type missmatch for array element of '%s'!", Type_name(e->construct->type->child).s);
       }
-    } else if (e->construct->type->kind == UnionTypeT) {
-      if (e->construct->p.len != 1)
-        FATAL(&e->location, "A union type could be only of one kind");
-      if (e->construct->p.p[0].name)
-        FATAL(&e->location, "Named initialisation of a union das not work");
-      Type *pt = c_Expression_make_variables_typed(s, p, m, e->construct->p.p[0].p);
-      UnionTypeEntry *ua = e->construct->type->unionT->member;
-      for (; ua; ua = ua->next)
-        if (Type_equal(pt, ua->type))
-          break;
-      if (!ua)
-        FATAL(&e->location, "type '%s' not supported by '%s'", Type_name(pt).s, Type_name(e->construct->type).s);
-      e->construct->p.p[0].name = (const char *)ua; // unsafe
     } else if (e->construct->type->kind == StructT || e->construct->type->kind == CStructT) {
       for (int i = 0; i < e->construct->p.len; ++i) {
         Parameter *pa = &e->construct->p.p[i];
@@ -4847,7 +4707,6 @@ void write_symbols(Module *m) {
       fprintf(f, "\"kind\":\"import\",");
       break;
     case BaseT:
-    case UnionTypeT:
     case ArrayT:
     case PointerT:
     case VecT:
