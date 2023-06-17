@@ -484,8 +484,8 @@ typedef PACK(struct EnumEntry {
 
 #define reverse_list(T, head)                                                                                          \
   {                                                                                                                    \
-    EnumEntry *current = head;                                                                                         \
-    EnumEntry *prev = NULL, *next = NULL;                                                                              \
+    T *current = head;                                                                                                 \
+    T *prev = NULL, *next = NULL;                                                                                      \
     while (current != NULL) {                                                                                          \
       next = current->next;                                                                                            \
       current->next = prev;                                                                                            \
@@ -1051,10 +1051,6 @@ Type *Program_add_type_after(Program *p, TypeKind k, Module *m, Type *child) {
       vecT->next = tl->next;
       tl->next = vecT;
       vecT = NULL;
-
-      Type *tt = tl->next->type;
-      tl->next->type = tl->type;
-      tl->type = tt;
       break;
     }
   }
@@ -1566,6 +1562,23 @@ Type *Program_parse_declared_type(Program *p, Module *m, State *st) {
             td = Program_add_type_after(p, vec_t, cm, c);
             td->array_count = count;
             td->child = c;
+
+            Type *value_type_array = Module_find_array_type(cm, count, c);
+            if (!value_type_array) {
+              value_type_array = Program_add_type_after(p, ArrayT, cm, c);
+              value_type_array->array_count = count;
+              value_type_array->child = c;
+            }
+            Type *value_type_pointer = Module_find_pointer_type(cm, c);
+            if (!value_type_pointer) {
+              value_type_pointer = Program_add_type_after(p, PointerT, cm, c);
+              value_type_pointer->child = c;
+            }
+            Type *vec_t_pointer_type = Module_find_pointer_type(cm, td);
+            if (!vec_t_pointer_type) {
+              vec_t_pointer_type = Program_add_type(p, PointerT, "", cm);
+              vec_t_pointer_type->child = td;
+            }
           }
           return td;
         }
@@ -2459,6 +2472,7 @@ void Program_parse_module(Program *p, Module *m, State *st) {
       }
     }
   }
+  reverse_list(TypeList, m->types)
 }
 
 Module *Program_parse_file(Program *p, const char *path) {
@@ -2487,15 +2501,6 @@ Module *Program_parse_file(Program *p, const char *path) {
 }
 
 void c_Module_types(FILE *f, Module *m);
-
-typedef void (*ModuleFileCB)(FILE *, Module *);
-
-void c_use(FILE *f, TypeList *tl, ModuleFileCB cb) {
-  if (tl->next)
-    c_use(f, tl->next, cb);
-  if (tl->type->kind == UseT)
-    cb(f, tl->type->useT->module);
-}
 
 BuffString Type_special_cname(Type *t) {
   if (!t)
@@ -2656,7 +2661,7 @@ void c_struct(FILE *f, const char *module_name, const char *name, bool is_union,
   fprintf(f, ";\n} %s%s;\n\n", module_name, name);
 }
 
-void c_fn_decl(FILE *f, const char *module_name, Type *tfn);
+void c_fn_decl(FILE *f, const char *module_name, Function *fn, const char *fn_name);
 
 void c_fn_pointer_decl(FILE *f, Type *tfn, bool named) {
   Function *fn = tfn->fnT;
@@ -2722,7 +2727,7 @@ void c_interface(FILE *f, const char *module_name, const char *name, Interface *
 
   for (int i = 0; i < intf->methods.len; ++i) {
     Type *fnt = &intf->methods.fns[i];
-    c_fn_decl(f, module_name, fnt);
+    c_fn_decl(f, module_name, fnt->fnT, fnt->name);
     fprintf(f, " {\n  ");
     if (fnt->fnT->d.returnType)
       fprintf(f, "return ");
@@ -2735,13 +2740,8 @@ void c_interface(FILE *f, const char *module_name, const char *name, Interface *
   }
 }
 
-void c_type(FILE *f, const char *module_name, TypeList *t) {
-  if (!t)
-    return;
-
-  c_type(f, module_name, t->next);
-
-  switch ((TypeKind)t->type->kind) {
+void c_type(FILE *f, const char *module_name, Type *t) {
+  switch ((TypeKind)t->kind) {
   case UseT:
     break;
   case CStructT:
@@ -2750,7 +2750,7 @@ void c_type(FILE *f, const char *module_name, TypeList *t) {
     break;
   case UnionT:
   case StructT:
-    c_struct(f, module_name, t->type->name, t->type->kind == UnionT, &t->type->structT->member);
+    c_struct(f, module_name, t->name, t->kind == UnionT, &t->structT->member);
     break;
   case EnumT:
   case CEnumT:
@@ -2763,7 +2763,7 @@ void c_type(FILE *f, const char *module_name, TypeList *t) {
   case VecT:
   case PoolT:
   case BufT:
-    FATALX("'%s' should be replaced here that kind", Type_name(t->type).s);
+    FATALX("'%s' should be replaced here that kind", Type_name(t).s);
     break;
   case ArrayT:
   case PointerT:
@@ -3279,14 +3279,13 @@ void c_statements(FILE *f, Statement *s, int indent) {
   }
 }
 
-void c_fn_decl(FILE *f, const char *module_name, Type *tfn) {
-  Function *fn = tfn->fnT;
+void c_fn_decl(FILE *f, const char *module_name, Function *fn, const char *fn_name) {
   if (fn->d.returnType) {
     if (c_type_declare(f, fn->d.returnType, &fn->d.return_type_location, ""))
       FATALX("array return type not supported -> c backend!");
   } else
     fprintf(f, "void");
-  fprintf(f, " %s%s(", module_name, tfn->name);
+  fprintf(f, " %s%s(", module_name, fn_name);
   if (fn->d.parameter.len > 0)
     c_var_list(f, &fn->d.parameter, ", ");
   else
@@ -3294,20 +3293,16 @@ void c_fn_decl(FILE *f, const char *module_name, Type *tfn) {
   fprintf(f, ")");
 }
 
-void c_fn(FILE *f, const char *module_name, TypeList *tl) {
-  if (!tl)
+void c_fn(FILE *f, const char *module_name, Function *fn, const char *fn_name) {
+  if (fn->is_extern_c)
     return;
 
-  c_fn(f, module_name, tl->next);
-  if (tl->type->kind != FnT || tl->type->fnT->is_extern_c)
-    return;
-
-  c_fn_decl(f, module_name, tl->type);
-  if (!tl->type->fnT->body)
+  c_fn_decl(f, module_name, fn, fn_name);
+  if (!fn->body)
     fprintf(f, " {}\n\n");
   else {
     fprintf(f, " {\n");
-    c_statements(f, tl->type->fnT->body, 2);
+    c_statements(f, fn->body, 2);
     fprintf(f, "}\n\n");
   }
 }
@@ -3319,9 +3314,12 @@ void c_Module_types(FILE *f, Module *m) {
 
   if (m->types) {
     fprintf(f, "\n");
-    c_use(f, m->types, c_Module_types);
+    for (TypeList *tl = m->types; tl; tl = tl->next)
+      if (tl->type->kind == UseT)
+        c_Module_types(f, tl->type->useT->module);
     fprintf(f, "\n");
-    c_type(f, m->c_name, m->types);
+    for (TypeList *tl = m->types; tl; tl = tl->next)
+      c_type(f, m->c_name, tl->type);
   }
 }
 
@@ -3331,7 +3329,9 @@ void c_Module_interface_tables(FILE *f, Module *m) {
   m->finished = true;
 
   if (m->types) {
-    c_use(f, m->types, c_Module_interface_tables);
+    for (TypeList *tl = m->types; tl; tl = tl->next)
+      if (tl->type->kind == UseT)
+        c_Module_interface_tables(f, tl->type->useT->module);
 
     for (TypeList *tl = m->types; tl; tl = tl->next)
       if (tl->type->kind == InterfaceT)
@@ -3345,7 +3345,9 @@ void c_Module_interfaces(FILE *f, Module *m) {
   m->finished = true;
 
   if (m->types) {
-    c_use(f, m->types, c_Module_interfaces);
+    for (TypeList *tl = m->types; tl; tl = tl->next)
+      if (tl->type->kind == UseT)
+        c_Module_interfaces(f, tl->type->useT->module);
 
     for (TypeList *tl = m->types; tl; tl = tl->next)
       if (tl->type->kind == InterfaceT)
@@ -3360,9 +3362,13 @@ void c_Module_fn(FILE *f, Module *m) {
 
   if (m->types) {
     fprintf(f, "\n");
-    c_use(f, m->types, c_Module_fn);
+    for (TypeList *tl = m->types; tl; tl = tl->next)
+      if (tl->type->kind == UseT)
+        c_Module_fn(f, tl->type->useT->module);
     fprintf(f, "\n");
-    c_fn(f, m->c_name, m->types);
+    for (TypeList *tl = m->types; tl; tl = tl->next)
+      if (tl->type->kind == FnT)
+        c_fn(f, m->c_name, tl->type->fnT, tl->type->name);
   }
 }
 
@@ -3380,36 +3386,31 @@ void c_fn_forward_fn(FILE *f, const char *module_name, const char *fn_name, Func
   fprintf(f, ");\n");
 }
 
-void c_type_forward(FILE *f, const char *module_name, TypeList *t) {
-  if (!t)
-    return;
-
-  c_type_forward(f, module_name, t->next);
-
-  switch ((TypeKind)t->type->kind) {
+void c_type_forward(FILE *f, const char *module_name, Type *t) {
+  switch ((TypeKind)t->kind) {
   case BaseT:
   case CStructT:
   case CEnumT:
     break;
   case StructT:
-    fprintf(f, "typedef struct %s%s %s%s;\n", module_name, t->type->name, module_name, t->type->name);
+    fprintf(f, "typedef struct %s%s %s%s;\n", module_name, t->name, module_name, t->name);
     break;
   case UnionT:
-    fprintf(f, "typedef union %s%s %s%s;\n", module_name, t->type->name, module_name, t->type->name);
+    fprintf(f, "typedef union %s%s %s%s;\n", module_name, t->name, module_name, t->name);
     break;
   case EnumT:
-    c_enum(f, module_name, t->type->name, t->type->enumT->entries);
+    c_enum(f, module_name, t->name, t->enumT->entries);
     break;
   case InterfaceT: {
-    fprintf(f, "typedef struct %s%sTable %s%sTable;\n", module_name, t->type->name, module_name, t->type->name);
-    fprintf(f, "typedef struct %s%s %s%s;\n", module_name, t->type->name, module_name, t->type->name);
+    fprintf(f, "typedef struct %s%sTable %s%sTable;\n", module_name, t->name, module_name, t->name);
+    fprintf(f, "typedef struct %s%s %s%s;\n", module_name, t->name, module_name, t->name);
     break;
   }
 
   case VecT:
   case PoolT:
   case BufT:
-    FATALX("'%s' type should be replaced here!", Type_name(t->type).s);
+    FATALX("'%s' type should be replaced here!", Type_name(t).s);
     break;
 
   case UseT:
@@ -3431,24 +3432,22 @@ void c_Module_forward_types(FILE *f, Module *m) {
 
   if (m->types) {
     fprintf(f, "\n");
-    c_use(f, m->types, c_Module_forward_types);
+    for (TypeList *tl = m->types; tl; tl = tl->next)
+      if (tl->type->kind == UseT)
+        c_Module_forward_types(f, tl->type->useT->module);
     fprintf(f, "\n");
-    c_type_forward(f, m->c_name, m->types);
+    for (TypeList *t = m->types; t; t = t->next)
+      c_type_forward(f, m->c_name, t->type);
   }
 }
 
-void c_fn_forward(FILE *f, const char *module_name, TypeList *tl) {
-  if (!tl)
-    return;
+void c_fn_forward(FILE *f, const char *module_name, Type *t) {
+  if (t->kind == FnT && !t->fnT->is_extern_c)
+    c_fn_forward_fn(f, module_name, t->name, t->fnT);
 
-  c_fn_forward(f, module_name, tl->next);
-  if (tl->type->kind == FnT && !tl->type->fnT->is_extern_c)
-    c_fn_forward_fn(f, module_name, tl->type->name, tl->type->fnT);
-
-  if (tl->type->kind == InterfaceT) {
-    for (int i = 0; i < tl->type->interfaceT->methods.len; ++i)
-      c_fn_forward_fn(f, module_name, tl->type->interfaceT->methods.fns[i].name,
-                      tl->type->interfaceT->methods.fns[i].fnT);
+  if (t->kind == InterfaceT) {
+    for (int i = 0; i < t->interfaceT->methods.len; ++i)
+      c_fn_forward_fn(f, module_name, t->interfaceT->methods.fns[i].name, t->interfaceT->methods.fns[i].fnT);
   }
 }
 
@@ -3459,9 +3458,12 @@ void c_Module_forward_fn(FILE *f, Module *m) {
 
   if (m->types) {
     fprintf(f, "\n");
-    c_use(f, m->types, c_Module_forward_fn);
+    for (TypeList *tl = m->types; tl; tl = tl->next)
+      if (tl->type->kind == UseT)
+        c_Module_forward_fn(f, tl->type->useT->module);
     fprintf(f, "\n");
-    c_fn_forward(f, m->c_name, m->types);
+    for (TypeList *tl = m->types; tl; tl = tl->next)
+      c_fn_forward(f, m->c_name, tl->type);
   }
 }
 
@@ -4082,6 +4084,13 @@ void c_check_types(Module *m) {
   if (m->finished)
     return;
   m->finished = true;
+
+  for (TypeList *tl = m->types; tl; tl = tl->next) {
+    if (tl->type->kind == PlaceHolder)
+      FATALX("undefined type '%s' in module '%s'", Type_name(tl->type).s, m->path);
+    else if (tl->type->kind == UseT)
+      c_check_types(tl->type->useT->module);
+  }
   for (TypeList *tl = m->types; tl; tl = tl->next) {
     if (tl->type->kind != UseT)
       continue;
@@ -4094,12 +4103,6 @@ void c_check_types(Module *m) {
       }
     }
   }
-  for (TypeList *tl = m->types; tl; tl = tl->next) {
-    if (tl->type->kind == PlaceHolder)
-      FATALX("undefined type '%s' in module '%s'", Type_name(tl->type).s, m->path);
-    else if (tl->type->kind == UseT)
-      c_check_types(tl->type->useT->module);
-  }
 }
 
 void c_build_pool_from(Program *p, Module *m, TypeList *tl) {
@@ -4110,18 +4113,11 @@ void c_build_pool_from(Program *p, Module *m, TypeList *tl) {
 
   Type *value_type = tl->type->child;
   Type *value_type_array = Module_find_array_type(m, count, value_type);
-  if (!value_type_array) {
-    value_type_array = Program_add_type(p, ArrayT, "", m);
-    value_type_array->array_count = count;
-    value_type_array->child = value_type;
-  }
-  // for (TypeList *tl = m->types; tl; tl = tl->next)
-  //   printf("::: %s\n", Type_special_cname(tl->type).s);
+  if (!value_type_array)
+    FATALX("internal error finding array type for '%s'", Type_name(value_type).s);
   Type *value_type_pointer = Module_find_pointer_type(m, value_type);
-  if (!value_type_pointer) {
-    value_type_pointer = Program_add_type(p, PointerT, "", m);
-    value_type_pointer->child = value_type;
-  }
+  if (!value_type_pointer)
+    FATALX("internal error finding pointer type for '%s'", Type_name(value_type).s);
 
   Struct *poolS = (Struct *)Program_alloc(p, sizeof(Struct));
   poolS->module = m;
@@ -4135,10 +4131,8 @@ void c_build_pool_from(Program *p, Module *m, TypeList *tl) {
   tl->type->child = NULL;
   tl->type->name = Program_copy_string(p, pool_name.s, strlen(pool_name.s));
   Type *pool_pointer_type = Module_find_pointer_type(m, tl->type);
-  if (!pool_pointer_type) {
-    pool_pointer_type = Program_add_type(p, PointerT, "", m);
-    pool_pointer_type->child = tl->type;
-  }
+  if (!pool_pointer_type)
+    FATALX("internal error finding pool pointer type for '%s'", Type_name(tl->type).s);
 
   {
     BuffString fn_name = pool_name;
@@ -4208,16 +4202,11 @@ void c_build_buf_from(Program *p, Module *m, TypeList *tl) {
 
   Type *value_type = tl->type->child;
   Type *value_type_array = Module_find_array_type(m, count, value_type);
-  if (!value_type_array) {
-    value_type_array = Program_add_type(p, ArrayT, "", m);
-    value_type_array->array_count = count;
-    value_type_array->child = value_type;
-  }
+  if (!value_type_array)
+    FATALX("internal error finding array type for '%s'", Type_name(value_type).s);
   Type *value_type_pointer = Module_find_pointer_type(m, value_type);
-  if (!value_type_pointer) {
-    value_type_pointer = Program_add_type(p, PointerT, "", m);
-    value_type_pointer->child = value_type;
-  }
+  if (!value_type_pointer)
+    FATALX("internal error finding pointer type for '%s'", Type_name(value_type).s);
 
   Struct *bufS = (Struct *)Program_alloc(p, sizeof(Struct));
   bufS->module = m;
@@ -4230,10 +4219,8 @@ void c_build_buf_from(Program *p, Module *m, TypeList *tl) {
   tl->type->child = NULL;
   tl->type->name = Program_copy_string(p, buf_name.s, strlen(buf_name.s));
   Type *buf_pointer_type = Module_find_pointer_type(m, tl->type);
-  if (!buf_pointer_type) {
-    buf_pointer_type = Program_add_type(p, PointerT, "", m);
-    buf_pointer_type->child = tl->type;
-  }
+  if (!buf_pointer_type)
+    FATALX("internal error finding pointer type for '%s'", Type_name(tl->type).s);
 
   {
     BuffString fn_name = buf_name;
@@ -4279,10 +4266,8 @@ void c_build_vec_from(Program *p, Module *m, TypeList *tl) {
 
   Type *value_type = tl->type->child;
   Type *value_type_pointer = Module_find_pointer_type(m, value_type);
-  if (!value_type_pointer) {
-    value_type_pointer = Program_add_type(p, PointerT, "", m);
-    value_type_pointer->child = value_type;
-  }
+  if (!value_type_pointer)
+    FATALX("internal error finding pointer type for '%s'", Type_name(value_type).s);
 
   Struct *vecS = (Struct *)Program_alloc(p, sizeof(Struct));
   vecS->module = m;
@@ -4296,10 +4281,8 @@ void c_build_vec_from(Program *p, Module *m, TypeList *tl) {
   tl->type->child = NULL;
   tl->type->name = Program_copy_string(p, vec_name.s, strlen(vec_name.s));
   Type *vec_pointer_type = Module_find_pointer_type(m, tl->type);
-  if (!vec_pointer_type) {
-    vec_pointer_type = Program_add_type(p, PointerT, "", m);
-    vec_pointer_type->child = tl->type;
-  }
+  if (!vec_pointer_type)
+    FATALX("internal error finding pointer type for '%s'", Type_name(tl->type).s);
 
   {
     BuffString fn_name = vec_name;
