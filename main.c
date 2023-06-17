@@ -3384,6 +3384,43 @@ void c_if_statement(FILE *f, Statement *s, int indent) {
     c_if_statement_base(f, s, indent);
 }
 
+void c_switch_statement_base(FILE *f, Statement *s, int indent) {
+  fprintf(f, "switch (");
+  c_expression(f, s->switchS->condition);
+  fprintf(f, ") ");
+  c_scope_as_body(f, s->doWhileS->body, indent);
+}
+
+void c_switch_statement(FILE *f, Statement *s, int indent) {
+  if (s->switchS->condition->type == AutoTypeE) {
+    fprintf(f, "{\n");
+    Expression *backup = s->switchS->condition;
+    s->switchS->condition = &(Expression){
+        .type = BraceE,
+        .location = backup->location,
+        .brace = &(Brace){
+            .o = &(Expression){
+                .binop = &(BinaryOperation){.o1 = &(Expression){.location = backup->location,
+                                                                .type = IdentifierA,
+                                                                .id = &(Identifier){.name = backup->autotype->name,
+                                                                                    .type = backup->autotype->type}},
+                                            .o2 = backup->autotype->e,
+                                            .op = getop("=")},
+                .type = BinaryOperationE,
+                .location = backup->location,
+            }}};
+
+    fprintf(f, "%.*s", indent + 2, SPACE);
+    if (!c_type_declare(f, backup->autotype->type, &backup->location, backup->autotype->name))
+      fprintf(f, " %s;", backup->autotype->name);
+    c_switch_statement_base(f, s, indent + 2);
+    fprintf(f, "%.*s}", indent, SPACE);
+
+    s->switchS->condition = backup;
+  } else
+    c_switch_statement_base(f, s, indent);
+}
+
 void c_statements(FILE *f, Statement *s, int indent) {
   if (!s)
     return;
@@ -3466,10 +3503,7 @@ void c_statements(FILE *f, Statement *s, int indent) {
     fprintf(f, ");\n");
     break;
   case Switch:
-    fprintf(f, "switch (");
-    c_expression(f, s->switchS->condition);
-    fprintf(f, ") ");
-    c_scope_as_body(f, s->doWhileS->body, indent);
+    c_switch_statement(f, s, indent);
     break;
   }
 }

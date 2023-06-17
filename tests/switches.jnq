@@ -1,4 +1,8 @@
 
+fn dummy(a int) int {
+  return a
+}
+
 fn main() int {
   printf("switches\n")
   a := 0
@@ -27,6 +31,15 @@ fn main() int {
     a = 63
   }
   ASSERT(a == 63)
+
+  val := 42
+  switch (val := dummy(3)) {
+  case 3:
+    ASSERT(val == 3)
+  default:
+    ASSERT(false)
+  }
+  ASSERT(val == 42)
 
   printf(" ...ok\n")
   return 0

@@ -40,15 +40,18 @@ fn main() int {
 
   ASSERT(b == 21 * 3)
 
+  x := 42
   if (x := dummy())
     ASSERT(false)
   else
     ASSERT(x == null)
+  ASSERT(x == 42)
 
   if (x := none_dummy())
     ASSERT(x != null)
   else
     ASSERT(false)
+  ASSERT(x == 42)
 
   printf(" ...ok\n")
   return 0

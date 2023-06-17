@@ -1,10 +1,6 @@
 
-fn dummy() *int {
-  return null as *int
-}
-
-fn none_dummy() *char {
-  return "some static text"
+fn dummy(a int) int {
+  return a
 }
 
 fn main() int
@@ -12,15 +8,11 @@ fn main() int
   v := [3, 1, 2]
   printf("%d %d %d\n", v[0], v[1], v[2])
 
-  if (x := dummy())
-    printf("%d\n", *x)
-  else
-    printf("%p\n", x)
+  switch (val := dummy(3)) {
+  case 3: printf("Yes %d\n", val)
+  default: ASSERT(false)
+  }
 
-  if (x := none_dummy())
-    printf("%s\n", x)
-  else
-    printf("nooo: %p\n", x)
-
+  printf("ok\n")
   return 0
 }
