@@ -1,4 +1,13 @@
 
+
+fn dummy() *int {
+  return null as *int
+}
+
+fn none_dummy() *char {
+  return "some static text"
+}
+
 fn main() int {
   printf("conditionsls\n")
 
@@ -30,6 +39,16 @@ fn main() int {
   }
 
   ASSERT(b == 21 * 3)
+
+  if (x := dummy())
+    ASSERT(false)
+  else
+    ASSERT(x == null)
+
+  if (x := none_dummy())
+    ASSERT(x != null)
+  else
+    ASSERT(false)
 
   printf(" ...ok\n")
   return 0

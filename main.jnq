@@ -1,60 +1,26 @@
 
-use
-
-sqrtf  , cosf   from
-
- C.math
-
-  type   Empty
-
-     struct {
-
+fn dummy() *int {
+  return null as *int
 }
 
-type Stuff struct {
-  d   buf  [ 32  ] * int
-  type   **int   ,    }
-
-use    scanf from C.  stdio
-use rand from C .stdlib
-
-type Days enum {
-  Mon, Tue, Wed, Thu = 4, Fri, Sat = -4, Sun
-}
-
-cfn a_c_fn_with_return()
-
-fn a_c_fn_with_return() {}
-
-cfn qsort(  base   any  , num size_t, size size_t, comp fn_ptr)
-
-fn comp_int(  const   a   *any, const b any) *int {
-  return *(a as *int) - *(b as *int);
-
-  }
-
-fn early_out_apply(x *int) {
-  *x += 4
-}
-
-type RenderObject interface {
-  fn draw(r *RenderObject)
-  fn dist(r *RenderObject) float
-  fn dead(r *RenderObject, const a int) bool
-  fn destroy(r *RenderObject)
+fn none_dummy() *char {
+  return "some static text"
 }
 
 fn main() int
-{  v := [3,1,2]
-  printf("%d %d \"%d\n", v[0], v[1], v[2])
-
-  qsort(v, 3ul, sizeof(i32), comp_int)
+{
+  v := [3, 1, 2]
   printf("%d %d %d\n", v[0], v[1], v[2])
 
-  a := 38
-  early_out_apply(a)
-  ASSERT(a == 42)
+  if (x := dummy())
+    printf("%d\n", *x)
+  else
+    printf("%p\n", x)
 
-  printf("%d %d %lu ok\n", 1, 2, sizeof(RenderObject))
+  if (x := none_dummy())
+    printf("%s\n", x)
+  else
+    printf("nooo: %p\n", x)
+
   return 0
 }

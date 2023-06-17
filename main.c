@@ -3339,6 +3339,51 @@ void c_scope_as_body(FILE *f, Statement *s, int indent) {
     c_statements(f, s, indent + 2);
   }
 }
+
+void c_if_statement_base(FILE *f, Statement *s, int indent) {
+  fprintf(f, "if (");
+  c_expression(f, s->ifS->condition);
+  fprintf(f, ") ");
+  c_scope_as_body(f, s->ifS->ifBody, indent);
+  if (s->ifS->elseBody) {
+    fprintf(f, "%.*s", (s->ifS->ifBody->type == Scope ? 1 : indent), SPACE);
+    fprintf(f, "else");
+    c_scope_as_body(f, s->ifS->elseBody, indent);
+    if (s->ifS->elseBody->type == Scope)
+      fprintf(f, "\n");
+  } else if (s->ifS->ifBody->type == Scope)
+    fprintf(f, "\n");
+}
+void c_if_statement(FILE *f, Statement *s, int indent) {
+  if (s->ifS->condition->type == AutoTypeE) {
+    fprintf(f, "{\n");
+    Expression *backup = s->ifS->condition;
+    s->ifS->condition = &(Expression){
+        .type = BraceE,
+        .location = backup->location,
+        .brace = &(Brace){
+            .o = &(Expression){
+                .binop = &(BinaryOperation){.o1 = &(Expression){.location = backup->location,
+                                                                .type = IdentifierA,
+                                                                .id = &(Identifier){.name = backup->autotype->name,
+                                                                                    .type = backup->autotype->type}},
+                                            .o2 = backup->autotype->e,
+                                            .op = getop("=")},
+                .type = BinaryOperationE,
+                .location = backup->location,
+            }}};
+
+    fprintf(f, "%.*s", indent + 2, SPACE);
+    if (!c_type_declare(f, backup->autotype->type, &backup->location, backup->autotype->name))
+      fprintf(f, " %s;", backup->autotype->name);
+    c_if_statement_base(f, s, indent + 2);
+    fprintf(f, "%.*s}", indent, SPACE);
+
+    s->ifS->condition = backup;
+  } else
+    c_if_statement_base(f, s, indent);
+}
+
 void c_statements(FILE *f, Statement *s, int indent) {
   if (!s)
     return;
@@ -3386,18 +3431,7 @@ void c_statements(FILE *f, Statement *s, int indent) {
     fprintf(f, "%.*s}\n", indent, SPACE);
     break;
   case If:
-    fprintf(f, "if (");
-    c_expression(f, s->ifS->condition);
-    fprintf(f, ") ");
-    c_scope_as_body(f, s->ifS->ifBody, indent);
-    if (s->ifS->elseBody) {
-      fprintf(f, "%.*s", (s->ifS->ifBody->type == Scope ? 1 : indent), SPACE);
-      fprintf(f, "else");
-      c_scope_as_body(f, s->ifS->elseBody, indent);
-      if (s->ifS->elseBody->type == Scope)
-        fprintf(f, "\n");
-    } else if (s->ifS->ifBody->type == Scope)
-      fprintf(f, "\n");
+    c_if_statement(f, s, indent);
     break;
   case For:
     fprintf(f, "for (");
