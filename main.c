@@ -2778,119 +2778,6 @@ void c_type(FILE *f, const char *module_name, TypeList *t) {
   }
 }
 
-void lisp_expression(FILE *f, Expression *e);
-
-void lisp_parameter(FILE *f, ParameterList *pl) {
-  if (pl->len == 0)
-    return;
-
-  for (int i = 0; i < pl->len; ++i) {
-    lisp_expression(f, pl->p[i].p);
-    if (i + 1 < pl->len)
-      fprintf(f, " ");
-  }
-}
-
-void lisp_expression(FILE *f, Expression *e) {
-  if (!e)
-    return;
-
-  switch ((ExpressionType)e->type) {
-  case BaseA:
-    if (e->baseconst->type == &String)
-      fprintf(f, "\"%s\"", e->baseconst->text);
-    else if (e->baseconst->type == &Char)
-      fprintf(f, "'%s'", e->baseconst->text);
-    else
-      fprintf(f, "%s", e->baseconst->text);
-    break;
-  case IdentifierA:
-    fprintf(f, "%s", e->id->name);
-    break;
-  case AutoTypeE:
-    fprintf(f, "(:: %s %s ", e->autotype->name, Type_name(e->autotype->type).s);
-    lisp_expression(f, e->autotype->e);
-    fprintf(f, ")");
-    break;
-  case BraceE:
-    fprintf(f, "(() ");
-    lisp_expression(f, e->brace->o);
-    fprintf(f, ")");
-    break;
-  case CallE:
-    fprintf(f, "(__ ");
-    lisp_expression(f, e->call->o);
-    if (e->call->p.len > 0)
-      fprintf(f, " ");
-    lisp_parameter(f, &e->call->p);
-    fprintf(f, ")");
-    break;
-  case ConstructE:
-    fprintf(f, "(## %s", Type_name(e->construct->type).s);
-    if (e->construct->p.len > 0)
-      fprintf(f, " ");
-    lisp_parameter(f, &e->construct->p);
-    fprintf(f, ")");
-    break;
-  case NewE:
-    fprintf(f, "(new ");
-    lisp_expression(f, e->newE->o);
-    fprintf(f, ")");
-    break;
-  case AccessE:
-    fprintf(f, "([] ");
-    lisp_expression(f, e->access->o);
-    fprintf(f, " ");
-    lisp_expression(f, e->access->p);
-    fprintf(f, ")");
-    break;
-  case MemberAccessE:
-    if (e->member->o_type->kind == PointerT)
-      fprintf(f, "(-> ");
-    else
-      fprintf(f, "(. ");
-    lisp_expression(f, e->member->o);
-    fprintf(f, " %s)", e->member->member->name);
-    break;
-  case AsCast:
-    fprintf(f, "(as ");
-    lisp_expression(f, e->cast->o);
-    fprintf(f, " %s)", e->cast->type->name);
-    break;
-  case UnaryPrefixE:
-    fprintf(f, "(%s ", e->unpre->op);
-    lisp_expression(f, e->unpre->o);
-    fprintf(f, ")");
-    break;
-  case UnaryPostfixE:
-    fprintf(f, "(>>%s ", e->unpost->op);
-    lisp_expression(f, e->unpost->o);
-    fprintf(f, ")");
-    break;
-  case BinaryOperationE:
-    fprintf(f, "(%s ", e->binop->op->op);
-    lisp_expression(f, e->binop->o1);
-    fprintf(f, " ");
-    lisp_expression(f, e->binop->o2);
-    fprintf(f, ")");
-    break;
-  case TernaryOperationE:
-    fprintf(f, "(?! ");
-    lisp_expression(f, e->ternop->condition);
-    fprintf(f, " ");
-    lisp_expression(f, e->ternop->if_e);
-    fprintf(f, " ");
-    lisp_expression(f, e->ternop->else_e);
-    fprintf(f, ")");
-    break;
-  case CDelegateE:
-    fprintf(f, "(.c ");
-    lisp_expression(f, e->cdelegate->o);
-    fprintf(f, "%s)", e->cdelegate->delegate);
-    break;
-  }
-}
-
 void c_expression(FILE *f, Expression *e);
 
 void c_parameter(FILE *f, ParameterList *pl) {
@@ -3707,7 +3594,6 @@ Expression *Interface_construct(Program *p, Type *got, Type *expect, Expression 
 
   bool is_pointer = got->kind == PointerT;
   if (!is_pointer) {
-    lisp_expression(stderr, pr);
     fprintf(stderr, " %s <=> %s %p %p\n", Type_name(got).s, Type_name(expect).s, got, expect);
     FATAL(&pr->location, "construct interface from none pointer type '%s'", Type_name(got).s);
   }
@@ -4056,12 +3942,6 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
       return t1;
     }
     if (!Type_convertable(t1, t2)) {
-      lisp_expression(stderr, e);
-      fprintf(stderr, "\n");
-      lisp_expression(stderr, e->binop->o1);
-      fprintf(stderr, "\n");
-      lisp_expression(stderr, e->binop->o2);
-      fprintf(stderr, "\n");
       FATAL(&e->location, "Expect equal types for binary operation '%s' (%s, %s) (%p, %p)", e->binop->op->op,
             Type_name(t1).s, Type_name(t2).s, t1, t2);
     }
