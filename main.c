@@ -482,6 +482,18 @@ typedef PACK(struct EnumEntry {
   bool valueSet;
 }) EnumEntry;
 
+EnumEntry *Enum_reverse(EnumEntry *head) {
+  EnumEntry *current = head;
+  EnumEntry *prev = NULL, *next = NULL;
+  while (current != NULL) {
+    next = current->next;
+    current->next = prev;
+    prev = current;
+    current = next;
+  }
+  return prev;
+}
+
 typedef PACK(struct Enum {
   EnumEntry *entries;
   Module *module;
@@ -1689,7 +1701,7 @@ EnumEntry *Program_parse_enum_entry_list(Program *p, State *st) {
   EnumEntry *top = NULL;
   while (*st->c) {
     if (check_op(st, "}"))
-      return top;
+      return Enum_reverse(top);
 
     skip_whitespace(st);
     State old = *st;
@@ -2650,17 +2662,14 @@ bool c_type_declare(FILE *f, Type *t, Location *l, const char *var) {
   return hasVarWritten;
 }
 
-void c_enum_entry_list(FILE *f, const char *module_name, EnumEntry *ee) {
-  if (!ee)
-    return;
-
-  c_enum_entry_list(f, module_name, ee->next);
-  if (ee->next)
-    fprintf(f, ",\n  ");
-
-  fprintf(f, "%s%s", module_name, ee->name);
-  if (ee->valueSet)
-    fprintf(f, " = %d", ee->value);
+void c_enum_entry_list(FILE *f, const char *module_name, EnumEntry *head) {
+  for (EnumEntry *e = head; e; e = e->next) {
+    fprintf(f, "%s%s", module_name, e->name);
+    if (e->valueSet)
+      fprintf(f, " = %d", e->value);
+    if (e->next)
+      fprintf(f, ",\n  ");
+  }
 }
 
 void c_enum(FILE *f, const char *module_name, const char *name, EnumEntry *entries) {
