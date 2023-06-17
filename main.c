@@ -4709,6 +4709,10 @@ void Program_add_defaults(Program *p) {
   Program_parse_fn(p, &global, &(State){"free(d *char)\n", fn_location}, true);
 }
 
+#ifndef WIN32
+extern ssize_t readlink(const char *, char *, size_t);
+#endif
+
 void init_lib_path() {
 #ifdef WIN32
   const char sep = '\\';
