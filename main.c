@@ -1772,6 +1772,23 @@ FnVec Program_parse_interface_fns(Program *p, Module *m, Type *in, State *st) {
   return (FnVec){};
 }
 
+TypeKind Program_parse_type_kind(State *st) {
+  if (check_word(st, "union"))
+    return UnionT;
+  else if (check_word(st, "struct"))
+    return StructT;
+  else if (check_word(st, "cstruct"))
+    return CStructT;
+  else if (check_word(st, "enum"))
+    return EnumT;
+  else if (check_word(st, "cenum"))
+    return CEnumT;
+  else if (check_word(st, "interface"))
+    return InterfaceT;
+
+  return PlaceHolder;
+}
+
 void Program_parse_type(Program *p, Module *m, State *st) {
   Location old = back(st, 4);
   skip_whitespace(st);
@@ -1779,26 +1796,26 @@ void Program_parse_type(Program *p, Module *m, State *st) {
   const char *name_start = st->c;
   if (check_identifier(st)) {
     const char *name = Program_copy_string(p, be_sv(name_start, st->c));
-    bool is_union = check_word(st, "union");
-    bool is_c_struct = !is_union && check_word(st, "cstruct");
-    if ((is_union || is_c_struct || check_word(st, "struct")) && check_op(st, "{")) {
-      Struct *s = Program_add_type(p, is_union ? UnionT : (is_c_struct ? CStructT : StructT), name, m)->structT;
+    TypeKind tk = Program_parse_type_kind(st);
+    if (tk == PlaceHolder)
+      FATAL(&st->location, "Missing type declaration");
+    if (!check_op(st, "{"))
+      FATAL(&st->location, "Expect '{' for type declaration");
+
+    if (tk == UnionT || tk == StructT || tk == CStructT) {
+      Struct *s = Program_add_type(p, tk, name, m)->structT;
       s->member = Program_parse_variable_declaration_list(p, m, st, "}");
       s->location = NewRange(old, st->location);
-    } else if (check_word(st, "enum") && check_op(st, "{")) {
-      Enum *e = Program_add_type(p, EnumT, name, m)->enumT;
+    } else if (tk == EnumT || tk == CEnumT) {
+      Enum *e = Program_add_type(p, tk, name, m)->enumT;
       e->entries = Program_parse_enum_entry_list(p, st);
       e->location = NewRange(old, st->location);
-    } else if (check_word(st, "cenum") && check_op(st, "{")) {
-      Enum *e = Program_add_type(p, CEnumT, name, m)->enumT;
-      e->entries = Program_parse_enum_entry_list(p, st);
-      e->location = NewRange(old, st->location);
-    } else if (check_word(st, "interface") && check_op(st, "{")) {
+    } else if (tk == InterfaceT) {
       Type *in = Program_add_type(p, InterfaceT, name, m);
       in->interfaceT->methods = Program_parse_interface_fns(p, m, in, st);
       in->interfaceT->location = NewRange(old, st->location);
     } else
-      FATAL(&st->location, "Missing type declaration");
+      FATAL(&st->location, "Unhandled type kind");
   } else
     FATAL(&st->location, "Missing type name");
 }
