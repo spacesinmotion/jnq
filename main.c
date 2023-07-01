@@ -636,6 +636,12 @@ typedef struct CBlock {
   CBlock *next;
 } CBlock;
 
+typedef enum ProgramMode {
+  Run = 0,
+  Symbols = 1,
+  Build = 2,
+} ProgramMode;
+
 typedef struct Program {
   struct {
     char *buffer;
@@ -645,7 +651,9 @@ typedef struct Program {
 
   Module *modules;
   CBlock *cblocks;
-  bool single_file_mode;
+  const char *main_file;
+  const char *output;
+  ProgramMode mode;
 } Program;
 
 Module global = (Module){"", "", NULL, true, NULL};
@@ -659,7 +667,9 @@ Program Program_new(char *buffer, size_t cap) {
   p.arena.cap = cap;
   p.modules = &global;
   p.cblocks = NULL;
-  p.single_file_mode = false;
+  p.main_file = NULL;
+  p.output = JNQ_BIN;
+  p.mode = Run;
   return p;
 }
 
@@ -1332,7 +1342,7 @@ bool read_float(State *st, double *f) {
 Module *Program_parse_file(Program *p, const char *path);
 
 Module *Program_parse_sub_file(Program *p, const char *path, Module *parent) {
-  if (p->single_file_mode)
+  if (p->mode == Symbols)
     return Program_add_module(p, path);
 
   char tempPath[256];
@@ -4435,9 +4445,24 @@ void c_Program(FILE *f, Program *p, Module *m) {
     }
 
   if (!custom_main) {
+
+    int nb_main_args = 0;
+    for (TypeList *tl = m->types; tl; tl = tl->next) {
+      if (tl->type->kind != FnT || strcmp(tl->type->name, "main") != 0)
+        continue;
+      nb_main_args = tl->type->fnT->d.parameter.len;
+    }
+
     fputs("\n", f);
-    fputs("int main() {\n", f);
-    fprintf(f, "  return %smain();\n", m->c_name);
+    if (nb_main_args == 0) {
+      fputs("int main() {\n", f);
+      fprintf(f, "  return %smain();\n", m->c_name);
+    } else if (nb_main_args == 2) {
+      fputs("int main(int argc, char **argv) {\n", f);
+      fprintf(f, "  return %smain(argc, argv);\n", m->c_name);
+    } else {
+      FATALX("incompatible main function");
+    }
     fputs("}\n", f);
   }
 }
@@ -4479,72 +4504,6 @@ void init_lib_path() {
   if (last)
     last[1] = '\0';
   strcat(lib_path, "lib.");
-}
-
-int compile(Program *p, Module *m, const char *main_file, int jnq_len, int argc, char *argv[]) {
-
-  char main_c[256] = {0};
-  strncpy(main_c, main_file, jnq_len - 4);
-  main_c[jnq_len - 4] = '_';
-  main_c[jnq_len - 3] = '.';
-  main_c[jnq_len - 2] = 'c';
-  main_c[jnq_len - 1] = 0;
-
-  if (access(main_c, F_OK) == 0)
-    FATALX("temp file already exisits '%s'", main_c);
-  if (access(JNQ_BIN, F_OK) == 0)
-    FATALX("temp bin already exisits '" JNQ_BIN "'");
-
-  FILE *c_tmp_file = fopen(main_c, "w");
-  if (!c_tmp_file)
-    FATALX("could not create temp file '%s'", main_c);
-
-  int error = setjmp(long_jump_end);
-  if (error == 0)
-    c_Program(c_tmp_file, p, m);
-  fclose(c_tmp_file);
-
-  if (error == 0)
-    error = setjmp(long_jump_end);
-  if (error == 0) {
-    char clang_call[1024] = {0};
-    // strcat(clang_call, "cat ");
-    // strcat(clang_call, main_c);
-    // system(clang_call);
-    // clang_call[0] = 0;
-    strcat(clang_call, "clang -o " JNQ_BIN " -Werror -g "
-#ifndef _WIN32
-                       "-lm "
-#else
-                       "-D_CRT_SECURE_NO_WARNINGS "
-#endif
-    );
-    const int start = p->single_file_mode ? 3 : 2;
-    for (int i = start; i < argc; ++i) {
-      strcat(clang_call, argv[i]);
-      strcat(clang_call, " ");
-    }
-    strcat(clang_call, main_c);
-    error = system(clang_call);
-    if (error != 0)
-      FATALX("failed to compile c '%s'", main_c);
-  }
-  if (error == 0)
-    error = system(JNQ_BIN);
-
-  remove(main_c);
-  remove(JNQ_BIN);
-#ifdef _WIN32
-  remove("jnq_bin.ilk");
-  remove("jnq_bin.pdb");
-#endif
-
-  int percent = (int)(100.0 * (double)p->arena.len / (double)p->arena.cap);
-  if (percent > 90) {
-    printf("-------------------------------------\n");
-    printf("       memory usage %3d%% (%zu/%zu)\n", percent, p->arena.len, p->arena.cap);
-  }
-  return error;
 }
 
 void write_symbols(Module *m) {
@@ -4606,7 +4565,7 @@ void write_symbols(Module *m) {
 #endif
 
 int symbols(Program *p) {
-  p->single_file_mode = true;
+  p->mode = Symbols;
   size_t size = 0;
   size_t size_read = 1024;
   char *code = NULL;
@@ -4625,7 +4584,7 @@ int symbols(Program *p) {
 }
 
 int symbols_file(Program *p, const char *file) {
-  p->single_file_mode = true;
+  p->mode = Symbols;
   char *code = readFile(file);
   if (!code)
     return 1;
@@ -4638,36 +4597,177 @@ int symbols_file(Program *p, const char *file) {
   return 0;
 }
 
-int main(int argc, char *argv[]) {
+void parse_command_line(Program *p, int argc, char *argv[]) {
   if (argc <= 1)
-    FATALX("missing input file\n");
+    FATALX("missing command line arguments\n");
 
-  char buffer[1024 * 1024];
-  Program p = Program_new(buffer, 1024 * 1024);
+  int arg = 1;
+  if (strcmp(argv[arg], "symbols") == 0) {
+    p->mode = Symbols;
+  } else if (strcmp(argv[arg], "build") == 0)
+    p->mode = Build;
+  else if (strcmp(argv[arg], "run") == 0)
+    p->mode = Run;
+  else
+    arg--;
 
-  const char *main_file = argv[1];
-  if (strcmp(main_file, "symbols") == 0) {
-    if (argc > 2)
-      return symbols_file(&p, argv[2]);
-    return symbols(&p);
+  for (int i = arg; i < argc; ++i) {
+    if (strcmp(argv[i], "--") == 0)
+      break;
+    if (strcmp(argv[i], "-o") == 0 && i + 1 < argc) {
+      p->output = argv[i + 1];
+      i++;
+    } else
+      arg = i;
   }
 
-  int jnq_len = strlen(main_file);
-  if (jnq_len < 4 || strcmp(main_file + (jnq_len - 4), ".jnq") != 0)
-    FATALX("invalid input file '%s'\n", main_file);
+  if (arg >= argc)
+    FATALX("missing input file\n");
+  p->main_file = argv[arg];
+}
+
+Module *parse_main(Program *p) {
+  int jnq_len = strlen(p->main_file);
+  if (jnq_len < 4 || strcmp(p->main_file + (jnq_len - 4), ".jnq") != 0)
+    FATALX("invalid input file '%s'\n", p->main_file);
 
   init_lib_path();
 
-  char main_mod[256] = {0};
+  BuffString main_mod = (BuffString){};
   if (jnq_len > 255)
-    FATALX("input path too long '%s' (sorry)\n", main_file);
-  strncpy(main_mod, main_file, jnq_len - 4);
+    FATALX("input path too long '%s' (sorry)\n", p->main_file);
+  strncpy(main_mod.s, p->main_file, jnq_len - 4);
 
+  return Program_parse_file(p, main_mod.s);
+}
+
+BuffString write_c_file(Program *p, Module *m) {
+  int jnq_len = strlen(p->main_file);
+  BuffString main_c = str("%.*s_.c", jnq_len - 4, p->main_file);
+
+  int error = 0;
+  error = setjmp(long_jump_end);
+  if (error == 0 && access(main_c.s, F_OK) == 0)
+    FATALX("temp file already exisits '%s'", main_c.s);
+
+  if (error == 0) {
+    FILE *c_tmp_file = fopen(main_c.s, "w");
+    if (!c_tmp_file)
+      FATALX("could not create temp file '%s'", main_c);
+    error = setjmp(long_jump_end);
+    if (error == 0)
+      c_Program(c_tmp_file, p, m);
+    fclose(c_tmp_file);
+  } else
+    main_c.s[0] = '\0';
+  return main_c;
+}
+
+int compile(Program *p, const char *main_c, int argc, char *argv[]) {
+  int error = 0;
+  error = setjmp(long_jump_end);
+  if (error == 0 && access(p->output, F_OK) == 0)
+    FATALX("temp bin already exisits '%s'", p->output);
+
+  if (error == 0)
+    error = setjmp(long_jump_end);
+  if (error == 0) {
+    char clang_call[1024] = {0};
+    strcat(clang_call, "clang  -Werror -g "
+#ifndef _WIN32
+                       "-lm "
+#else
+                       "-D_CRT_SECURE_NO_WARNINGS "
+#endif
+    );
+    const int start = 2; // p->main_file == argv[1] ? 2 : 3;
+    bool output_defined = false;
+    for (int i = start; i < argc; ++i) {
+      if (strcmp(argv[i], "--") == 0)
+        break;
+      if (strcmp(argv[i], "-o") == 0)
+        output_defined = true;
+
+      int len = strlen(argv[i]);
+      if (len > 4 && strcmp(argv[i] + len - 4, ".jnq") == 0)
+        continue;
+
+      strcat(clang_call, argv[i]);
+      strcat(clang_call, " ");
+    }
+    if (!output_defined) {
+      strcat(clang_call, "-o ");
+      strcat(clang_call, p->output);
+      strcat(clang_call, " ");
+    }
+    strcat(clang_call, main_c);
+    error = system(clang_call);
+    if (error != 0)
+      FATALX("failed to compile c '%s'", main_c);
+  }
+  remove(main_c);
+  return error;
+}
+
+int run(Program *p, const char *exec, int argc, char *argv[]) {
+  char exec_call[1024] = {0};
+  if (strlen(exec) < 2 || exec[0] != '.' || exec[1] != '/')
+    strcat(exec_call, "./");
+  strcat(exec_call, exec);
+  strcat(exec_call, " ");
+  bool add = false;
+  for (int i = 1; i < argc; ++i) {
+    if (add) {
+      strcat(exec_call, argv[i]);
+      strcat(exec_call, " ");
+    } else
+      add = strcmp(argv[i], "--") == 0;
+  }
+
+  int error = system(exec_call);
+  remove(exec);
+#ifdef _WIN32
+  remove("jnq_bin.ilk");
+  remove("jnq_bin.pdb");
+#endif
+
+  if (error == 0) {
+    int percent = (int)(100.0 * (double)p->arena.len / (double)p->arena.cap);
+    if (percent > 90) {
+      printf("-------------------------------------\n");
+      printf("       memory usage %3d%% (%zu/%zu)\n", percent, p->arena.len, p->arena.cap);
+    }
+  }
+  return error;
+}
+
+int main(int argc, char *argv[]) {
+  char buffer[1024 * 1024];
+  Program p = Program_new(buffer, 1024 * 1024);
   Program_add_defaults(&p);
 
-  Module *m = Program_parse_file(&p, main_mod);
-  if (!m)
-    FATALX("Cant find input file! '%s'", main_file);
+  parse_command_line(&p, argc, argv);
 
-  return compile(&p, m, main_file, jnq_len, argc, argv);
+  if (p.mode == Symbols) {
+    if (p.main_file)
+      return symbols_file(&p, argv[2]);
+    else
+      return symbols(&p);
+  }
+
+  Module *m = parse_main(&p);
+  if (!m)
+    FATALX("Invalid input file! '%s'", p.main_file);
+
+  BuffString main_c = write_c_file(&p, m);
+
+  int error = *main_c.s == '\0' ? 1 : 0;
+
+  if (error == 0)
+    error = compile(&p, main_c.s, argc, argv);
+
+  if (error == 0 && p.mode == Run)
+    run(&p, p.output, argc, argv);
+
+  return error;
 }

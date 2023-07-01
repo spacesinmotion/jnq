@@ -9,8 +9,12 @@ type TestE enum {
   C
 }
 
-fn main() int
+fn main(argc i32, argv[]*char) int
 {
+  for (i := 0; i < argc; ++i)
+    printf("%s ", argv[i])
+  printf("\n")
+
   v := [3, 1, 2]
   printf("%d %d %d\n", v[0], v[1], v[2])
 
