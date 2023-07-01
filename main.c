@@ -4565,7 +4565,7 @@ void write_symbols(Module *m) {
 #define read(a, b, c) _read(a, b, c)
 #endif
 
-int symbols(Program *p) {
+char *read_stdin() {
   size_t size = 0;
   size_t size_read = 1024;
   char *code = NULL;
@@ -4574,17 +4574,11 @@ int symbols(Program *p) {
     size_read = read(STDIN_FILENO, code + size, 1024);
     size += 1024;
   }
-  State st = State_new(code, "dummy");
-  Module *m = Program_add_module(p, "dummy");
-  Program_parse_module(p, m, &st);
-  write_symbols(m);
-  free(code);
-
-  return 0;
+  return code;
 }
 
-int symbols_file(Program *p, const char *file) {
-  char *code = readFile(file);
+int symbols(Program *p, const char *file) {
+  char *code = file ? readFile(file) : read_stdin();
   if (!code)
     return 1;
   State st = State_new(code, "dummy");
@@ -4612,6 +4606,7 @@ void parse_command_line(Program *p, int argc, char *argv[]) {
   else
     arg--;
 
+  ++arg;
   for (int i = arg; i < argc; ++i) {
     if (strcmp(argv[i], "--") == 0)
       break;
@@ -4622,9 +4617,10 @@ void parse_command_line(Program *p, int argc, char *argv[]) {
       arg = i;
   }
 
-  if (arg >= argc)
+  if (arg >= argc && p->mode != Symbols)
     FATALX("missing input file\n");
-  p->main_file = argv[arg];
+  if (arg < argc)
+    p->main_file = argv[arg];
 }
 
 Module *parse_main(Program *p) {
@@ -4749,12 +4745,8 @@ int main(int argc, char *argv[]) {
 
   parse_command_line(&p, argc, argv);
 
-  if (p.mode == Symbols) {
-    if (p.main_file)
-      return symbols_file(&p, argv[2]);
-    else
-      return symbols(&p);
-  }
+  if (p.mode == Symbols)
+    return symbols(&p, p.main_file);
 
   Module *m = parse_main(&p);
   if (!m)
