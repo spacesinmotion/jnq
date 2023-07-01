@@ -640,6 +640,7 @@ typedef enum ProgramMode {
   Run = 0,
   Symbols = 1,
   Build = 2,
+  Transpile = 3,
 } ProgramMode;
 
 typedef struct Program {
@@ -4565,7 +4566,6 @@ void write_symbols(Module *m) {
 #endif
 
 int symbols(Program *p) {
-  p->mode = Symbols;
   size_t size = 0;
   size_t size_read = 1024;
   char *code = NULL;
@@ -4584,7 +4584,6 @@ int symbols(Program *p) {
 }
 
 int symbols_file(Program *p, const char *file) {
-  p->mode = Symbols;
   char *code = readFile(file);
   if (!code)
     return 1;
@@ -4606,6 +4605,8 @@ void parse_command_line(Program *p, int argc, char *argv[]) {
     p->mode = Symbols;
   } else if (strcmp(argv[arg], "build") == 0)
     p->mode = Build;
+  else if (strcmp(argv[arg], "transpile") == 0)
+    p->mode = Transpile;
   else if (strcmp(argv[arg], "run") == 0)
     p->mode = Run;
   else
@@ -4643,7 +4644,7 @@ Module *parse_main(Program *p) {
 
 BuffString write_c_file(Program *p, Module *m) {
   int jnq_len = strlen(p->main_file);
-  BuffString main_c = str("%.*s_.c", jnq_len - 4, p->main_file);
+  BuffString main_c = p->mode == Transpile ? str("%s.c", p->output) : str("%.*s_.c", jnq_len - 4, p->main_file);
 
   int error = 0;
   error = setjmp(long_jump_end);
@@ -4763,7 +4764,7 @@ int main(int argc, char *argv[]) {
 
   int error = *main_c.s == '\0' ? 1 : 0;
 
-  if (error == 0)
+  if (error == 0 && p.mode != Transpile)
     error = compile(&p, main_c.s, argc, argv);
 
   if (error == 0 && p.mode == Run)
