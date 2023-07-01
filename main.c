@@ -4594,33 +4594,36 @@ void parse_command_line(Program *p, int argc, char *argv[]) {
   if (argc <= 1)
     FATALX("missing command line arguments\n");
 
-  int arg = 1;
-  if (strcmp(argv[arg], "symbols") == 0) {
+  int start = 2;
+  if (strcmp(argv[1], "symbols") == 0) {
     p->mode = Symbols;
-  } else if (strcmp(argv[arg], "build") == 0)
+  } else if (strcmp(argv[1], "build") == 0)
     p->mode = Build;
-  else if (strcmp(argv[arg], "transpile") == 0)
+  else if (strcmp(argv[1], "transpile") == 0)
     p->mode = Transpile;
-  else if (strcmp(argv[arg], "run") == 0)
+  else if (strcmp(argv[1], "run") == 0)
     p->mode = Run;
   else
-    arg--;
+    start = 1;
 
-  ++arg;
-  for (int i = arg; i < argc; ++i) {
+  int main_file = -1;
+  for (int i = start; i < argc; ++i) {
     if (strcmp(argv[i], "--") == 0)
       break;
     if (strcmp(argv[i], "-o") == 0 && i + 1 < argc) {
       p->output = argv[i + 1];
       i++;
-    } else
-      arg = i;
+    } else {
+      int len = strlen(argv[i]);
+      if (len > 4 && strcmp(argv[i] + (len - 4), ".jnq") == 0)
+        main_file = i;
+    }
   }
 
-  if (arg >= argc && p->mode != Symbols)
+  if (main_file < 0 && p->mode != Symbols)
     FATALX("missing input file\n");
-  if (arg < argc)
-    p->main_file = argv[arg];
+  if (main_file >= 0)
+    p->main_file = argv[main_file];
 }
 
 Module *parse_main(Program *p) {
