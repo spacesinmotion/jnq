@@ -4658,8 +4658,12 @@ BuffString write_c_file(Program *p, Module *m) {
     if (error == 0)
       c_Program(c_tmp_file, p, m);
     fclose(c_tmp_file);
-  } else
+    if (error != 0)
+      remove(main_c.s);
+  }
+  if (error != 0)
     main_c.s[0] = '\0';
+
   return main_c;
 }
 
