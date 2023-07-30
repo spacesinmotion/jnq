@@ -9,11 +9,35 @@ type TestE enum {
   C
 }
 
+type XX struct {
+  a i32
+}
+
+fn doit(xx *XX) {
+  printf("doit %p\n", xx)
+}
+
+type II interface {
+  fn doit(ii *II),
+}
+
+fn test_b(i1 II, pi2 *II) {
+  i1.doit()
+  pi2.doit()
+  ASSERT(i1 == *pi2)
+  ASSERT(*pi2 == i1)
+}
+
+fn test_a(i1 II, i2 II) {
+  i1.doit()
+  i2.doit()
+  ASSERT(i1 == i2)
+}
+
 fn main(argc i32, argv[]*char) int
 {
   for (i := 0; i < argc; ++i)
     printf("%s ", argv[i])
-  printf("\n", v)
 
   v := [3, 1, 2]
   printf("%d %d %d\n", v[0], v[1], v[2])
@@ -26,6 +50,9 @@ fn main(argc i32, argv[]*char) int
   ASSERT(TestE.A as i32 == 3)
   ASSERT(TestE.B as i32 == 4)
   ASSERT(TestE.C as i32 == 5)
+
+  xx := XX{}
+  test_a(&xx, &xx)
 
   printf("ok\n")
   return 0

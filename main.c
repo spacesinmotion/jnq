@@ -2881,8 +2881,9 @@ void jnq_expression(FILE *f, Expression *e) {
     break;
 
   case UnaryPrefixE:
-    fprintf(f, "%s", e->unpre->op);
+    fprintf(f, "(%s", e->unpre->op);
     jnq_expression(f, e->unpre->o);
+    fprintf(f, ")");
     break;
 
   case UnaryPostfixE:
@@ -3949,14 +3950,18 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
     Type *t2 = c_Expression_make_variables_typed(s, p, m, e->binop->o2);
     if (t1->kind == InterfaceT && (strcmp(e->binop->op->op, "==") == 0 || strcmp(e->binop->op->op, "!=") == 0)) {
       Expression *cd = Program_new_Expression(p, CDelegateE, e->binop->o1->location);
-      cd->cdelegate->o = e->binop->o1;
+      Expression *br = Program_new_Expression(p, BraceE, e->binop->o2->location);
+      br->brace->o = e->binop->o1;
+      cd->cdelegate->o = br;
       cd->cdelegate->delegate = ".self";
       e->binop->o1 = cd;
       // return &Bool;
     }
     if (t2->kind == InterfaceT && (strcmp(e->binop->op->op, "==") == 0 || strcmp(e->binop->op->op, "!=") == 0)) {
       Expression *cd = Program_new_Expression(p, CDelegateE, e->binop->o2->location);
-      cd->cdelegate->o = e->binop->o2;
+      Expression *br = Program_new_Expression(p, BraceE, e->binop->o2->location);
+      br->brace->o = e->binop->o2;
+      cd->cdelegate->o = br;
       cd->cdelegate->delegate = ".self";
       e->binop->o2 = cd;
       // return &Bool;
