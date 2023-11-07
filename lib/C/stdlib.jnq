@@ -1,3 +1,28 @@
 
+cfn atof(const str *char) f64
+cfn atoi(const str *char) i32
+cfn atol(const str *char) i64
+// cfn atoll(const str *char) i64
+cfn strtod(const str *char, endptr **char) f64
+cfn strtof(const str *char, endptr **char) f32
+cfn strtol(const str *char, endptr **char, base i32) i64
+// cfn strtold(const str *char, endptr **char) f64
+// cfn strtoll(const str *char, endptr **char, base i32) i64
+// cfn strtoul(const str *char, endptr **char, base i32) i64
+// cfn strtoull(const str *char, endptr **char, base i32) i64
+
 cfn rand() int
 cfn srand(seed int)
+
+cfn abort()
+cfn atexit(func fn_ptr) i32
+cfn at_quick_exit(func fn_ptr) i32
+cfn exit(status i32)
+cfn quick_exit(status i32)
+
+cfn getenv(const name *char) *char
+
+cfn system(const cmd *char) i32
+
+cfn bsearch(const key any, const base any, num size_t, size size_t, compar fn_ptr) any
+cfn qsort(base any, num size_t, size size_t, compar fn_ptr)

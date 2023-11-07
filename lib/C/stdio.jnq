@@ -1,4 +1,16 @@
 
+type FILE struct {}
+
+cfn remove(const filename *char) i32
+cfn rename(const oldname *char, const newname *char) i32
+cfn tmpfile() *FILE
+cfn tmpnam(str *char) *char
+
+cfn fclose(stream *FILE) i32
+cfn fflush(stream *FILE) i32
+
+cfn fopen(const filename *char, const mode *char) *FILE
+cfn freopen(const filename *char, const mode *char, stream *FILE) *FILE
 
 cfn sprintf(t *char, format *char, ...) int
 cfn snprintf(t *char, ml int, format *char, ...) int

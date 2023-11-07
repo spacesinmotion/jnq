@@ -1,9 +1,27 @@
 
-cfn strlen(t *char) int
-
-cfn strcmp(str1 *char, str2 *char) int
-cfn strncmp(str1 *char, str2 *char, num int) int
+cfn memcpy(dest any, const src any, num size_t) any
+cfn memmove(dest any, const src any, num size_t) any
+cfn strcpy(dest *char, const src *char) *char
+cfn strncpy(dest *char, const src *char, num size_t) *char
 
 cfn strcat(dest *char, src *char) *char
-cfn strncat(dest *char, src *char, size int) *char
+cfn strncat(dest *char, src *char, size i32) *char
+
+cfn memcmp(const str1 any, const str2 any) i32
+cfn strcmp(const str1 *char, const str2 *char) i32
+cfn strcoll(const str1 *char, const str2 *char) i32
+cfn strncmp(const str1 *char, const str2 *char, num i32) i32
+cfn strxfrm(dest *char, const src *char, num i32) size_t
+
+cfn memchr(const ptr any, value i32, num size_t) any
+cfn strchr(const str *char, ch i32) *char
+cfn strcspn(const str1 *char, const str2 *char) size_t
+cfn strpbrk(const str1 *char, const str2 *char) *char
+cfn strrchr(str *char, character i32) *char
+cfn strstr(const str1 *char, const str2 *char) *char
+cfn strtok(str *char, const delimiters *char) *char
+
+cfn memset(ptr any, value i32, num size_t) any
+cfn strerror(errnum i32) *char
+cfn strlen(const t *char) size_t
 
