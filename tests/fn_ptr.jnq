@@ -1,4 +1,6 @@
 
+use qsort from C.stdlib
+
 ccode {
 void higher_order(void(*x)())
 {
@@ -17,8 +19,6 @@ fn fn_ptr_test() {
 
   higher_order(call_back)
 }
-
-cfn qsort(base any, num u64 size u64, comp fn_ptr)
 
 fn comp_int(const a any, const b any) int {
   return *(a as *int) - *(b as *int);

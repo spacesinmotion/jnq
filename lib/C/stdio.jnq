@@ -1,5 +1,5 @@
 
-type FILE struct {}
+type FILE cstruct {}
 
 cfn remove(const filename *char) i32
 cfn rename(const oldname *char, const newname *char) i32
@@ -12,7 +12,37 @@ cfn fflush(stream *FILE) i32
 cfn fopen(const filename *char, const mode *char) *FILE
 cfn freopen(const filename *char, const mode *char, stream *FILE) *FILE
 
-cfn sprintf(t *char, format *char, ...) int
-cfn snprintf(t *char, ml int, format *char, ...) int
+cfn fprintf(stream *FILE, const format *char, ...) i32
+cfn fscanf(stream *FILE, const format * char, ...) i32
 
-cfn scanf(c *char, x *char)
+cfn scanf(c *char, x *char) i32
+
+cfn snprintf(t *char, ml i32, format *char, ...) i32
+cfn sprintf(t *char, format *char, ...) i32
+
+cfn sscanf(const s *char, const format *char, ...)i32
+
+type va_list cstruct {}
+
+cfn vfprintf(stream *FILE, const format *char, arg va_list) i32
+cfn vfscanf(stream *FILE, const format *char, arg va_list) i32
+cfn vprintf(const format *char, arg va_list) i32
+cfn vscanf(const format *char, arg va_list) i32
+cfn vsnprintf(s *char, n size_t, const format *char, arg va_list) i32
+cfn vsprintf(s *char, const format *char, arg va_list) i32
+cfn vsscanf(const s *char, const format *char, arg va_list) i32
+
+cfn fgetc(stream *FILE) i32
+cfn fgets(str *char, num i32, stream *FILE) *char
+cfn fputc(character i32, stream *FILE) i32
+cfn fputs(str *char, stream *FILE) i32
+
+cfn getc(stream *FILE) i32
+cfn putc(character i32, stream *FILE) i32
+cfn putchar(character i32) i32
+cfn puts(str *char) i32
+cfn ungetc(character i32, stream *FILE) i32
+
+cfn fread(ptr any, size size_t, count size_t, stream *FILE) size_t
+cfn fwrite(const ptr any, size size_t, count size_t, stream *FILE) size_t
+

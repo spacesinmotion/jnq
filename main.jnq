@@ -1,6 +1,7 @@
 
 use * from C.str
 use * from C.stdlib
+use * from C.stdio
 
 fn dummy(a int) int {
   return a

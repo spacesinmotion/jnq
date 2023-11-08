@@ -743,6 +743,7 @@ bool Type_is_import_type(Type *t) {
 Type Null = (Type){"null_t", .c_name = "null_t", BaseT, NULL};
 Type Bool = (Type){"bool", .c_name = "bool", BaseT, NULL};
 Type Char = (Type){"char", .c_name = "char", BaseT, NULL};
+Type WChar = (Type){"wchar_t", .c_name = "wchar_t", BaseT, NULL};
 Type i8 = (Type){"i8", .c_name = "int8_t", BaseT, NULL};
 Type i16 = (Type){"i16", .c_name = "int16_t", BaseT, NULL};
 Type i32 = (Type){"i32", .c_name = "int32_t", BaseT, NULL};
@@ -784,6 +785,8 @@ Type *Module_find_type(Module *m, StringView name) {
     return &f64;
   if (sv_eq(name, (StringView){Char.name, 4}))
     return &Char;
+  if (sv_eq(name, (StringView){WChar.name, 7}))
+    return &WChar;
   if (sv_eq(name, (StringView){String.name, 6}))
     return &String;
   if (sv_eq(name, (StringView){FnPtr.name, 6}))

@@ -47,8 +47,6 @@ cfn fabs(d double) double
 
 cfn fabsf(d float) float
 
-cfn abs(i int) int
-
 cfn pow(d double, c double) double
 
 cfn sqrt(a double) double

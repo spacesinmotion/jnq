@@ -11,8 +11,8 @@ cfn strtol(const str *char, endptr **char, base i32) i64
 // cfn strtoul(const str *char, endptr **char, base i32) i64
 // cfn strtoull(const str *char, endptr **char, base i32) i64
 
-cfn rand() int
-cfn srand(seed int)
+cfn rand() i32
+cfn srand(seed u32)
 
 cfn abort()
 cfn atexit(func fn_ptr) i32
@@ -26,3 +26,25 @@ cfn system(const cmd *char) i32
 
 cfn bsearch(const key any, const base any, num size_t, size size_t, compar fn_ptr) any
 cfn qsort(base any, num size_t, size size_t, compar fn_ptr)
+
+cfn abs(i i32) i32
+cfn labs(i i64) i64
+
+type div_t cstruct {
+  quot i32,
+  rem i32
+}
+cfn div(numer i32, denom i32) div_t
+
+type ldiv_t cstruct {
+  quot i64,
+  rem i64
+}
+cfn ldiv(numer i64, denom i64) ldiv_t
+
+cfn mblen(const pmb *char, max size_t) i32
+cfn mbtowc(pwc *wchar_t, const pmb *char, max size_t) int
+cfn wctomb(pmb *char, wc wchar_t) int
+
+cfn mbstowcs(dest *wchar_t, const src char, max size_t) size_t
+cfn wcstombs(dest *char, const src *wchar_t, max size_t) size_t

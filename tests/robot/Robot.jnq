@@ -1,7 +1,5 @@
 
-fn system(c *char) {}
-
-use rand, srand from C.stdlib
+use rand, srand, system from C.stdlib
 use scanf from C.stdio
 
 type Robot struct {
@@ -206,7 +204,7 @@ fn as_number(c *char) int {
 fn new_Game(name *char) Game {
   game := Game{}
   game.clear_field()
-  srand(as_number(name))
+  srand(as_number(name) as u32)
   game.rand_field()
 
   game.robi = Robot{0, 0, 0, 0, true};
