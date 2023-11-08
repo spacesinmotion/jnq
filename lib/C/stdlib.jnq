@@ -14,6 +14,11 @@ cfn strtol(const str *char, endptr **char, base i32) i64
 cfn rand() i32
 cfn srand(seed u32)
 
+cfn calloc(num size_t, size size_t) any
+// cfn free(ptr any)
+cfn malloc(size size_t) any
+// cfn realloc(ptr *any, size size_t) any
+
 cfn abort()
 cfn atexit(func fn_ptr) i32
 cfn at_quick_exit(func fn_ptr) i32
