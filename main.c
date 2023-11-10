@@ -3863,6 +3863,8 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
 
   case MemberAccessE: {
     Type *t = c_Expression_make_variables_typed(s, p, m, e->member->o);
+    if ((TypeKind)t->kind == ConstantWrapperT)
+      t = t->child;
     e->member->o_type = t;
     if (t->kind == PointerT)
       t = t->child;

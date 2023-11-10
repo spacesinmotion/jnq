@@ -3,6 +3,12 @@ use * from C.stdio
 
 VALUE := 123
 
+type XX struct {
+  a i32
+}
+
+XX_VALUE := XX {321}
+
 fn main() int {
   printf("constants\n")
 
@@ -10,6 +16,7 @@ fn main() int {
   printf("%d\n", SEEK_CUR)
   printf("%d\n", SEEK_END)
   ASSERT(VALUE == 123)
+  ASSERT(XX_VALUE.a == 321)
 
   printf(" ...ok\n")
   return 0

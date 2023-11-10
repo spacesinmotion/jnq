@@ -1,61 +1,18 @@
 
-use * from C.str
-use * from C.stdlib
-
-fn dummy(a int) int {
-  return a
-}
-
-type TestE enum {
-  A = 3,
-  B,
-  C
-}
 
 type XX struct {
   a i32
 }
 
-fn doit(xx *XX) {
-  printf("doit %p\n", xx)
-}
-
-type II interface {
-  fn doit(ii *II),
-}
-
-fn test_b(i1 II, pi2 *II) {
-  i1.doit()
-  pi2.doit()
-  ASSERT(i1 == *pi2)
-  ASSERT(*pi2 == i1)
-}
-
-fn test_a(i1 II, i2 II) {
-  i1.doit()
-  i2.doit()
-  ASSERT(i1 == i2)
-}
+XX_VALUE := XX {321}
 
 fn main(argc i32, argv[]*char) int
 {
   for (i := 0; i < argc; ++i)
     printf("%s ", argv[i])
+  printf("--\n")
 
-  v := [3, 1, 2]
-  printf("%d %d %d\n", v[0], v[1], v[2])
-
-  switch (val := dummy(3)) {
-  case 3: printf("Yes %d\n", val)
-  default: ASSERT(false)
-  }
-
-  ASSERT(TestE.A as i32 == 3)
-  ASSERT(TestE.B as i32 == 4)
-  ASSERT(TestE.C as i32 == 5)
-
-  xx := XX{}
-  test_a(&xx, &xx)
+  ASSERT(XX_VALUE.a == 321)
 
   printf("ok\n")
   return 0
