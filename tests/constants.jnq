@@ -1,0 +1,16 @@
+
+use * from C.stdio
+
+VALUE := 123
+
+fn main() int {
+  printf("constants\n")
+
+  printf("%d\n", SEEK_SET)
+  printf("%d\n", SEEK_CUR)
+  printf("%d\n", SEEK_END)
+  ASSERT(VALUE == 123)
+
+  printf(" ...ok\n")
+  return 0
+}

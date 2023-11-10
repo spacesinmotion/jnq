@@ -3061,7 +3061,7 @@ void c_expression(FILE *f, Expression *e) {
       FATAL(&e->location, "unknown type for id '%s'", e->id->name);
     if (e->id->type->kind == FnT && !e->id->type->fnT->is_extern_c)
       fprintf(f, "%s", Type_defined_module(e->id->type)->c_name);
-    else if (e->id->type->kind == ConstantWrapperT)
+    else if (e->id->type->kind == ConstantWrapperT && e->id->type->constantModule)
       fprintf(f, "%s", e->id->type->constantModule->c_name);
     else if ((e->id->type->kind == StructT || e->id->type->kind == InterfaceT || e->id->type->kind == UnionT) &&
              e->id->type->name && strcmp(e->id->name, e->id->type->name) == 0)
@@ -4247,9 +4247,10 @@ void c_Module_make_variables_typed(Program *p, Module *m) {
   for (ConstantList *cl = m->constants; cl; cl = cl->next) {
     Expression *e = cl->autotype;
     e->autotype->type = Program_add_type(p, ConstantWrapperT, "", m);
-    if (cl->is_extern_c)
+    if (cl->is_extern_c) {
       e->autotype->type->child = &i32;
-    else
+      e->autotype->type->constantModule = NULL;
+    } else
       e->autotype->type->child = c_Expression_make_variables_typed(&stack, p, m, e->autotype->e);
     if (!e->autotype->type->child)
       FATALX("internal problem finding type for constant '%s'", e->autotype->name);

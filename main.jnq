@@ -1,7 +1,6 @@
 
 use * from C.str
 use * from C.stdlib
-use * from C.stdio
 
 fn dummy(a int) int {
   return a
@@ -38,8 +37,6 @@ fn test_a(i1 II, i2 II) {
   ASSERT(i1 == i2)
 }
 
-VALUE := 123
-
 fn main(argc i32, argv[]*char) int
 {
   for (i := 0; i < argc; ++i)
@@ -56,9 +53,6 @@ fn main(argc i32, argv[]*char) int
   ASSERT(TestE.A as i32 == 3)
   ASSERT(TestE.B as i32 == 4)
   ASSERT(TestE.C as i32 == 5)
-
-  ASSERT(VALUE == 123)
-  // ASSERT(SEEK_SET == 42)
 
   xx := XX{}
   test_a(&xx, &xx)

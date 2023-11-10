@@ -12,7 +12,7 @@ done
 
 for t in `find . -iname "*.jnq"`; do
   echo "format $t"
-  if ! ../jnq_format $t; then
+  if ! ../jnq_format $t > /dev/null; then
     errors+=("format $t")
   fi
 done
