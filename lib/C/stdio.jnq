@@ -47,9 +47,9 @@ cfn fread(ptr any, size size_t, count size_t, stream *FILE) size_t
 cfn fwrite(const ptr any, size size_t, count size_t, stream *FILE) size_t
 
 type fpos_t cstruct {}
-// const SEEK_SET
-// const SEEK_CUR
-// const SEEK_END
+SEEK_SET := cconst
+SEEK_CUR := cconst
+SEEK_END := cconst
 
 cfn fgetpos(stream *FILE, pos *fpos_t) i32
 cfn fseek(stream *FILE, offset i64, origin i32) i32

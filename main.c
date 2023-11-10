@@ -532,6 +532,7 @@ typedef enum TypeKind {
   PoolT,
   BufT,
   FnT,
+  ConstantWrapperT,
   PlaceHolder
 } TypeKind;
 
@@ -544,6 +545,7 @@ typedef PACK(struct Type {
     Interface *interfaceT;
     Function *fnT;
     Module *placeholerModule;
+    Module *constantModule;
     Use *useT;
     int array_count;
   };
@@ -581,7 +583,10 @@ Module *Type_defined_module(Type *t) {
   }
   case PlaceHolder:
     return t->placeholerModule;
-    break;
+
+  case ConstantWrapperT:
+    return Type_defined_module(t->child);
+
   case UseT:
     FATALX("Can't get defined module for use-type.");
     break;
@@ -604,6 +609,8 @@ LocationRange *Type_location(Type *t) {
     return &t->fnT->location;
   case UseT:
     return &t->useT->location;
+  case ConstantWrapperT:
+    return Type_location(t->child);
   case VecT:
   case PoolT:
   case BufT:
@@ -621,10 +628,18 @@ typedef struct TypeList {
   TypeList *next;
 } TypeList;
 
+typedef struct ConstantList ConstantList;
+typedef struct ConstantList {
+  Expression *autotype;
+  ConstantList *next;
+  bool is_extern_c;
+} ConstantList;
+
 typedef struct Module {
   const char *path;
   const char *c_name;
   TypeList *types;
+  ConstantList *constants;
   bool finished;
   Module *next;
 } Module;
@@ -657,7 +672,7 @@ typedef struct Program {
   ProgramMode mode;
 } Program;
 
-Module global = (Module){"", "", NULL, true, NULL};
+Module global = (Module){"", "", NULL, NULL, true, NULL};
 
 Module *global_module() { return &global; }
 
@@ -760,6 +775,23 @@ Type Any = (Type){"any", .c_name = "void *", BaseT, NULL};
 
 Type Ellipsis = (Type){"...", .structT = &(Struct){{}, &global, (LocationRange){}}, BaseT, NULL};
 
+Type *Module_constant_type(Module *m, StringView name) {
+  for (ConstantList *cl = m->constants; cl; cl = cl->next)
+    if (sv_eq(name, c_sv(cl->autotype->autotype->name)))
+      return cl->autotype->autotype->type;
+
+  for (TypeList *tl = m->types; tl; tl = tl->next) {
+    if (tl->type->kind == UseT && tl->type->useT->take_all) {
+      Type *mtt = Module_constant_type(tl->type->useT->module, name);
+      if (mtt)
+        return mtt;
+    } else if (tl->type->kind == UseT && tl->type->useT->type_len > 0) {
+      // missing
+    }
+  }
+  return NULL;
+}
+
 Type *Module_find_type(Module *m, StringView name) {
   if (sv_eq(name, (StringView){Bool.name, 4}))
     return &Bool;
@@ -829,6 +861,12 @@ Type *Module_type_or_placeholder(Program *p, Module *m, StringView name) {
 bool Type_equal(Type *t1, Type *t2) {
   if (!t1 || !t2)
     FATALX("there should be no null type pointer?!");
+
+  if (t1->kind == ConstantWrapperT)
+    return Type_equal(t1->child, t2);
+  if (t2->kind == ConstantWrapperT)
+    return Type_equal(t1, t2->child);
+
   if (t1 == &Null)
     return t2 == &Null || t2->kind == PointerT || t2->kind == InterfaceT;
   if (t2 == &Null)
@@ -854,6 +892,11 @@ bool Type_equal(Type *t1, Type *t2) {
 bool Type_convertable(Type *expect, Type *got) {
   if (Type_equal(expect, got))
     return true;
+
+  if (expect->kind == ConstantWrapperT)
+    return Type_convertable(expect->child, got);
+  if (got->kind == ConstantWrapperT)
+    return Type_convertable(expect, got->child);
 
   if (expect->kind == BaseT && got->kind == BaseT) {
     if (expect == &f64 && got == &f32)
@@ -927,6 +970,9 @@ BuffString Type_name(Type *t) {
       else
         i += snprintf(ss + i, sizeof(s.s) - i, "buf[]");
       break;
+    case ConstantWrapperT:
+      return Type_name(t->child);
+      break;
     case UseT:
     case StructT:
     case CStructT:
@@ -959,6 +1005,7 @@ Module *Program_add_module(Program *p, const char *pathc) {
   m->path = path;
   m->c_name = cname;
   m->types = NULL;
+  m->constants = NULL;
   m->next = p->modules;
   p->modules = m;
   return m;
@@ -1013,6 +1060,9 @@ Type *Program_add_type(Program *p, TypeKind k, const char *name, Module *m) {
   case PlaceHolder:
     tt->placeholerModule = m;
     break;
+  case ConstantWrapperT:
+    tt->constantModule = m;
+    break;
   case VecT:
   case PoolT:
   case BufT:
@@ -1046,6 +1096,15 @@ Type *Program_add_type(Program *p, TypeKind k, const char *name, Module *m) {
   tl->next = m->types;
   m->types = tl;
   return tt;
+}
+
+ConstantList *Program_add_constant(Program *p, Module *m, Expression *e) {
+  ConstantList *cl = (ConstantList *)Program_alloc(p, sizeof(ConstantList));
+  cl->autotype = e;
+  cl->is_extern_c = false;
+  cl->next = m->constants;
+  m->constants = cl;
+  return cl;
 }
 
 Type *Program_add_type_after(Program *p, TypeKind k, Module *m, Type *child) {
@@ -1138,6 +1197,7 @@ Expression *Program_new_Expression(Program *p, ExpressionType t, Location l) {
     break;
   case IdentifierA:
     e->id = (Identifier *)Program_alloc(p, sizeof(Identifier));
+    e->id->type = NULL;
     break;
   case AutoTypeE:
     e->autotype = (AutoTypeDeclaration *)Program_alloc(p, sizeof(AutoTypeDeclaration));
@@ -2118,6 +2178,27 @@ Expression *Program_parse_auto_declaration_(Program *p, Module *m, State *st) {
   return NULL;
 }
 
+Expression *Program_parse_cconst_declaration(Program *p, State *st) {
+  skip_whitespace(st);
+  State old = *st;
+
+  if (check_identifier(st)) {
+    const char *ne = st->c;
+    if (check_op(st, ":=")) {
+      skip_whitespace(st);
+      if (check_word(st, "cconst")) {
+        Expression *at = Program_new_Expression(p, AutoTypeE, old.location);
+        at->autotype->name = Program_copy_string(p, be_sv(old.c, ne));
+        at->autotype->e = NULL;
+        return at;
+      }
+    }
+  }
+
+  *st = old;
+  return NULL;
+}
+
 Expression *Program_parse_unary_operand(Program *p, Module *m, State *st) {
   Expression *prefix = NULL;
   const char *un_pre_ops[] = {"++", "--", "*", "~", "!", "-", "+", "&"};
@@ -2497,8 +2578,17 @@ void Program_parse_module(Program *p, Module *m, State *st) {
       else if (check_word(st, "cmain"))
         Program_parse_ccode(p, st, false);
       else {
-        FATAL(&st->location, "Unknown keyword >>'%s'\n", st->c);
-        break;
+        Expression *autotype = Program_parse_cconst_declaration(p, st);
+        if (autotype)
+          Program_add_constant(p, m, autotype)->is_extern_c = true;
+        else {
+          autotype = Program_parse_auto_declaration_(p, m, st);
+          if (!autotype) {
+            FATAL(&st->location, "Unknown keyword >>'%s'\n", st->c);
+            break;
+          }
+          Program_add_constant(p, m, autotype);
+        }
       }
     }
   }
@@ -2569,6 +2659,8 @@ BuffString Type_special_cname(Type *t) {
       else
         i += snprintf(ss + i, sizeof(s.s) - i, "_buf__");
       break;
+    case ConstantWrapperT:
+      return Type_special_cname(t->child);
     case UseT:
     case StructT:
     case CStructT:
@@ -2610,6 +2702,9 @@ bool c_type_declare(FILE *f, Type *t, Location *l, const char *var) {
     return true;
   case PointerT:
     fprintf(f, "*");
+    break;
+  case ConstantWrapperT:
+    c_type_declare(f, tt->child, l, var);
     break;
   case VecT:
   case BufT:
@@ -2797,6 +2892,7 @@ void c_type(FILE *f, const char *module_name, Type *t) {
     break;
   case ArrayT:
   case PointerT:
+  case ConstantWrapperT:
     break;
   case PlaceHolder:
     FATALX("Type declaration not implemented for that kind");
@@ -2965,6 +3061,8 @@ void c_expression(FILE *f, Expression *e) {
       FATAL(&e->location, "unknown type for id '%s'", e->id->name);
     if (e->id->type->kind == FnT && !e->id->type->fnT->is_extern_c)
       fprintf(f, "%s", Type_defined_module(e->id->type)->c_name);
+    else if (e->id->type->kind == ConstantWrapperT)
+      fprintf(f, "%s", e->id->type->constantModule->c_name);
     else if ((e->id->type->kind == StructT || e->id->type->kind == InterfaceT || e->id->type->kind == UnionT) &&
              e->id->type->name && strcmp(e->id->name, e->id->type->name) == 0)
       fprintf(f, "%s", Type_defined_module(e->id->type)->c_name);
@@ -3057,7 +3155,13 @@ void c_expression(FILE *f, Expression *e) {
     }
     if (!e->member->member->type)
       FATAL(&e->location, "unknown type for member '%s'", e->member->member->name);
-    switch ((TypeKind)e->member->member->type->kind) {
+    TypeKind kk = (TypeKind)e->member->member->type->kind;
+    if (kk == ConstantWrapperT)
+      kk = (TypeKind)e->member->member->type->child->kind;
+    switch (kk) {
+    case ConstantWrapperT:
+      FATAL(&e->location, "Internal error for constant type '%s'", Type_name(e->member->member->type).s);
+      break;
     case PlaceHolder:
       FATAL(&e->location, "Use of unknow type '%s'", Type_name(e->member->member->type).s);
       break;
@@ -3385,6 +3489,33 @@ void c_Module_interfaces(FILE *f, Module *m) {
   }
 }
 
+void c_Module_constants(FILE *f, Module *m) {
+  if (m->finished)
+    return;
+  m->finished = true;
+
+  if (m->constants) {
+    for (TypeList *tl = m->types; tl; tl = tl->next)
+      if (tl->type->kind == UseT)
+        c_Module_constants(f, tl->type->useT->module);
+
+    for (ConstantList *cl = m->constants; cl; cl = cl->next) {
+      if (cl->is_extern_c)
+        continue;
+      if ((ExpressionType)cl->autotype->type == AutoTypeE) {
+        AutoTypeDeclaration *a = cl->autotype->autotype;
+        char t_name[256];
+        snprintf(t_name, sizeof(t_name), "%s%s", m->c_name, a->name);
+        if (!c_type_declare(f, a->type, &cl->autotype->location, t_name))
+          fprintf(f, " %s", t_name);
+        fprintf(f, " = ");
+        c_expression(f, a->e);
+      }
+      fprintf(f, ";\n");
+    }
+  }
+}
+
 void c_Module_fn(FILE *f, Module *m) {
   if (m->finished)
     return;
@@ -3443,6 +3574,7 @@ void c_type_forward(FILE *f, const char *module_name, Type *t) {
     FATALX("'%s' type should be replaced here!", Type_name(t).s);
     break;
 
+  case ConstantWrapperT:
   case UseT:
     break;
   case PlaceHolder:
@@ -3549,6 +3681,8 @@ bool is_member_fn_for(Type *ot, Type *ft, const char *name) {
 
 Type *Module_find_member(Type *t, const char *name) {
   switch ((TypeKind)t->kind) {
+  case ConstantWrapperT:
+    return Module_find_member(t->child, name);
   case UnionT:
   case CStructT:
   case StructT: {
@@ -3712,14 +3846,15 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
   case IdentifierA: {
     if ((e->id->type = VariableStack_find(s, e->id->name)))
       return e->id->type;
+    if ((e->id->type = Module_constant_type(m, c_sv(e->id->name))))
+      return e->id->type;
     if ((e->id->type = Module_find_type(m, c_sv(e->id->name))))
       return e->id->type;
     FATAL(&e->location, "unknown type for '%s'", e->id->name);
     return NULL;
   }
   case AutoTypeE: {
-    Type *t = c_Expression_make_variables_typed(s, p, m, e->autotype->e);
-    e->autotype->type = t;
+    e->autotype->type = c_Expression_make_variables_typed(s, p, m, e->autotype->e);
     VariableStack_push(s, e->autotype->name, e->autotype->type);
     return e->autotype->type;
   }
@@ -4109,6 +4244,17 @@ void c_Module_make_variables_typed(Program *p, Module *m) {
       c_Module_make_variables_typed(p, tl->type->useT->module);
 
   VariableStack stack = (VariableStack){};
+  for (ConstantList *cl = m->constants; cl; cl = cl->next) {
+    Expression *e = cl->autotype;
+    e->autotype->type = Program_add_type(p, ConstantWrapperT, "", m);
+    if (cl->is_extern_c)
+      e->autotype->type->child = &i32;
+    else
+      e->autotype->type->child = c_Expression_make_variables_typed(&stack, p, m, e->autotype->e);
+    if (!e->autotype->type->child)
+      FATALX("internal problem finding type for constant '%s'", e->autotype->name);
+    VariableStack_push(&stack, e->autotype->name, e->autotype->type);
+  }
   for (TypeList *tl = m->types; tl; tl = tl->next)
     if (tl->type->kind == FnT)
       c_Function_make_variables_typed(&stack, p, m, tl->type->fnT);
@@ -4443,6 +4589,10 @@ void c_Program(FILE *f, Program *p, Module *m) {
   c_Module_interfaces(f, m);
 
   Program_reset_module_finished(p);
+  c_Module_constants(f, &global);
+  c_Module_constants(f, m);
+
+  Program_reset_module_finished(p);
   c_Module_fn(f, &global);
   c_Module_fn(f, m);
 
@@ -4555,6 +4705,7 @@ void write_symbols(Module *m) {
     case PoolT:
     case BufT:
     case PlaceHolder:
+    case ConstantWrapperT:
       break;
     }
     fprintf(f, "\"uri\":\"file://%s\",", ll->file);
