@@ -1,0 +1,79 @@
+
+type ABC struct {
+  a i32,
+  b f32,
+  c char,
+}
+
+fn check_all_doubled_c(a *i32, l i32){
+  for (i := 0; i < l; ++i)
+    ASSERT(a[i] == i * 2)
+}
+
+fn check_all_doubled(a[*]i32){
+  for (i := 0; i < len(a) as i32; ++i)
+    ASSERT(a[i] == i * 2)
+}
+
+// fn print_all_dyn(a[]i32){
+//   for (i := 0; i < len(a) as i32; ++i)
+//     printf("%5d %5d\n", i, a[i])
+// }
+
+// fn print_first_static(a[]i32){
+//   printf("%5d %5d %5d\n", 0, a[0], len(a))
+// }
+
+fn simple_int()
+{
+  printf(" .simple_int\n")
+  a := new[32]i32{}
+  for (i := 0; i < 32; ++i)
+    a[i] = i * 2
+
+  ASSERT(32u == len(a))
+  for (i := 0; i < 32; ++i)
+    ASSERT(a[i] == i * 2)
+  check_all_doubled_c(a, len(a) as i32)
+  check_all_doubled(a)
+  
+  delete a
+
+  b := new[3]ABC{}
+  ASSERT(len(b) == 3u)
+  for (i := 0; i < len(b) as i32; ++i) {
+    b[i].a = i * 3
+    b[i].b = i as f32 / 2.0f
+    b[i].c = (i) as char + 'a'
+  }
+  for (i := 0; i < len(b) as i32; ++i) {
+    printf("ABC{%d, %g, '%c'}\n", b[i].a, b[i].b, b[i].c)
+  }
+}
+
+fn simple_struct()
+{
+  printf(" .simple_struct\n")
+
+  b := new[3]ABC{}
+  ASSERT(len(b) == 3u)
+  for (i := 0; i < len(b) as i32; ++i) {
+    b[i].a = i * 3
+    b[i].b = i as f32 / 2.0f
+    b[i].c = (i) as char + 'a'
+  }
+  for (i := 0; i < len(b) as i32; ++i) {
+    ASSERT(b[i].a = i * 3)
+    ASSERT(b[i].b = i as f32 / 2.0f)
+    ASSERT(b[i].c = i as char + 'a')
+  }
+
+  delete b
+}
+
+fn main() i32 {
+  printf("dynamic arrays\n")
+
+  printf(" ...ok\n")
+  return 0
+}

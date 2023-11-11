@@ -1561,9 +1561,11 @@ bool Program_check_declared_type(Program *p, State *st) {
   }
 
   if (check_op(st, "[")) {
-    int count = -1;
-    Type *t_count;
-    read_int(st, &count, &t_count);
+    if (!check_op(st, "*")) {
+      int count = -1;
+      Type *t_count;
+      read_int(st, &count, &t_count);
+    }
     if (check_op(st, "]")) {
       if (Program_check_declared_type(p, st))
         return true;
@@ -1677,22 +1679,40 @@ Type *Program_parse_declared_type(Program *p, Module *m, State *st) {
   }
 
   if (check_op(st, "[")) {
-    int count = -1;
-    Type *t_count;
-    read_int(st, &count, &t_count);
-    if (check_op(st, "]")) {
-      Type *c = Program_parse_declared_type(p, m, st);
-      if (c) {
-        Module *cm = Type_defined_module(c);
-        if (!cm)
-          FATALX("internal problem finding module for type");
-        Type *td = Module_find_array_type(cm, count, c);
-        if (!td) {
-          td = Program_add_type(p, ArrayT, "", cm);
-          td->array_count = count;
-          td->child = c;
+    if (check_op(st, "*")) {
+      if (check_op(st, "]")) {
+        Type *c = Program_parse_declared_type(p, m, st);
+        if (c) {
+          Module *cm = Type_defined_module(c);
+          if (!cm)
+            FATALX("internal problem finding module for type");
+          Type *td = Module_find_dyn_array_type(cm, c);
+          if (!td) {
+            td = Program_add_type(p, DynArrayT, "", cm);
+            td->array_count = -1;
+            td->child = c;
+          }
+          return td;
         }
-        return td;
+      }
+    } else {
+      int count = -1;
+      Type *t_count;
+      read_int(st, &count, &t_count);
+      if (check_op(st, "]")) {
+        Type *c = Program_parse_declared_type(p, m, st);
+        if (c) {
+          Module *cm = Type_defined_module(c);
+          if (!cm)
+            FATALX("internal problem finding module for type");
+          Type *td = Module_find_array_type(cm, count, c);
+          if (!td) {
+            td = Program_add_type(p, ArrayT, "", cm);
+            td->array_count = count;
+            td->child = c;
+          }
+          return td;
+        }
       }
     }
     *st = old;

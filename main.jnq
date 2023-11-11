@@ -5,48 +5,30 @@ type ABC struct {
   c char,
 }
 
-fn print_all(a *i32, l i32){
-  for (i := 0; i < 32; ++i)
+fn print_all_c(a *i32, l i32){
+  for (i := 0; i < l; ++i)
     printf("%5d %5d\n", i, a[i])
 }
 
-// fn print_all_dyn(a[]i32){
-//   for (i := 0; i < len(a) as i32; ++i)
-//     printf("%5d %5d\n", i, a[i])
-// }
-
-// fn print_first_static(a[]i32){
-//   printf("%5d %5d %5d\n", 0, a[0], len(a))
-// }
+fn print_all_dyn(a[*]i32){
+  for (i := 0; i < len(a) as i32; ++i)
+    printf("%5d %5d\n", i, a[i])
+}
 
 fn main(argc i32, argv[]*char) int
 {
-  vecc := [1, 2, 3, 4]
-  printf("%d\n", len(vecc)as i32)
-  ASSERT(len(vecc) == 4u)
-
-  a := new[32]i32{}
-  for (i := 0; i < 32; ++i)
+  a := new[5]i32{}
+  for (i := 0; i < len(a) as i32; ++i)
     a[i] = i * 2
-
-  for (i := 0; i < 32; ++i)
+  for (i := 0; i < len(a) as i32; ++i)
     ASSERT(a[i] == i * 2)
-  print_all(a, 32)
-  ASSERT(32u == len(a))
-  printf("len of array: %d\n", len(a) as i32);
-  // print_first_static(a)
-  delete a
+  ASSERT(5u == len(a))
 
-  b := new[3]ABC{}
-  ASSERT(len(b) == 3u)
-  for (i := 0; i < len(b) as i32; ++i) {
-    b[i].a = i * 3
-    b[i].b = i as f32 / 2.0f
-    b[i].c = (i) as char + 'a'
-  }
-  for (i := 0; i < len(b) as i32; ++i) {
-    printf("ABC{%d, %g, '%c'}\n", b[i].a, b[i].b, b[i].c)
-  }
+  print_all_c(a, len(a) as i32)
+
+  print_all_dyn(a)
+
+  delete a
 
   printf("ok\n")
   return 0
