@@ -56,6 +56,9 @@ fn matrix_test() {
   ASSERT(m[0][1] == 1)
   ASSERT(m[0][2] == 2)
   ASSERT(m[0][3] == 3)
+
+  ASSERT(len(m) == 4u)
+  ASSERT(len(m[0]) == 4u)
 }
 
 type Dec struct {
@@ -71,6 +74,7 @@ fn array_construct_test() {
   printf(" .array_construct_test\n")
 
   d := [1, 2, 3]
+  ASSERT(len(d) == 3u)
   ASSERT(d[0] == 1)
   ASSERT(d[1] == 2)
   ASSERT(d[2] == 3)
@@ -93,6 +97,9 @@ fn array_construct_test() {
       ]
     }
   ]
+
+  ASSERT(len(com) == 2u)
+  ASSERT(len(com[0].tri) == 3u)
 
   ASSERT(com[0].tri[0].f[0] == 0.1f)
   ASSERT(com[0].tri[0].f[1] == 0.3f)

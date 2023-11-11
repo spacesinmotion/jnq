@@ -2104,7 +2104,7 @@ Expression *Program_parse_array_construction(Program *p, Module *m, State *st) {
     Expression *construct = Program_new_Expression(p, ConstructE, old.location);
     construct->construct->p = Program_parse_parameter_list(p, m, st);
     if (!check_op(st, "]"))
-      FATAL(&st->location, "unfinished constructor call, missing '}'");
+      FATAL(&st->location, "unfinished constructor call, missing ']'");
     construct->construct->type = NULL;
     return construct;
   }
@@ -3207,6 +3207,10 @@ bool c_check_makro(FILE *f, Call *ca, Location *l) {
       fprintf(f, ")");
       return true;
 
+    case ArrayT:
+      fprintf(f, "%d", arg_type->array_count);
+      return true;
+
     case UseT:
     case BaseT:
     case StructT:
@@ -3215,7 +3219,6 @@ bool c_check_makro(FILE *f, Call *ca, Location *l) {
     case EnumT:
     case CEnumT:
     case InterfaceT:
-    case ArrayT:
     case PointerT:
     case VecT:
     case PoolT:
@@ -4184,10 +4187,10 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
       Module *first_m = Type_defined_module(first);
       if (!first_m)
         FATAL(&e->location, "unknown module for type '%s'", Type_name(first).s);
-      e->construct->type = Module_find_array_type(first_m, 0, first);
+      e->construct->type = Module_find_array_type(first_m, e->construct->p.len, first);
       if (!e->construct->type) {
         e->construct->type = Program_add_type(p, ArrayT, "", first_m);
-        e->construct->type->array_count = 0;
+        e->construct->type->array_count = e->construct->p.len;
         e->construct->type->child = first;
       }
     }
