@@ -1,18 +1,50 @@
 
-
-type XX struct {
-  a i32
+type ABC struct {
+  a i32,
+  b f32,
+  c char,
 }
 
-XX_VALUE := XX {321}
+fn print_all(a *i32, l i32){
+  for (i := 0; i < 32; ++i)
+    printf("%5d %5d\n", i, a[i])
+}
+
+// fn print_all_dyn(a[]i32){
+//   for (i := 0; i < len(a) as i32; ++i)
+//     printf("%5d %5d\n", i, a[i])
+// }
+
+// fn print_first_static(a[]i32){
+//   printf("%5d %5d %5d\n", 0, a[0], len(a))
+// }
 
 fn main(argc i32, argv[]*char) int
 {
-  for (i := 0; i < argc; ++i)
-    printf("%s ", argv[i])
-  printf("--\n")
+  a := new[32]i32{}
+  for (i := 0; i < 32; ++i)
+    a[i] = i * 2
 
-  ASSERT(XX_VALUE.a == 321)
+  for (i := 0; i < 32; ++i)
+    ASSERT(a[i] == i * 2)
+  print_all(a, 32)
+  ASSERT(32u == len(a))
+  printf("len of array: %d\n", len(a) as i32);
+
+  // print_first_static(a)
+
+  delete a
+
+  b := new[3]ABC{}
+  ASSERT(len(b) == 3u)
+  for (i := 0; i < len(b) as i32; ++i) {
+    b[i].a = i * 3
+    b[i].b = i as f32 / 2.0f
+    b[i].c = (i) as char + 'a'
+  }
+  for (i := 0; i < len(b) as i32; ++i) {
+    printf("ABC{%d, %g, '%c'}\n", b[i].a, b[i].b, b[i].c)
+  }
 
   printf("ok\n")
   return 0

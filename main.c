@@ -527,6 +527,7 @@ typedef enum TypeKind {
   CEnumT,
   InterfaceT,
   ArrayT,
+  DynArrayT,
   PointerT,
   VecT,
   PoolT,
@@ -574,6 +575,7 @@ Module *Type_defined_module(Type *t) {
   case PoolT:
   case BufT:
   case ArrayT:
+  case DynArrayT:
   case PointerT: {
     if (!t->child)
       FATALX("missing base type for pointer or array.");
@@ -615,6 +617,7 @@ LocationRange *Type_location(Type *t) {
   case PoolT:
   case BufT:
   case ArrayT:
+  case DynArrayT:
   case PointerT:
   case PlaceHolder:
   case BaseT:
@@ -874,6 +877,8 @@ bool Type_equal(Type *t1, Type *t2) {
 
   if ((t1->kind == PointerT && t2->kind == ArrayT) || (t2->kind == PointerT && t1->kind == ArrayT))
     return Type_equal(t1->child, t2->child);
+  if ((t1->kind == PointerT && t2->kind == DynArrayT) || (t2->kind == PointerT && t1->kind == DynArrayT))
+    return Type_equal(t1->child, t2->child);
 
   if (t1 == &String && t2->kind == PointerT && t2->child == &Char)
     return true;
@@ -942,6 +947,9 @@ BuffString Type_name(Type *t) {
   int i = 0;
   while (t->child) {
     switch ((TypeKind)t->kind) {
+    case DynArrayT:
+      i += snprintf(ss + i, sizeof(s.s) - i, "new[%d]", t->array_count);
+      break;
     case ArrayT:
       if (t->array_count > 0)
         i += snprintf(ss + i, sizeof(s.s) - i, "[%d]", t->array_count);
@@ -1067,6 +1075,7 @@ Type *Program_add_type(Program *p, TypeKind k, const char *name, Module *m) {
   case PoolT:
   case BufT:
   case ArrayT:
+  case DynArrayT:
     tt->array_count = 0;
     break;
   case BaseT:
@@ -1584,6 +1593,13 @@ Type *Module_find_pointer_type(Module *m, Type *child) {
   return NULL;
 }
 
+Type *Module_find_dyn_array_type(Module *m, Type *child) {
+  for (TypeList *tl = m->types; tl; tl = tl->next)
+    if (tl->type->kind == DynArrayT && tl->type->child == child)
+      return tl->type;
+  return NULL;
+}
+
 Type *Module_find_array_type(Module *m, int count, Type *child) {
   for (TypeList *tl = m->types; tl; tl = tl->next)
     if (tl->type->kind == ArrayT && tl->type->array_count == count && tl->type->child == child)
@@ -2073,6 +2089,8 @@ Expression *Program_parse_construction(Program *p, Module *m, State *st) {
       return construct;
     }
   }
+  if (new_construct)
+    FATAL(&st->location, "broken 'new' construction");
 
   *st = old;
   return NULL;
@@ -2631,6 +2649,9 @@ BuffString Type_special_cname(Type *t) {
   int i = 0;
   while (t->child) {
     switch ((TypeKind)t->kind) {
+    case DynArrayT:
+      i += snprintf(ss + i, sizeof(s.s) - i, "_n_%d_", t->array_count);
+      break;
     case ArrayT:
       if (t->array_count > 0)
         i += snprintf(ss + i, sizeof(s.s) - i, "_%d_", t->array_count);
@@ -2700,6 +2721,7 @@ bool c_type_declare(FILE *f, Type *t, Location *l, const char *var) {
       t = t->child;
     }
     return true;
+  case DynArrayT:
   case PointerT:
     fprintf(f, "*");
     break;
@@ -2890,6 +2912,7 @@ void c_type(FILE *f, const char *module_name, Type *t) {
   case BufT:
     FATALX("'%s' should be replaced here that kind", Type_name(t).s);
     break;
+  case DynArrayT:
   case ArrayT:
   case PointerT:
   case ConstantWrapperT:
@@ -3009,6 +3032,141 @@ void jnq_expression(FILE *f, Expression *e) {
   }
 }
 
+Type *c_expression_get_type(Module *m, Expression *e) {
+  if (!e)
+    return NULL;
+
+  switch ((ExpressionType)e->type) {
+  case BaseA:
+    return e->baseconst->type;
+
+  case IdentifierA: {
+    if (!e->id->type)
+      FATAL(&e->location, "unknown type for '%s'", e->id->name);
+    return e->id->type;
+  }
+  case AutoTypeE: {
+    if (!e->autotype->type)
+      FATAL(&e->location, "unknown type for '%s'", e->autotype->name);
+    return e->autotype->type;
+  }
+  case BraceE:
+    return c_expression_get_type(m, e->brace->o);
+
+  case MemberAccessE: {
+    if (!e->member->member->type)
+      FATAL(&e->location, "unknown type for '%s'", e->member->member->name);
+    return e->member->member->type;
+  }
+
+  case CallE: {
+    Type *t = c_expression_get_type(m, e->call->o);
+    if (!t || t->kind != FnT)
+      FATAL(&e->location, "Need a function to be called!");
+    return t->fnT->d.returnType;
+  }
+
+  case ConstructE: {
+    if (!e->construct->type)
+      FATAL(&e->location, "unknown construct type");
+    return e->construct->type;
+  }
+  case AccessE: {
+    Type *t = c_expression_get_type(m, e->access->o);
+    if (t->kind == StructT && t->structT->member.len > 0) {
+      Variable *delegateV = &t->structT->member.v[0];
+      if ((delegateV->type->kind == PointerT || delegateV->type->kind == ArrayT) &&
+          strcmp(delegateV->name, "__d") == 0) {
+        return delegateV->type->child;
+      }
+    }
+    if (t->kind == PointerT && t->child->kind == StructT && t->child->structT->member.len > 0) {
+      Variable *delegateV = &t->child->structT->member.v[0];
+      if ((delegateV->type->kind == PointerT || delegateV->type->kind == ArrayT) &&
+          strcmp(delegateV->name, "__d") == 0) {
+        return delegateV->type->child;
+      }
+    }
+    if (!t->child)
+      FATAL(&e->location, "unknown access return type for '%s'", Type_name(t).s);
+    return t->child;
+  }
+
+  case AsCast:
+    if (!e->cast->type)
+      FATAL(&e->location, "unknown access return type ");
+    return e->cast->type;
+
+  case NewE: {
+    Type *st = c_expression_get_type(m, e->newE->o);
+    Module *cm = Type_defined_module(st);
+    if (!cm)
+      FATAL(&e->location, "internal problem finding module for type '%s'", Type_name(st).s);
+    if ((TypeKind)st->kind == ArrayT) {
+      Type *td = Module_find_dyn_array_type(cm, st->child);
+      if (!td)
+        FATAL(&e->location, "internal problem finding dynamic array type for '%s'", Type_name(st).s);
+      return td;
+    }
+    Type *td = Module_find_pointer_type(cm, st);
+    if (!td)
+      FATAL(&e->location, "internal problem finding pointer type for '%s'", Type_name(st).s);
+    return td;
+  }
+
+  case UnaryPrefixE: {
+    Type *st = c_expression_get_type(m, e->unpost->o);
+    if (strcmp(e->unpre->op, "&") == 0) {
+      Module *cm = Type_defined_module(st);
+      if (!cm)
+        FATALX("internal problem finding module for type");
+      Type *td = Module_find_pointer_type(cm, st);
+      if (!td)
+        FATAL(&e->location, "internal problem finding pointer type for '%s'", Type_name(st).s);
+      return td;
+    } else if (strcmp(e->unpre->op, "*") == 0) {
+      if (st->kind != PointerT)
+        FATAL(&e->location, "dereferenceing none pointer type '%s'!", Type_name(st).s);
+      return st->child;
+    } else if (strcmp(e->unpre->op, "!") == 0) {
+      return &Bool;
+    }
+    return st;
+  }
+
+  case UnaryPostfixE:
+    return c_expression_get_type(m, e->unpre->o);
+
+  case BinaryOperationE: {
+    Type *t1 = c_expression_get_type(m, e->binop->o1);
+    Type *t2 = c_expression_get_type(m, e->binop->o2);
+    if (!Type_convertable(t1, t2) && !Type_convertable(t2, t1)) {
+      FATAL(&e->location, "Expect equal types for binary operation '%s' (%s, %s) (%p, %p)", e->binop->op->op,
+            Type_name(t1).s, Type_name(t2).s, t1, t2);
+    }
+    if (e->binop->op->returns_bool)
+      return &Bool;
+    // return  Type_more_common(t1, t2);
+    return t1;
+  }
+
+  case TernaryOperationE: {
+    Type *t1 = c_expression_get_type(m, e->ternop->if_e);
+    Type *t2 = c_expression_get_type(m, e->ternop->else_e);
+    if (!Type_equal(t1, t2))
+      FATAL(&e->location, "Expect equal types for ternary operation (%s, %s)", Type_name(t1).s, Type_name(t2).s);
+    return t1;
+  }
+
+  case CDelegateE: {
+    FATAL(&e->location, "internal error: unexpected delegate");
+    return c_expression_get_type(m, e->cdelegate->o);
+  }
+  }
+  FATAL(&e->location, "unknown type for expression!");
+  return NULL;
+}
+
 bool c_check_makro(FILE *f, Call *ca, Location *l) {
   if (ca->o->type != IdentifierA)
     return false;
@@ -3037,10 +3195,42 @@ bool c_check_makro(FILE *f, Call *ca, Location *l) {
     fprintf(f, "offsetof(%s%s, %s)", (ma->o_type->kind == CStructT ? "" : mam->c_name), ma->o->id->name,
             ma->member->name);
     return true;
+  } else if (strcmp(ca->o->id->name, "len") == 0) {
+    if (ca->p.len != 1)
+      FATAL(l, "'len' expects exact 1 parameter!");
+    Type *arg_type = c_expression_get_type(NULL, ca->p.p[0].p);
+
+    switch ((TypeKind)arg_type->kind) {
+    case DynArrayT:
+      fprintf(f, "__LEN_ARRAY(");
+      c_expression(f, ca->p.p[0].p);
+      fprintf(f, ")");
+      return true;
+
+    case UseT:
+    case BaseT:
+    case StructT:
+    case CStructT:
+    case UnionT:
+    case EnumT:
+    case CEnumT:
+    case InterfaceT:
+    case ArrayT:
+    case PointerT:
+    case VecT:
+    case PoolT:
+    case BufT:
+    case FnT:
+    case ConstantWrapperT:
+    case PlaceHolder:
+      FATAL(&ca->p.p[0].p->location, "Can't get 'len' for type '%s'!", Type_name(arg_type).s);
+      break;
+    }
   }
 
   return false;
 }
+
 void c_expression(FILE *f, Expression *e) {
   if (!e)
     return;
@@ -3056,6 +3246,7 @@ void c_expression(FILE *f, Expression *e) {
     else
       fprintf(f, "%s", e->baseconst->text);
     break;
+
   case IdentifierA:
     if (!e->id->type)
       FATAL(&e->location, "unknown type for id '%s'", e->id->name);
@@ -3072,6 +3263,7 @@ void c_expression(FILE *f, Expression *e) {
     }
     fprintf(f, "%s", e->id->name);
     break;
+
   case AutoTypeE: {
     if (!c_type_declare(f, e->autotype->type, &e->location, e->autotype->name))
       fprintf(f, " %s", e->autotype->name);
@@ -3079,14 +3271,17 @@ void c_expression(FILE *f, Expression *e) {
     c_expression(f, e->autotype->e);
     break;
   }
-  case BraceE:
+
+  case BraceE: {
     fprintf(f, "(");
     c_expression(f, e->brace->o);
     fprintf(f, ")");
     break;
+  }
+
   case CallE: {
     if (c_check_makro(f, e->call, &e->location))
-      break;
+      return;
 
     c_expression(f, e->call->o);
     fprintf(f, "(");
@@ -3094,15 +3289,28 @@ void c_expression(FILE *f, Expression *e) {
     fprintf(f, ")");
     break;
   }
+
   case NewE: {
     if (e->newE->o->type != ConstructE)
       FATAL(&e->location, "expect construction for 'new'");
     Type *t = e->newE->o->construct->type;
-    fprintf(f, "__NEW_(%s%s, &(", Type_defined_module(t)->c_name, t->name);
-    c_expression(f, e->newE->o);
-    fprintf(f, "))");
+    if ((TypeKind)t->kind == ArrayT) {
+      int count = t->array_count;
+      t = t->child;
+      fprintf(f, "__NEW_ARRAY(");
+      if (c_type_declare(f, t, &e->location, "<<>>"))
+        FATAL(&e->location, "Type '%s' not working as dynamic array!", Type_name(t).s);
+      fprintf(f, ", %d)", count);
+      Module_find_pointer_type(Type_defined_module(t), t);
+    } else {
+      fprintf(f, "__NEW_(%s%s, &(", Type_defined_module(t)->c_name, t->name);
+      c_expression(f, e->newE->o);
+      fprintf(f, "))");
+      Module_find_pointer_type(Type_defined_module(t), t);
+    }
     break;
   }
+
   case ConstructE: {
     if (e->construct->type->kind == VecT) {
       FATAL(&e->construct->p.p[0].p->location, "vec type should be replaced!");
@@ -3134,6 +3342,7 @@ void c_expression(FILE *f, Expression *e) {
     }
     break;
   }
+
   case AccessE: {
     c_expression(f, e->access->o);
     fprintf(f, "[");
@@ -3141,6 +3350,7 @@ void c_expression(FILE *f, Expression *e) {
     fprintf(f, "]");
     break;
   }
+
   case MemberAccessE: {
     if (!e->member->o_type)
       FATAL(&e->location, "missing type for access");
@@ -3185,13 +3395,16 @@ void c_expression(FILE *f, Expression *e) {
       FATAL(&e->location, "type should be replaced '%s'!", Type_name(e->member->member->type).s);
       break;
 
-    case FnT: {
+    case DynArrayT:
+      FATAL(&e->location, "member call to dynamic array type '%s'!", Type_name(e->member->member->type).s);
+      break;
+    case FnT:
       FATAL(&e->location, "internal error creating member function call!");
       break;
     }
-    }
     break;
   }
+
   case AsCast:
     fprintf(f, "((");
     if (c_type_declare(f, e->cast->type, &e->location, ""))
@@ -3200,22 +3413,26 @@ void c_expression(FILE *f, Expression *e) {
     c_expression(f, e->cast->o);
     fprintf(f, "))");
     break;
+
   case UnaryPrefixE: {
     fprintf(f, "%s", e->unpre->op);
     c_expression(f, e->unpre->o);
     break;
   }
+
   case UnaryPostfixE: {
     c_expression(f, e->unpost->o);
     fprintf(f, "%s", e->unpost->op);
     break;
   }
+
   case BinaryOperationE: {
     c_expression(f, e->binop->o1);
     fprintf(f, " %s ", e->binop->op->op);
     c_expression(f, e->binop->o2);
     break;
   }
+
   case TernaryOperationE: {
     c_expression(f, e->ternop->condition);
     fprintf(f, " ? ");
@@ -3224,10 +3441,10 @@ void c_expression(FILE *f, Expression *e) {
     c_expression(f, e->ternop->else_e);
     break;
   }
+
   case CDelegateE: {
     c_expression(f, e->cdelegate->o);
     fprintf(f, "%s", e->cdelegate->delegate);
-    break;
   }
   }
 }
@@ -3342,11 +3559,41 @@ void c_statements(FILE *f, Statement *s, int indent) {
     c_expression(f, s->ret->e);
     fprintf(f, ";\n");
     break;
-  case Delete:
-    fprintf(f, "free(");
-    c_expression(f, s->deleteS->e);
-    fprintf(f, ");\n");
+  case Delete: {
+    Type *arg_type = c_expression_get_type(NULL, s->deleteS->e);
+    switch ((TypeKind)arg_type->kind) {
+    case DynArrayT:
+      fprintf(f, "__FREE_ARRAY(");
+      c_expression(f, s->deleteS->e);
+      fprintf(f, ");");
+      break;
+    case PointerT:
+      fprintf(f, "free(");
+      c_expression(f, s->deleteS->e);
+      fprintf(f, ");\n");
+      break;
+    case UseT:
+    case BaseT:
+    case StructT:
+    case CStructT:
+    case UnionT:
+    case EnumT:
+    case CEnumT:
+    case InterfaceT:
+    case ArrayT:
+    case VecT:
+    case PoolT:
+    case BufT:
+    case FnT:
+    case ConstantWrapperT:
+    case PlaceHolder:
+      FATAL(&s->deleteS->e->location, "Can't delete type '%s'!", Type_name(arg_type).s);
+      break;
+    }
+
     break;
+  }
+
   case Break:
     fprintf(f, "break;\n");
     break;
@@ -3582,6 +3829,7 @@ void c_type_forward(FILE *f, const char *module_name, Type *t) {
     // todo?!?
     break;
   case ArrayT:
+  case DynArrayT:
   case PointerT:
     break;
   }
@@ -3717,6 +3965,7 @@ Type *Module_find_member(Type *t, const char *name) {
 
   case BaseT:
   case ArrayT:
+  case DynArrayT:
   case PointerT:
   case FnT:
   case PlaceHolder:
@@ -4044,7 +4293,7 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
         return delegateV->type->child;
       }
     }
-    if (t->kind != ArrayT && t->kind != PointerT)
+    if ((TypeKind)t->kind != ArrayT && t->kind != DynArrayT && t->kind != PointerT)
       FATAL(&e->location, "Expect array/pointer type for access got '%s'", Type_name(t).s);
     return t->child;
   }
@@ -4057,6 +4306,14 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
     Module *cm = Type_defined_module(st);
     if (!cm)
       FATALX("internal problem finding module for type");
+    if ((TypeKind)st->kind == ArrayT) {
+      Type *td = Module_find_dyn_array_type(cm, st->child);
+      if (!td) {
+        td = Program_add_type(p, DynArrayT, "", cm);
+        td->child = st->child;
+      }
+      return td;
+    }
     Type *td = Module_find_pointer_type(cm, st);
     if (!td) {
       td = Program_add_type(p, PointerT, "", cm);
@@ -4110,7 +4367,7 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
       e->binop->o2 = Interface_construct(p, t2, t1, e->binop->o2);
       return t1;
     }
-    if (!Type_convertable(t1, t2)) {
+    if (!Type_convertable(t1, t2) && !Type_convertable(t2, t1)) {
       FATAL(&e->location, "Expect equal types for binary operation '%s' (%s, %s) (%p, %p)", e->binop->op->op,
             Type_name(t1).s, Type_name(t2).s, t1, t2);
     }
@@ -4535,6 +4792,13 @@ void c_build_special_types(Program *p) {
   }
 }
 
+char *_new_array(size_t nb, size_t st) {
+  char *d = (char *)malloc(nb * st + sizeof(size_t));
+  *((size_t *)d) = nb;
+  return (d + sizeof(size_t));
+}
+size_t _len_array(char *a) { return *((size_t *)(a - sizeof(size_t))); }
+
 void c_Program(FILE *f, Program *p, Module *m) {
   Program_reset_module_finished(p);
   c_check_types(&global);
@@ -4554,13 +4818,24 @@ void c_Program(FILE *f, Program *p, Module *m) {
   fputs("#include <math.h>\n", f);
   fputs("\n", f);
 
-  fputs("void assert_imp_(const char *f, int l, int c, bool condition, const char *code) {\n", f);
+  fputs("bool assert_imp_(const char *f, int l, int c, bool condition, const char *code) {\n", f);
   fputs("  if (!condition) {\n", f);
   fputs("    fprintf(stderr, \"%s:%d:%d: failed: %s\\n\", f, l, c, code);\n", f);
   fputs("    abort();\n", f);
   fputs("  }\n", f);
+  fputs("  return !condition;\n", f);
   fputs("}\n", f);
 
+  fputs("char *new_array_imp_(size_t nb, size_t st) {\n", f);
+  fputs("  char *d = (char *)malloc(nb * st + sizeof(size_t));\n", f);
+  fputs("  *((size_t *)d) = nb;\n", f);
+  fputs("  return (d + sizeof(size_t));\n", f);
+  fputs("}\n", f);
+  fputs("size_t _len_array(char *a) { return *((size_t *)(a - sizeof(size_t))); }\n", f);
+
+  fputs("#define __NEW_ARRAY(T, count) ((T *)new_array_imp_((count), sizeof(T)))\n", f);
+  fputs("#define __LEN_ARRAY(a) (_len_array((char*)(a)))\n", f);
+  fputs("#define __FREE_ARRAY(a) (free(((char*)a)-sizeof(size_t)))\n", f);
   fputs("#define __NEW_(T, src) ((T *)memcpy(malloc(sizeof(T)), src, sizeof(T)))\n", f);
 
   for (CBlock *cb = p->cblocks; cb; cb = cb->next)
@@ -4634,6 +4909,7 @@ void Program_add_defaults(Program *p) {
   Program_parse_fn(p, &global, &(State){"sizeof(...) u64\n", fn_location}, true);
   Program_parse_fn(p, &global, &(State){"offsetof(...) u64\n", fn_location}, true);
   Program_parse_fn(p, &global, &(State){"ASSERT(...)\n", fn_location}, true);
+  Program_parse_fn(p, &global, &(State){"len(...) u64\n", fn_location}, true);
   Program_parse_fn(p, &global, &(State){"printf(d *char, ...) *char\n", fn_location}, true);
   Program_parse_fn(p, &global, &(State){"realloc(d *char, s int) *char\n", fn_location}, true);
   Program_parse_fn(p, &global, &(State){"free(d *char)\n", fn_location}, true);
@@ -4703,6 +4979,7 @@ void write_symbols(Module *m) {
       break;
     case BaseT:
     case ArrayT:
+    case DynArrayT:
     case PointerT:
     case VecT:
     case PoolT:
