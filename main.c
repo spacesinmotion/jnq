@@ -937,7 +937,8 @@ bool Type_convertable(Type *expect, Type *got) {
     return true;
   }
 
-  if (expect == &Any && ((TypeKind)got->kind == ArrayT || (TypeKind)got->kind == PointerT)) {
+  if (expect == &Any &&
+      ((TypeKind)got->kind == ArrayT || (TypeKind)got->kind == PointerT || (TypeKind)got->kind == DynArrayT)) {
     return true;
   }
 

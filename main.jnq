@@ -1,44 +1,31 @@
 
 use printf from C.stdio
+use qsort, rand from C.stdlib
 
-fn print_all_c(a *i32, l i32){
-  for (i := 0; i < l; ++i)
-    printf("%5d %5d\n", i, a[i])
-}
-
-fn print_all_dyn(a[*]i32){
-  for (i := 0; i < len(a) as i32; ++i)
-    printf("%5d %5d\n", i, a[i])
-}
-
-type XYZ struct {
-  a[*]f32,
+fn comp(const ap any, const bp any) i32 {
+  a := *(ap as *i32)
+  b := *(bp as *i32)
+  if (a < b) return -1
+  if (a > b) return 1
+  return 0
 }
 
 fn main(argc i32, argv[]*char) int
 {
-  w := XYZ{}
-  ASSERT(len(w.a) == 0u)
-  ASSERT(cap(w.a) == 0u)
+  a := new[]i32{}
+  for (i := 0; i < 10; ++i)
+    push(a, rand() % 100)
 
-  w.a = new[8]f32{}
+  for (i := 0; i < len(a) as i32; ++i)
+    print(i, a[i])
 
-  ASSERT(len(w.a) == 8u)
-  ASSERT(cap(w.a) == 8u)
+  qsort(a, len(a), sizeof(i32), comp)
 
-  for (i := 0; i < len(w.a) as i32; ++i)
-    w.a[i] = i as f32 * 10.0f
+  print()
+  for (i := 0; i < len(a) as i32; ++i)
+    print(i, a[i])
 
-  for (i := 0; i < len(w.a) as i32; ++i)
-    ASSERT(w.a[i] == i as f32 * 10.0f)
-
-  w.a = push(w.a, 4.2f)
-
-  delete w.a
-  print(w.a)
-  w.a = null
-  ASSERT(0u == len(w.a))
-  ASSERT(0u == cap(w.a))
+  delete a
 
   print("ok")
   return 0
