@@ -134,6 +134,36 @@ fn qsort_any_dynamic_array()
   delete a
 }
 
+type SomeAble interface {
+  fn id(s *SomeAble) i32
+}
+
+type SomeImp struct {
+  val i32
+}
+
+fn id(s *SomeImp) i32 {
+  return s.val
+}
+
+fn interface_in_dynamic_array()
+{
+  printf(" .interface_in_dynamic_array\n")
+
+  a := new[]SomeAble{}
+
+  x := SomeImp{42}
+
+  push(a, null)
+  push(a, &x)
+
+  ASSERT(a[0] == null)
+  ASSERT(a[1] != null)
+  ASSERT(a[1].id() == 42)
+
+  delete a
+}
+
 fn main() i32 {
   printf("dynamic arrays\n")
 
@@ -141,6 +171,7 @@ fn main() i32 {
   simple_struct()
   as_members()
   qsort_any_dynamic_array()
+  interface_in_dynamic_array()
 
   printf(" ...ok\n")
   return 0

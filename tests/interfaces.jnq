@@ -6,7 +6,7 @@ type SomeAble interface {
   fn val(s *SomeAble) int
 }
 
-fn some(x *SomeAble) int {
+fn some(x SomeAble) int {
   return x.id(42) + x.val()
 }
 

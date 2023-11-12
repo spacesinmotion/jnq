@@ -4139,7 +4139,10 @@ Expression *Interface_construct(Program *p, Type *got, Type *expect, Expression 
     Expression *cE = Program_new_Expression(p, ConstructE, pr->location);
     cE->construct->type = expect;
     cE->construct->p = (ParameterList){NULL, 0};
-    return cE;
+
+    Expression *br = Program_new_Expression(p, BraceE, pr->location);
+    br->brace->o = cE;
+    return br;
   }
 
   bool is_pointer = got->kind == PointerT;
@@ -4181,7 +4184,10 @@ Expression *Interface_construct(Program *p, Type *got, Type *expect, Expression 
     tl->next = expect->interfaceT->used_types;
     expect->interfaceT->used_types = tl;
   }
-  return pr;
+
+  Expression *br = Program_new_Expression(p, BraceE, pr->location);
+  br->brace->o = pr;
+  return br;
 }
 
 Type *AdaptParameter_for(Program *p, Type *got, Type *expect, Parameter *param) {
@@ -4252,6 +4258,7 @@ Type *c_Macro_make_variables_typed(VariableStack *s, Program *p, Module *m, cons
       FATAL(&e->location, "too much parameter for macro '%s'!", macro_name);
     if (param[0]->kind != DynArrayT)
       FATAL(&pl.p[0].p->location, "expect dynamic array for macro '%s' got '%s'!", macro_name, Type_name(param[0]).s);
+    param[1] = AdaptParameter_for(p, param[1], param[0]->child, &pl.p[1]);
     if (!Type_convertable(param[0]->child, param[1]))
       FATAL(&pl.p[1].p->location, "can not '%s' type '%s'!", macro_name, Type_name(param[1]).s);
     if ((ExpressionType)pl.p[0].p->type == CallE)
