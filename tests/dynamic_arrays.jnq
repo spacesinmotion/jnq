@@ -35,6 +35,19 @@ fn simple_int()
   ASSERT(64u == len(a))
   ASSERT(64u == cap(a))
 
+  a = reserve(a, 42)
+  ASSERT(64u == len(a))
+  ASSERT(64u == cap(a))
+
+  a = push(a, 54321)
+  ASSERT(65u == len(a))
+  ASSERT(65u >= cap(a))
+  ASSERT(8000u < cap(a))
+
+  a = reserve(a, 8000)
+  ASSERT(65u == len(a))
+  ASSERT(8000u == cap(a))
+
   delete a
 }
 

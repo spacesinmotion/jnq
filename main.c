@@ -3107,8 +3107,8 @@ Type *c_expression_get_type(Module *m, Expression *e) {
         return &Bool;
       else if (strcmp(t->macro_name, "print") == 0)
         return &i32;
-      else if (strcmp(t->macro_name, "resize") == 0)
-        FATAL(&e->location, "'resize' may be more complicated here!");
+      else if (strcmp(t->macro_name, "resize") == 0 || strcmp(t->macro_name, "reserve") == 0)
+        FATAL(&e->location, "'%s' may be more complicated here!", t->macro_name);
       else
         FATAL(&e->location, "Need a function to be called!");
     }
@@ -3297,11 +3297,12 @@ bool c_check_macro(FILE *f, Call *ca, Location *l) {
     fprintf(f, "offsetof(%s%s, %s)", (ma->o_type->kind == CStructT ? "" : mam->c_name), ma->o->id->name,
             ma->member->name);
     return true;
-  } else if (strcmp(ca->o->id->name, "resize") == 0) {
+  } else if (strcmp(ca->o->id->name, "resize") == 0 || strcmp(ca->o->id->name, "reserve") == 0 ||
+             strcmp(ca->o->id->name, "push") == 0) {
     Type *arg_type = c_expression_get_type(NULL, ca->p.p[0].p);
     if (!arg_type || arg_type->kind != DynArrayT)
       FATAL(l, "Type '%s' not working as dynamic array!", Type_name(arg_type).s);
-    fprintf(f, "__RESIZE_ARRAY(");
+    fprintf(f, "__%s_ARRAY(", ca->o->id->name);
     if (c_type_declare(f, arg_type->child, l, "<<>>"))
       FATAL(l, "Type '%s' not working as dynamic array!", Type_name(arg_type).s);
     fprintf(f, ", ");
@@ -4217,7 +4218,7 @@ Type *c_Macro_make_variables_typed(VariableStack *s, Program *p, Module *m, cons
     param[nb_param] = c_Expression_make_variables_typed(s, p, m, pl.p[nb_param].p);
   }
 
-  if (strcmp("resize", macro_name) == 0) {
+  if (strcmp("resize", macro_name) == 0 || strcmp("reserve", macro_name) == 0) {
     if (nb_param == 0)
       FATAL(&e->location, "missing parameter for macro '%s'!", macro_name);
     if (nb_param > 2)
@@ -4226,6 +4227,18 @@ Type *c_Macro_make_variables_typed(VariableStack *s, Program *p, Module *m, cons
       FATAL(&pl.p[0].p->location, "expect dynamic array for macro '%s' got '%s'!", macro_name, Type_name(param[0]).s);
     if (!Type_convertable(&u64, param[1]) && !Type_convertable(&i64, param[1]))
       FATAL(&pl.p[1].p->location, "expect length unit for macro '%s'!", macro_name);
+    return param[0];
+  } else if (strcmp("push", macro_name) == 0) {
+    if (nb_param == 0)
+      FATAL(&e->location, "missing parameter for macro '%s'!", macro_name);
+    if (nb_param > 2)
+      FATAL(&e->location, "too much parameter for macro '%s'!", macro_name);
+    if (param[0]->kind != DynArrayT)
+      FATAL(&pl.p[0].p->location, "expect dynamic array for macro '%s' got '%s'!", macro_name, Type_name(param[0]).s);
+    if (!Type_convertable(param[0]->child, param[1]))
+      FATAL(&pl.p[1].p->location, "can not '%s' type '%s'!", macro_name, Type_name(param[1]).s);
+    if ((ExpressionType)pl.p[0].p->type != IdentifierA)
+      FATAL(&pl.p[0].p->location, "'%s' does not work for r-values!");
     return param[0];
   } else if (strcmp("sizeof", macro_name) == 0 || strcmp("offsetof", macro_name) == 0 ||
              strcmp("len", macro_name) == 0 || strcmp("cap", macro_name) == 0) {
@@ -5008,18 +5021,27 @@ void c_Program(FILE *f, Program *p, Module *m) {
   fputs("  ((size_t *)d)[1] = nb;\n", f);
   fputs("  return (d + 2 * sizeof(size_t));\n", f);
   fputs("}\n", f);
-  fputs("char *push_array_imp_(char *a, char *val, size_t st) {\n", f);
-  fputs("  size_t l = _len_array(a);\n", f);
-  fputs("  if (l == _cap_array(a))\n", f);
-  fputs("    a = resize_array_imp_(a, _cap_array(a) + 512, st);\n", f);
-  fputs("  memcpy(&a[l], val, st);\n", f);
-  fputs("  char *d = (a - 2*sizeof(size_t));\n", f);
-  fputs("  ((size_t *)d)[0] = l+1;\n", f);
+  fputs("char *reserve_array_imp_(char *a, size_t nb, size_t st) {\n", f);
+  fputs("  if (_cap_array(a) >= nb)\n", f);
+  fputs("    return a;\n", f);
+  fputs("  char *d = (char *)realloc((a - 2*sizeof(size_t)), nb * st + 2 * sizeof(size_t));\n", f);
+  fputs("  ((size_t *)d)[1] = nb;\n", f);
+  fputs("  return (d + 2 * sizeof(size_t));\n", f);
+  fputs("}\n", f);
+  fputs("char *prepare_push_array_imp_(char *a, size_t st) {\n", f);
+  fputs("  if (_cap_array(a) <= _len_array(a))\n", f);
+  fputs("    a = reserve_array_imp_(a, _cap_array(a) + 512, st);\n", f);
+  fputs("  char *d = (char *)(a - 2*sizeof(size_t));\n", f);
+  fputs("  ((size_t *)d)[0]++;\n", f);
   fputs("  return (d + 2 * sizeof(size_t));\n", f);
   fputs("}\n", f);
 
   fputs("#define __NEW_ARRAY(T, count) ((T *)new_array_imp_((count), sizeof(T)))\n", f);
-  fputs("#define __RESIZE_ARRAY(T, a, count) ((T *)resize_array_imp_((char*)a, (count), sizeof(T)))\n", f);
+  fputs("#define __resize_ARRAY(T, a, count) ((T *)resize_array_imp_((char*)a, (count), sizeof(T)))\n", f);
+  fputs("#define __reserve_ARRAY(T, a, count) ((T *)reserve_array_imp_((char*)a, (count), sizeof(T)))\n", f);
+  fputs("#define __push_ARRAY(T, a, val) (a = (T *)prepare_push_array_imp_((char*)a, sizeof(T)), "
+        "a[_len_array((char*)a)-1] = val, a)\n",
+        f);
   fputs("#define __FREE_ARRAY(a) (free(((char*)a) - 2 * sizeof(size_t)))\n", f);
   fputs("#define __NEW_(T, src) ((T *)memcpy(malloc(sizeof(T)), src, sizeof(T)))\n", f);
 
@@ -5106,6 +5128,8 @@ void Program_add_defaults(Program *p) {
   Program_declare_macro(p, "offsetof");
   Program_declare_macro(p, "sizeof");
   Program_declare_macro(p, "resize");
+  Program_declare_macro(p, "reserve");
+  Program_declare_macro(p, "push");
   Program_declare_macro(p, "print");
 }
 
