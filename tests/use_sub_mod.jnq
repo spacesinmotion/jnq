@@ -1,6 +1,6 @@
 
+use printf from C.stdio
 use add, Point, strlen from sub.util
-
 use util_user from sub.util_user
 
 fn main() int {

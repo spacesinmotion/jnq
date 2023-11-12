@@ -1,4 +1,5 @@
 
+use printf from C.stdio
 
 ccode {
 #include <assert.h>

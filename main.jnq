@@ -1,4 +1,6 @@
 
+use printf from C.stdio
+
 type ABC struct {
   a i32,
   b f32,

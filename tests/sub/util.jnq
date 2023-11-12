@@ -1,4 +1,6 @@
 
+use printf from C.stdio
+
 ccode {
 
 typedef struct SomeFloats {

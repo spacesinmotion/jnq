@@ -1,4 +1,6 @@
 
+use printf from C.stdio
+
 type iBaseTypes struct {
   cc char,
   bb bool,

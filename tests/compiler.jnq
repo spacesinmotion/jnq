@@ -1,4 +1,6 @@
 
+use printf from C.stdio
+
 use State from src.State
 use Type from src.Type
 

@@ -1,5 +1,6 @@
 
 use qsort from C.stdlib
+use printf from C.stdio
 
 ccode {
 void higher_order(void(*x)())

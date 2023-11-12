@@ -1,4 +1,5 @@
 
+use printf from C.stdio
 
 fn main() int {
   printf("strings\n")

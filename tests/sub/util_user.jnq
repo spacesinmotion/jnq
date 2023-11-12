@@ -1,4 +1,4 @@
-
+use printf from C.stdio
 use add, Point from util
 
 fn util_user() {

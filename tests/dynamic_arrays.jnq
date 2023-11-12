@@ -1,4 +1,6 @@
 
+use printf from C.stdio
+
 type ABC struct {
   a i32,
   b f32,
@@ -14,15 +16,6 @@ fn check_all_doubled(a[*]i32){
   for (i := 0; i < len(a) as i32; ++i)
     ASSERT(a[i] == i * 2)
 }
-
-// fn print_all_dyn(a[]i32){
-//   for (i := 0; i < len(a) as i32; ++i)
-//     printf("%5d %5d\n", i, a[i])
-// }
-
-// fn print_first_static(a[]i32){
-//   printf("%5d %5d %5d\n", 0, a[0], len(a))
-// }
 
 fn simple_int()
 {

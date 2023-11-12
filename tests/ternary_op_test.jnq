@@ -1,3 +1,5 @@
+use printf from C.stdio
+
 fn simple_ternary_operation()
 {
   printf(" .simple_ternary_operation\n")

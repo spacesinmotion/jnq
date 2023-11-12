@@ -1,4 +1,4 @@
-
+use printf from C.stdio
 use Point from sub.util
 
 fn pool_Point()

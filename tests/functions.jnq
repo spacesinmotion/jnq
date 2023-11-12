@@ -1,4 +1,6 @@
 
+use printf from C.stdio
+
 fn a() int {
   return 42
 }

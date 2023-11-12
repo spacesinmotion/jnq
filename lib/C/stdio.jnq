@@ -15,7 +15,8 @@ cfn freopen(const filename *char, const mode *char, stream *FILE) *FILE
 cfn fprintf(stream *FILE, const format *char, ...) i32
 cfn fscanf(stream *FILE, const format * char, ...) i32
 
-cfn scanf(c *char, x *char) i32
+cfn printf(const format *char, ...) i32
+cfn scanf(c *char, ...) i32
 
 cfn snprintf(t *char, ml i32, format *char, ...) i32
 cfn sprintf(t *char, format *char, ...) i32

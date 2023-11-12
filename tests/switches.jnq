@@ -1,3 +1,4 @@
+use printf from C.stdio
 
 fn dummy(a int) int {
   return a

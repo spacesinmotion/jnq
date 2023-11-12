@@ -1,5 +1,6 @@
 
 use round from sub.util
+use printf from C.stdio
 
 ccode {
 #include <math.h>

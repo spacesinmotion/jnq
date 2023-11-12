@@ -1,4 +1,6 @@
 
+use printf from C.stdio
+
 fn on_float() {
   printf(" .on_float\n")
 

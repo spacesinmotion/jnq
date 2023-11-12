@@ -1,4 +1,4 @@
-
+use printf from C.stdio
 use rand, srand, system from C.stdlib
 use scanf from C.stdio
 

@@ -1,4 +1,6 @@
 
+use printf from C.stdio
+
 fn for_loops()
 {
   printf(" .for loops test\n")

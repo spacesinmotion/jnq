@@ -1,4 +1,5 @@
 
+use printf from C.stdio
 use strcmp from C.str
 
 use Nix from sub.util

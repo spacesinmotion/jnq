@@ -1,4 +1,6 @@
 
+use printf from C.stdio
+
 fn some_bugs() {
   printf(" .some_bugs\n")
   a := 1
