@@ -3214,6 +3214,60 @@ bool c_check_macro(FILE *f, Call *ca, Location *l) {
     jnq_expression(f, ca->p.p[0].p);
     fprintf(f, "'\")");
     return true;
+  } else if (strcmp(ca->o->id->name, "print") == 0) {
+    fprintf(f, "printf(\"");
+    Type *param[128];
+    int i = 0;
+    for (; i < ca->p.len; ++i) {
+      if (i >= 128)
+        FATAL(&ca->p.p[i].p->location, "Internal error to much parameter for 'print' macro.");
+      param[i] = c_expression_get_type(NULL, ca->p.p[i].p);
+      if (param[i] == &String || param[i] == &Bool)
+        fprintf(f, "%%s");
+      else if (param[i] == &Char)
+        fprintf(f, "%%c");
+      else if (param[i] == &i8)
+        fprintf(f, "%%hhd");
+      else if (param[i] == &i16)
+        fprintf(f, "%%hd");
+      else if (param[i] == &i32)
+        fprintf(f, "%%d");
+      else if (param[i] == &i64)
+        fprintf(f, "%%ld");
+      else if (param[i] == &u8)
+        fprintf(f, "%%hhu");
+      else if (param[i] == &u16)
+        fprintf(f, "%%hu");
+      else if (param[i] == &u32)
+        fprintf(f, "%%u");
+      else if (param[i] == &u64)
+        fprintf(f, "%%lu");
+      else if (param[i] == &f32)
+        fprintf(f, "%%g");
+      else if (param[i] == &f64)
+        fprintf(f, "%%g");
+      else if (param[i] == &Any || param[i]->kind == PointerT)
+        fprintf(f, "%%p");
+      else
+        FATAL(&ca->p.p[i].p->location, "Unhandled input type for 'print' macro '%s'", Type_name(param[i]).s);
+
+      if (i + 1 < ca->p.len)
+        fprintf(f, "\\t");
+    }
+    fprintf(f, "\\n\"");
+    ParameterList *pl = &ca->p;
+    for (int i = 0; i < pl->len; ++i) {
+      fprintf(f, ", ");
+      if (param[i] == &Bool) {
+        fprintf(f, " ((");
+        c_expression(f, pl->p[i].p);
+        fprintf(f, " )?\"true\":\"false\")");
+      } else
+        c_expression(f, pl->p[i].p);
+    }
+    fprintf(f, ")");
+
+    return true;
   } else if (strcmp(ca->o->id->name, "offsetof") == 0) {
     if (ca->p.len != 1)
       FATAL(l, "'offsetof' expects exact 1 parameter!");
@@ -4166,6 +4220,8 @@ Type *c_Macro_make_variables_typed(VariableStack *s, Program *p, Module *m, cons
     if (nb_param > 1)
       FATAL(&e->location, "too much parameter for macro '%s'!", macro_name);
     return &u64;
+  } else if (strcmp("print", macro_name) == 0) {
+    return &i32;
   } else if (strcmp("ASSERT", macro_name) == 0) {
     if (nb_param == 0)
       FATAL(&e->location, "missing parameter for macro '%s'!", macro_name);
@@ -5036,6 +5092,7 @@ void Program_add_defaults(Program *p) {
   Program_declare_macro(p, "offsetof");
   Program_declare_macro(p, "sizeof");
   Program_declare_macro(p, "resize");
+  Program_declare_macro(p, "print");
 }
 
 #ifndef WIN32
