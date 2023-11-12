@@ -3312,7 +3312,8 @@ bool c_check_macro(FILE *f, Call *ca, Location *l) {
     c_parameter(f, &ca->p);
     fprintf(f, ")");
     return true;
-  } else if (strcmp(ca->o->id->name, "pop") == 0) {
+  } else if (strcmp(ca->o->id->name, "pop") == 0 || strcmp(ca->o->id->name, "back") == 0 ||
+             strcmp(ca->o->id->name, "clear") == 0) {
     Type *arg_type = c_expression_get_type(NULL, ca->p.p[0].p);
     if (!arg_type || arg_type->kind != DynArrayT)
       FATAL(l, "Type '%s' not working as dynamic array!", Type_name(arg_type).s);
@@ -4256,7 +4257,7 @@ Type *c_Macro_make_variables_typed(VariableStack *s, Program *p, Module *m, cons
     if ((ExpressionType)pl.p[0].p->type == CallE)
       FATAL(&pl.p[0].p->location, "'%s' does not work for r-values!", macro_name);
     return param[0];
-  } else if (strcmp("pop", macro_name) == 0) {
+  } else if (strcmp("pop", macro_name) == 0 || strcmp("back", macro_name) == 0) {
     if (nb_param < 1)
       FATAL(&e->location, "missing parameter for macro '%s'!", macro_name);
     if (nb_param > 1)
@@ -4264,6 +4265,14 @@ Type *c_Macro_make_variables_typed(VariableStack *s, Program *p, Module *m, cons
     if (param[0]->kind != DynArrayT)
       FATAL(&pl.p[0].p->location, "expect dynamic array for macro '%s' got '%s'!", macro_name, Type_name(param[0]).s);
     return param[0]->child;
+  } else if (strcmp("clear", macro_name) == 0) {
+    if (nb_param < 1)
+      FATAL(&e->location, "missing parameter for macro '%s'!", macro_name);
+    if (nb_param > 1)
+      FATAL(&e->location, "too much parameter for macro '%s'!", macro_name);
+    if (param[0]->kind != DynArrayT)
+      FATAL(&pl.p[0].p->location, "expect dynamic array for macro '%s' got '%s'!", macro_name, Type_name(param[0]).s);
+    return param[0];
   } else if (strcmp("sizeof", macro_name) == 0 || strcmp("offsetof", macro_name) == 0 ||
              strcmp("len_s", macro_name) == 0 || strcmp("cap_s", macro_name) == 0) {
     if (nb_param < 1)
@@ -5076,10 +5085,12 @@ void c_Program(FILE *f, Program *p, Module *m) {
   fputs("#define __NEW_ARRAY(T, count) ((T *)new_array_imp_((count), sizeof(T)))\n", f);
   fputs("#define __resize_ARRAY(T, a, count) ((T *)resize_array_imp_((char*)a, (count), sizeof(T)))\n", f);
   fputs("#define __reserve_ARRAY(T, a, count) ((T *)reserve_array_imp_((char*)a, (count), sizeof(T)))\n", f);
+  fputs("#define __clear_ARRAY(T, a) ((T *)resize_array_imp_((char*)a, 0, sizeof(T)))\n", f);
   fputs("#define __push_ARRAY(T, a, val) (a = (T *)prepare_push_array_imp_((char*)a, sizeof(T)), "
         "a[_len_array((char*)a)-1] = val, a)\n",
         f);
   fputs("#define __pop_ARRAY(T, a) (a = (T *)pop_array_imp_((char*)a, sizeof(T)), a[_len_array((char*)a)])\n", f);
+  fputs("#define __back_ARRAY(T, a) (a[_len_array((char*)a)-1])\n", f);
   fputs("#define __FREE_ARRAY(a) (free(((char*)a) - 2 * sizeof(size_t)))\n", f);
   fputs("#define __NEW_(T, src) ((T *)memcpy(malloc(sizeof(T)), src, sizeof(T)))\n", f);
 
@@ -5170,7 +5181,9 @@ void Program_add_defaults(Program *p) {
   Program_declare_macro(p, "resize");
   Program_declare_macro(p, "reserve");
   Program_declare_macro(p, "push");
+  Program_declare_macro(p, "clear");
   Program_declare_macro(p, "pop");
+  Program_declare_macro(p, "back");
   Program_declare_macro(p, "print");
 }
 

@@ -31,7 +31,7 @@ fn skip(s *State, c int) {
   s.column += c
 }
 
-fn back(s *State, c int) State {
+fn back_(s *State, c int) State {
   b := *s;
   if (b.column < c) {
     b.column = 0;
