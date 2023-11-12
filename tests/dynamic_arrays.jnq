@@ -55,6 +55,10 @@ fn simple_int()
   ASSERT(val == 54321)
 
   delete a
+
+  a = null
+  ASSERT(0u == len(a))
+  ASSERT(0u == cap(a))
 }
 
 fn simple_struct()
@@ -76,6 +80,30 @@ fn simple_struct()
   }
 
   delete b
+}
+
+type XYZ struct {
+  a[*]f32,
+}
+
+fn as_members()
+{
+  printf(" .as_members\n")
+
+  w := XYZ{null}
+  ASSERT(len(w.a) == 0u)
+  ASSERT(cap(w.a) == 0u)
+
+  w.a = new[8]f32{}
+
+  ASSERT(len(w.a) == 8u)
+  ASSERT(cap(w.a) == 8u)
+
+  for (i := 0; i < len(w.a) as i32; ++i)
+    w.a[i] = i as f32 * 10.0f
+
+  for (i := 0; i < len(w.a) as i32; ++i)
+    ASSERT(w.a[i] == i as f32 * 10.0f)
 }
 
 fn main() i32 {

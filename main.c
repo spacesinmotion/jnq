@@ -877,9 +877,9 @@ bool Type_equal(Type *t1, Type *t2) {
     return Type_equal(t1, t2->child);
 
   if (t1 == &Null)
-    return t2 == &Null || t2->kind == PointerT || t2->kind == InterfaceT;
+    return t2 == &Null || t2->kind == PointerT || t2->kind == DynArrayT || t2->kind == InterfaceT;
   if (t2 == &Null)
-    return t1 == &Null || t1->kind == PointerT || t1->kind == InterfaceT;
+    return t1 == &Null || t1->kind == PointerT || t1->kind == DynArrayT || t1->kind == InterfaceT;
 
   if ((t1->kind == PointerT && t2->kind == ArrayT) || (t2->kind == PointerT && t1->kind == ArrayT))
     return Type_equal(t1->child, t2->child);
@@ -3260,7 +3260,7 @@ bool c_check_macro(FILE *f, Call *ca, Location *l) {
         fprintf(f, "%%g");
       else if (param[i] == &f64)
         fprintf(f, "%%g");
-      else if (param[i] == &Any || param[i]->kind == PointerT)
+      else if (param[i] == &Any || param[i]->kind == PointerT || param[i]->kind == DynArrayT)
         fprintf(f, "%%p");
       else
         FATAL(&ca->p.p[i].p->location, "Unhandled input type for 'print' macro '%s'", Type_name(param[i]).s);
@@ -3513,6 +3513,7 @@ void c_expression(FILE *f, Expression *e) {
     case InterfaceT:
     case UnionT:
     case PointerT:
+    case DynArrayT:
     case ArrayT:
       c_expression(f, e->member->o);
       fprintf(f, "%s%s", (e->member->o_type->kind == PointerT ? "->" : "."), e->member->member->name);
@@ -3524,8 +3525,6 @@ void c_expression(FILE *f, Expression *e) {
       FATAL(&e->location, "type should be replaced '%s'!", Type_name(e->member->member->type).s);
       break;
 
-    case DynArrayT:
-      FATAL(&e->location, "member call to dynamic array type '%s'!", Type_name(e->member->member->type).s);
       break;
     case MacroT:
     case FnT:
@@ -4230,7 +4229,7 @@ Type *c_Macro_make_variables_typed(VariableStack *s, Program *p, Module *m, cons
   }
 
   if (strcmp("resize", macro_name) == 0 || strcmp("reserve", macro_name) == 0) {
-    if (nb_param == 0)
+    if (nb_param < 2)
       FATAL(&e->location, "missing parameter for macro '%s'!", macro_name);
     if (nb_param > 2)
       FATAL(&e->location, "too much parameter for macro '%s'!", macro_name);
@@ -4240,7 +4239,7 @@ Type *c_Macro_make_variables_typed(VariableStack *s, Program *p, Module *m, cons
       FATAL(&pl.p[1].p->location, "expect length unit for macro '%s'!", macro_name);
     return param[0];
   } else if (strcmp("push", macro_name) == 0) {
-    if (nb_param == 0)
+    if (nb_param < 2)
       FATAL(&e->location, "missing parameter for macro '%s'!", macro_name);
     if (nb_param > 2)
       FATAL(&e->location, "too much parameter for macro '%s'!", macro_name);
@@ -4248,11 +4247,11 @@ Type *c_Macro_make_variables_typed(VariableStack *s, Program *p, Module *m, cons
       FATAL(&pl.p[0].p->location, "expect dynamic array for macro '%s' got '%s'!", macro_name, Type_name(param[0]).s);
     if (!Type_convertable(param[0]->child, param[1]))
       FATAL(&pl.p[1].p->location, "can not '%s' type '%s'!", macro_name, Type_name(param[1]).s);
-    if ((ExpressionType)pl.p[0].p->type != IdentifierA)
-      FATAL(&pl.p[0].p->location, "'%s' does not work for r-values!");
+    if ((ExpressionType)pl.p[0].p->type == CallE)
+      FATAL(&pl.p[0].p->location, "'%s' does not work for r-values!", macro_name);
     return param[0];
   } else if (strcmp("pop", macro_name) == 0) {
-    if (nb_param == 0)
+    if (nb_param < 1)
       FATAL(&e->location, "missing parameter for macro '%s'!", macro_name);
     if (nb_param > 1)
       FATAL(&e->location, "too much parameter for macro '%s'!", macro_name);
@@ -4261,7 +4260,7 @@ Type *c_Macro_make_variables_typed(VariableStack *s, Program *p, Module *m, cons
     return param[0]->child;
   } else if (strcmp("sizeof", macro_name) == 0 || strcmp("offsetof", macro_name) == 0 ||
              strcmp("len", macro_name) == 0 || strcmp("cap", macro_name) == 0) {
-    if (nb_param == 0)
+    if (nb_param < 1)
       FATAL(&e->location, "missing parameter for macro '%s'!", macro_name);
     if (nb_param > 1)
       FATAL(&e->location, "too much parameter for macro '%s'!", macro_name);
@@ -4269,7 +4268,7 @@ Type *c_Macro_make_variables_typed(VariableStack *s, Program *p, Module *m, cons
   } else if (strcmp("print", macro_name) == 0) {
     return &i32;
   } else if (strcmp("ASSERT", macro_name) == 0) {
-    if (nb_param == 0)
+    if (nb_param < 1)
       FATAL(&e->location, "missing parameter for macro '%s'!", macro_name);
     if (nb_param > 1)
       FATAL(&e->location, "too much parameter for macro '%s'!", macro_name);
@@ -5032,8 +5031,8 @@ void c_Program(FILE *f, Program *p, Module *m) {
   fputs("  ((size_t *)d)[1] = nb;\n", f);
   fputs("  return (d + 2 * sizeof(size_t));\n", f);
   fputs("}\n", f);
-  fputs("size_t _len_array(char *a) { return ((size_t *)(a - 2 * sizeof(size_t)))[0]; }\n", f);
-  fputs("size_t _cap_array(char *a) { return ((size_t *)(a - 2 * sizeof(size_t)))[1]; }\n", f);
+  fputs("size_t _len_array(char *a) { return a!=NULL ? ((size_t *)(a - 2 * sizeof(size_t)))[0] : 0; }\n", f);
+  fputs("size_t _cap_array(char *a) { return a!=NULL ? ((size_t *)(a - 2 * sizeof(size_t)))[1] : 0; }\n", f);
   fputs("char *resize_array_imp_(char *a, size_t nb, size_t st) {\n", f);
   fputs("  char *d = (char *)realloc((a - 2*sizeof(size_t)), nb * st + 2 * sizeof(size_t));\n", f);
   fputs("  ((size_t *)d)[0] = nb;\n", f);
