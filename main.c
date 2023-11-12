@@ -3095,9 +3095,23 @@ Type *c_expression_get_type(Module *m, Expression *e) {
 
   case CallE: {
     Type *t = c_expression_get_type(m, e->call->o);
-    if (!t || t->kind != FnT)
+    if (!t || (t->kind != FnT && t->kind != MacroT))
       FATAL(&e->location, "Need a function to be called!");
-    return t->fnT->d.returnType;
+    if (t->kind == FnT)
+      return t->fnT->d.returnType;
+    if (t->kind == MacroT) {
+      if (strcmp(t->macro_name, "len") == 0 || strcmp(t->macro_name, "offsetof") == 0 ||
+          strcmp(t->macro_name, "cap") == 0 || strcmp(t->macro_name, "sizeof") == 0)
+        return &u64;
+      else if (strcmp(t->macro_name, "ASSERT") == 0)
+        return &Bool;
+      else if (strcmp(t->macro_name, "print") == 0)
+        return &i32;
+      else if (strcmp(t->macro_name, "resize") == 0)
+        FATAL(&e->location, "'resize' may be more complicated here!");
+      else
+        FATAL(&e->location, "Need a function to be called!");
+    }
   }
 
   case ConstructE: {
@@ -4986,14 +5000,23 @@ void c_Program(FILE *f, Program *p, Module *m) {
   fputs("  ((size_t *)d)[1] = nb;\n", f);
   fputs("  return (d + 2 * sizeof(size_t));\n", f);
   fputs("}\n", f);
+  fputs("size_t _len_array(char *a) { return ((size_t *)(a - 2 * sizeof(size_t)))[0]; }\n", f);
+  fputs("size_t _cap_array(char *a) { return ((size_t *)(a - 2 * sizeof(size_t)))[1]; }\n", f);
   fputs("char *resize_array_imp_(char *a, size_t nb, size_t st) {\n", f);
   fputs("  char *d = (char *)realloc((a - 2*sizeof(size_t)), nb * st + 2 * sizeof(size_t));\n", f);
   fputs("  ((size_t *)d)[0] = nb;\n", f);
   fputs("  ((size_t *)d)[1] = nb;\n", f);
   fputs("  return (d + 2 * sizeof(size_t));\n", f);
   fputs("}\n", f);
-  fputs("size_t _len_array(char *a) { return ((size_t *)(a - 2 * sizeof(size_t)))[0]; }\n", f);
-  fputs("size_t _cap_array(char *a) { return ((size_t *)(a - 2 * sizeof(size_t)))[1]; }\n", f);
+  fputs("char *push_array_imp_(char *a, char *val, size_t st) {\n", f);
+  fputs("  size_t l = _len_array(a);\n", f);
+  fputs("  if (l == _cap_array(a))\n", f);
+  fputs("    a = resize_array_imp_(a, _cap_array(a) + 512, st);\n", f);
+  fputs("  memcpy(&a[l], val, st);\n", f);
+  fputs("  char *d = (a - 2*sizeof(size_t));\n", f);
+  fputs("  ((size_t *)d)[0] = l+1;\n", f);
+  fputs("  return (d + 2 * sizeof(size_t));\n", f);
+  fputs("}\n", f);
 
   fputs("#define __NEW_ARRAY(T, count) ((T *)new_array_imp_((count), sizeof(T)))\n", f);
   fputs("#define __RESIZE_ARRAY(T, a, count) ((T *)resize_array_imp_((char*)a, (count), sizeof(T)))\n", f);
