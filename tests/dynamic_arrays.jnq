@@ -41,12 +41,18 @@ fn simple_int()
 
   a = push(a, 54321)
   ASSERT(65u == len(a))
-  ASSERT(65u >= cap(a))
-  ASSERT(8000u < cap(a))
+  ASSERT(65u <= cap(a))
+  ASSERT(8000u > cap(a))
 
   a = reserve(a, 8000)
   ASSERT(65u == len(a))
   ASSERT(8000u == cap(a))
+
+  val := pop(a)
+  print("len", len(a), "cap", cap(a))
+  ASSERT(len(a) == 64u)
+  ASSERT(8000u == cap(a))
+  ASSERT(val == 54321)
 
   delete a
 }
@@ -74,6 +80,9 @@ fn simple_struct()
 
 fn main() i32 {
   printf("dynamic arrays\n")
+
+  simple_int()
+  simple_struct()
 
   printf(" ...ok\n")
   return 0

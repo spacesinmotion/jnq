@@ -37,6 +37,12 @@ fn main(argc i32, argv[]*char) int
   ASSERT(cap(a) >= 6u)
   ASSERT(a[5] == 123987)
 
+  val := pop(a)
+  print("len", len(a), "cap", cap(a))
+  ASSERT(len(a) == 5u)
+  ASSERT(cap(a) >= 6u)
+  ASSERT(val == 123987)
+
   delete a
 
   print("ok")
