@@ -533,6 +533,7 @@ typedef enum TypeKind {
   PoolT,
   BufT,
   FnT,
+  MacroT,
   ConstantWrapperT,
   PlaceHolder
 } TypeKind;
@@ -548,6 +549,7 @@ typedef PACK(struct Type {
     Module *placeholerModule;
     Module *constantModule;
     Use *useT;
+    const char *macro_name;
     int array_count;
   };
   uint8_t kind;
@@ -571,6 +573,8 @@ Module *Type_defined_module(Type *t) {
     return t->interfaceT->module;
   case FnT:
     return t->fnT->module;
+  case MacroT:
+    return global_module();
   case VecT:
   case PoolT:
   case BufT:
@@ -607,6 +611,8 @@ LocationRange *Type_location(Type *t) {
     return &t->enumT->location;
   case InterfaceT:
     return &t->interfaceT->location;
+  case MacroT:
+    break;
   case FnT:
     return &t->fnT->location;
   case UseT:
@@ -988,6 +994,7 @@ BuffString Type_name(Type *t) {
     case UnionT:
     case EnumT:
     case CEnumT:
+    case MacroT:
     case FnT:
     case BaseT:
     case PlaceHolder:
@@ -1065,6 +1072,8 @@ Type *Program_add_type(Program *p, TypeKind k, const char *name, Module *m) {
     tt->fnT->is_extern_c = false;
     tt->fnT->module = m;
     break;
+  case MacroT:
+    tt->macro_name = "missing_name";
   case PlaceHolder:
     tt->placeholerModule = m;
     break;
@@ -2709,6 +2718,7 @@ BuffString Type_special_cname(Type *t) {
     case UnionT:
     case EnumT:
     case CEnumT:
+    case MacroT:
     case FnT:
     case PlaceHolder:
     case BaseT:
@@ -2768,6 +2778,9 @@ bool c_type_declare(FILE *f, Type *t, Location *l, const char *var) {
     break;
   case BaseT:
     fprintf(f, "%s", t->c_name);
+    break;
+  case MacroT:
+    FATAL(l, "Cant handle macro '%s' as type!", t->macro_name);
     break;
   case FnT:
     if (c_type_declare(f, t->fnT->d.returnType, l, ""))
@@ -2924,6 +2937,7 @@ void c_type(FILE *f, const char *module_name, Type *t) {
     break;
   case InterfaceT:
     break;
+  case MacroT:
   case FnT:
     // todo!??
     break;
@@ -3187,7 +3201,7 @@ Type *c_expression_get_type(Module *m, Expression *e) {
   return NULL;
 }
 
-bool c_check_makro(FILE *f, Call *ca, Location *l) {
+bool c_check_macro(FILE *f, Call *ca, Location *l) {
   if (ca->o->type != IdentifierA)
     return false;
 
@@ -3214,6 +3228,17 @@ bool c_check_makro(FILE *f, Call *ca, Location *l) {
 
     fprintf(f, "offsetof(%s%s, %s)", (ma->o_type->kind == CStructT ? "" : mam->c_name), ma->o->id->name,
             ma->member->name);
+    return true;
+  } else if (strcmp(ca->o->id->name, "resize") == 0) {
+    Type *arg_type = c_expression_get_type(NULL, ca->p.p[0].p);
+    if (!arg_type || arg_type->kind != DynArrayT)
+      FATAL(l, "Type '%s' not working as dynamic array!", Type_name(arg_type).s);
+    fprintf(f, "__RESIZE_ARRAY(");
+    if (c_type_declare(f, arg_type->child, l, "<<>>"))
+      FATAL(l, "Type '%s' not working as dynamic array!", Type_name(arg_type).s);
+    fprintf(f, ", ");
+    c_parameter(f, &ca->p);
+    fprintf(f, ")");
     return true;
   } else if (strcmp(ca->o->id->name, "len") == 0) {
     if (ca->p.len != 1)
@@ -3243,6 +3268,7 @@ bool c_check_makro(FILE *f, Call *ca, Location *l) {
     case VecT:
     case PoolT:
     case BufT:
+    case MacroT:
     case FnT:
     case ConstantWrapperT:
     case PlaceHolder:
@@ -3303,7 +3329,7 @@ void c_expression(FILE *f, Expression *e) {
   }
 
   case CallE: {
-    if (c_check_makro(f, e->call, &e->location))
+    if (c_check_macro(f, e->call, &e->location))
       return;
 
     c_expression(f, e->call->o);
@@ -3421,6 +3447,7 @@ void c_expression(FILE *f, Expression *e) {
     case DynArrayT:
       FATAL(&e->location, "member call to dynamic array type '%s'!", Type_name(e->member->member->type).s);
       break;
+    case MacroT:
     case FnT:
       FATAL(&e->location, "internal error creating member function call!");
       break;
@@ -3607,6 +3634,7 @@ void c_statements(FILE *f, Statement *s, int indent) {
     case VecT:
     case PoolT:
     case BufT:
+    case MacroT:
     case FnT:
     case ConstantWrapperT:
     case PlaceHolder:
@@ -3848,6 +3876,7 @@ void c_type_forward(FILE *f, const char *module_name, Type *t) {
   case UseT:
     break;
   case PlaceHolder:
+  case MacroT:
   case FnT:
     // todo?!?
     break;
@@ -3990,6 +4019,7 @@ Type *Module_find_member(Type *t, const char *name) {
   case ArrayT:
   case DynArrayT:
   case PointerT:
+  case MacroT:
   case FnT:
   case PlaceHolder:
     FATALX("internal error, call of Module_find_member with wrong type");
@@ -4107,6 +4137,34 @@ Type *AdaptParameter_for(Program *p, Type *got, Type *expect, Parameter *param) 
   return got;
 }
 
+Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m, Expression *e);
+
+Type *c_Macro_make_variables_typed(VariableStack *s, Program *p, Module *m, const char *macro_name, Expression *e) {
+  Type *param[32];
+  int nb_param = 0;
+  ParameterList pl = e->call->p;
+  for (; nb_param < pl.len; ++nb_param) {
+    if (nb_param >= 32)
+      FATAL(&e->location, "internal error: too much parameter for makro call");
+    param[nb_param] = c_Expression_make_variables_typed(s, p, m, pl.p[nb_param].p);
+  }
+
+  if (strcmp("resize", macro_name) == 0) {
+    if (nb_param == 0)
+      FATAL(&e->location, "missing parameter for macro '%s'!", macro_name);
+    if (nb_param > 2)
+      FATAL(&e->location, "too much parameter for macro '%s'!", macro_name);
+    if (param[0]->kind != DynArrayT)
+      FATAL(&pl.p[0].p->location, "expect dynamic array for macro '%s' got '%s'!", macro_name, Type_name(param[0]).s);
+    if (!Type_convertable(&u64, param[1]) && !Type_convertable(&i64, param[1]))
+      FATAL(&pl.p[1].p->location, "expect length unit for macro '%s'!", macro_name);
+    return param[0];
+  }
+
+  FATAL(&e->location, "macro '%s' not implemented!", macro_name);
+  return NULL;
+}
+
 Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m, Expression *e) {
   if (!e)
     return NULL;
@@ -4151,8 +4209,11 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
   }
   case CallE: {
     Type *t = c_Expression_make_variables_typed(s, p, m, e->call->o);
-    if (!t || t->kind != FnT)
+    if (!t || (t->kind != FnT && t->kind != MacroT))
       FATAL(&e->location, "Need a function to be called!");
+
+    if (t->kind == MacroT)
+      return c_Macro_make_variables_typed(s, p, m, t->macro_name, e);
 
     Type *first_param_type = NULL;
     if (e->call->o->type == MemberAccessE) {
@@ -4820,6 +4881,11 @@ char *_new_array(size_t nb, size_t st) {
   *((size_t *)d) = nb;
   return (d + sizeof(size_t));
 }
+char *_resize_array(char *a, size_t nb, size_t st) {
+  char *d = (char *)realloc(a, nb * st + sizeof(size_t));
+  *((size_t *)d) = nb;
+  return (d + sizeof(size_t));
+}
 size_t _len_array(char *a) { return *((size_t *)(a - sizeof(size_t))); }
 
 void c_Program(FILE *f, Program *p, Module *m) {
@@ -4854,9 +4920,15 @@ void c_Program(FILE *f, Program *p, Module *m) {
   fputs("  *((size_t *)d) = nb;\n", f);
   fputs("  return (d + sizeof(size_t));\n", f);
   fputs("}\n", f);
+  fputs("char *resize_array_imp_(char *a, size_t nb, size_t st) {\n", f);
+  fputs("  char *d = (char *)realloc((a-sizeof(size_t)), nb * st + sizeof(size_t));\n", f);
+  fputs("  *((size_t *)d) = nb;\n", f);
+  fputs("  return (d + sizeof(size_t));\n", f);
+  fputs("}\n", f);
   fputs("size_t _len_array(char *a) { return *((size_t *)(a - sizeof(size_t))); }\n", f);
 
   fputs("#define __NEW_ARRAY(T, count) ((T *)new_array_imp_((count), sizeof(T)))\n", f);
+  fputs("#define __RESIZE_ARRAY(T, a, count) ((T *)resize_array_imp_((char*)a, (count), sizeof(T)))\n", f);
   fputs("#define __LEN_ARRAY(a) (_len_array((char*)(a)))\n", f);
   fputs("#define __FREE_ARRAY(a) (free(((char*)a)-sizeof(size_t)))\n", f);
   fputs("#define __NEW_(T, src) ((T *)memcpy(malloc(sizeof(T)), src, sizeof(T)))\n", f);
@@ -4928,6 +5000,12 @@ void c_Program(FILE *f, Program *p, Module *m) {
 }
 
 #define fn_location ((Location){.file = "", .line = 1, .column = 3})
+
+void Program_declare_macro(Program *p, const char *name) {
+  Type *m = Program_add_type(p, MacroT, name, &global);
+  m->macro_name = name;
+}
+
 void Program_add_defaults(Program *p) {
   Program_parse_fn(p, &global, &(State){"sizeof(...) u64\n", fn_location}, true);
   Program_parse_fn(p, &global, &(State){"offsetof(...) u64\n", fn_location}, true);
@@ -4936,6 +5014,8 @@ void Program_add_defaults(Program *p) {
   Program_parse_fn(p, &global, &(State){"printf(d *char, ...) *char\n", fn_location}, true);
   Program_parse_fn(p, &global, &(State){"realloc(d *char, s int) *char\n", fn_location}, true);
   Program_parse_fn(p, &global, &(State){"free(d *char)\n", fn_location}, true);
+
+  Program_declare_macro(p, "resize");
 }
 
 #ifndef WIN32
@@ -4987,6 +5067,7 @@ void write_symbols(Module *m) {
     case UnionT:
       fprintf(f, "\"kind\":\"struct\",");
       break;
+    case MacroT:
     case FnT:
       fprintf(f, "\"kind\":\"fn\",");
       break;

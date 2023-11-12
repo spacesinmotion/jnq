@@ -36,19 +36,11 @@ fn simple_int()
     ASSERT(a[i] == i * 2)
   check_all_doubled_c(a, len(a) as i32)
   check_all_doubled(a)
-  
-  delete a
 
-  b := new[3]ABC{}
-  ASSERT(len(b) == 3u)
-  for (i := 0; i < len(b) as i32; ++i) {
-    b[i].a = i * 3
-    b[i].b = i as f32 / 2.0f
-    b[i].c = (i) as char + 'a'
-  }
-  for (i := 0; i < len(b) as i32; ++i) {
-    printf("ABC{%d, %g, '%c'}\n", b[i].a, b[i].b, b[i].c)
-  }
+  a = resize(a, 64)
+  ASSERT(64u == len(a))
+
+  delete a
 }
 
 fn simple_struct()
