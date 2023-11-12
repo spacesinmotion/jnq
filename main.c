@@ -4166,6 +4166,16 @@ Type *c_Macro_make_variables_typed(VariableStack *s, Program *p, Module *m, cons
     if (nb_param > 1)
       FATAL(&e->location, "too much parameter for macro '%s'!", macro_name);
     return &u64;
+  } else if (strcmp("ASSERT", macro_name) == 0) {
+    if (nb_param == 0)
+      FATAL(&e->location, "missing parameter for macro '%s'!", macro_name);
+    if (nb_param > 1)
+      FATAL(&e->location, "too much parameter for macro '%s'!", macro_name);
+    if (param[0] != &Bool && param[0]->kind != PointerT)
+      FATAL(&pl.p[0].p->location, "expect boolean condition for macro '%s' got '%s'!", macro_name,
+            Type_name(param[0]).s);
+
+    return &Bool;
   }
 
   FATAL(&e->location, "macro '%s' not implemented!", macro_name);
@@ -4428,6 +4438,10 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
       if (st->kind != PointerT)
         FATAL(&e->location, "dereferenceing none pointer type '%s'!", Type_name(st).s);
       return st->child;
+    } else if (strcmp(e->unpre->op, "!") == 0) {
+      if (st != &Bool && st->kind != PointerT)
+        FATAL(&e->location, "wrong type for '!' operator '%s'", Type_name(st).s);
+      return &Bool;
     }
     return st;
   }
@@ -5014,10 +5028,10 @@ void Program_declare_macro(Program *p, const char *name) {
 }
 
 void Program_add_defaults(Program *p) {
-  Program_parse_fn(p, &global, &(State){"ASSERT(...)\n", fn_location}, true);
   Program_parse_fn(p, &global, &(State){"realloc(d *char, s int) *char\n", fn_location}, true);
   Program_parse_fn(p, &global, &(State){"free(d *char)\n", fn_location}, true);
 
+  Program_declare_macro(p, "ASSERT");
   Program_declare_macro(p, "len");
   Program_declare_macro(p, "offsetof");
   Program_declare_macro(p, "sizeof");

@@ -48,9 +48,9 @@ fn simple_struct()
     b[i].c = (i) as char + 'a'
   }
   for (i := 0; i < len(b) as i32; ++i) {
-    ASSERT(b[i].a = i * 3)
-    ASSERT(b[i].b = i as f32 / 2.0f)
-    ASSERT(b[i].c = i as char + 'a')
+    ASSERT(b[i].a == i * 3)
+    ASSERT(b[i].b == i as f32 / 2.0f)
+    ASSERT(b[i].c == i as char + 'a')
   }
 
   delete b

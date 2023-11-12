@@ -19,6 +19,11 @@ fn booleans() {
   ASSERT(t)
   f := false
   ASSERT(!f)
+
+  y := &f
+  ASSERT(y)
+  y = null
+  ASSERT(!y)
 }
 
 fn pointer_cast_to_bool() {
