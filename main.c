@@ -4159,6 +4159,12 @@ Type *c_Macro_make_variables_typed(VariableStack *s, Program *p, Module *m, cons
     if (!Type_convertable(&u64, param[1]) && !Type_convertable(&i64, param[1]))
       FATAL(&pl.p[1].p->location, "expect length unit for macro '%s'!", macro_name);
     return param[0];
+  } else if (strcmp("sizeof", macro_name) == 0 || strcmp("offsetof", macro_name) == 0) {
+    if (nb_param == 0)
+      FATAL(&e->location, "missing parameter for macro '%s'!", macro_name);
+    if (nb_param > 1)
+      FATAL(&e->location, "too much parameter for macro '%s'!", macro_name);
+    return &u64;
   }
 
   FATAL(&e->location, "macro '%s' not implemented!", macro_name);
@@ -5007,14 +5013,14 @@ void Program_declare_macro(Program *p, const char *name) {
 }
 
 void Program_add_defaults(Program *p) {
-  Program_parse_fn(p, &global, &(State){"sizeof(...) u64\n", fn_location}, true);
-  Program_parse_fn(p, &global, &(State){"offsetof(...) u64\n", fn_location}, true);
   Program_parse_fn(p, &global, &(State){"ASSERT(...)\n", fn_location}, true);
   Program_parse_fn(p, &global, &(State){"len(...) u64\n", fn_location}, true);
   Program_parse_fn(p, &global, &(State){"printf(d *char, ...) *char\n", fn_location}, true);
   Program_parse_fn(p, &global, &(State){"realloc(d *char, s int) *char\n", fn_location}, true);
   Program_parse_fn(p, &global, &(State){"free(d *char)\n", fn_location}, true);
 
+  Program_declare_macro(p, "offsetof");
+  Program_declare_macro(p, "sizeof");
   Program_declare_macro(p, "resize");
 }
 

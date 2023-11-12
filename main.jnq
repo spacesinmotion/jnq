@@ -34,6 +34,8 @@ fn main(argc i32, argv[]*char) int
 
   delete a
 
+  ASSERT(sizeof(i32) == 4u)
+
   printf("ok\n")
   return 0
 }
