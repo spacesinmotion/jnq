@@ -25,6 +25,7 @@ fn simple_int()
     a[i] = i * 2
 
   ASSERT(32u == len(a))
+  ASSERT(32u == cap(a))
   for (i := 0; i < 32; ++i)
     ASSERT(a[i] == i * 2)
   check_all_doubled_c(a, len(a) as i32)
@@ -32,6 +33,7 @@ fn simple_int()
 
   a = resize(a, 64)
   ASSERT(64u == len(a))
+  ASSERT(64u == cap(a))
 
   delete a
 }
@@ -42,6 +44,7 @@ fn simple_struct()
 
   b := new[3]ABC{}
   ASSERT(len(b) == 3u)
+  ASSERT(cap(b) == 3u)
   for (i := 0; i < len(b) as i32; ++i) {
     b[i].a = i * 3
     b[i].b = i as f32 / 2.0f

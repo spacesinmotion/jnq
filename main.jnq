@@ -25,6 +25,7 @@ fn main(argc i32, argv[]*char) int
   for (i := 0; i < len(a) as i32; ++i)
     ASSERT(a[i] == i * 2)
   ASSERT(5u == len(a))
+  ASSERT(5u == cap(a))
 
   print_all_c(a, len(a) as i32)
 
@@ -33,6 +34,7 @@ fn main(argc i32, argv[]*char) int
   a = resize(a, 32)
   printf("len %d\n", len(a)as i32)
   ASSERT(32u == len(a))
+  ASSERT(32u == cap(a))
 
   delete a
 
@@ -52,5 +54,6 @@ fn main(argc i32, argv[]*char) int
   print(3.2f, 6.4)
   print(x, &x)
 
+  print("ok")
   return 0
 }

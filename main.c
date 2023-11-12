@@ -3294,14 +3294,14 @@ bool c_check_macro(FILE *f, Call *ca, Location *l) {
     c_parameter(f, &ca->p);
     fprintf(f, ")");
     return true;
-  } else if (strcmp(ca->o->id->name, "len") == 0) {
+  } else if (strcmp(ca->o->id->name, "len") == 0 || strcmp(ca->o->id->name, "cap") == 0) {
     if (ca->p.len != 1)
       FATAL(l, "'len' expects exact 1 parameter!");
     Type *arg_type = c_expression_get_type(NULL, ca->p.p[0].p);
 
     switch ((TypeKind)arg_type->kind) {
     case DynArrayT:
-      fprintf(f, "__LEN_ARRAY(");
+      fprintf(f, "_%s_array((char*)", ca->o->id->name);
       c_expression(f, ca->p.p[0].p);
       fprintf(f, ")");
       return true;
@@ -4214,7 +4214,7 @@ Type *c_Macro_make_variables_typed(VariableStack *s, Program *p, Module *m, cons
       FATAL(&pl.p[1].p->location, "expect length unit for macro '%s'!", macro_name);
     return param[0];
   } else if (strcmp("sizeof", macro_name) == 0 || strcmp("offsetof", macro_name) == 0 ||
-             strcmp("len", macro_name) == 0) {
+             strcmp("len", macro_name) == 0 || strcmp("cap", macro_name) == 0) {
     if (nb_param == 0)
       FATAL(&e->location, "missing parameter for macro '%s'!", macro_name);
     if (nb_param > 1)
@@ -4953,18 +4953,6 @@ void c_build_special_types(Program *p) {
   }
 }
 
-char *_new_array(size_t nb, size_t st) {
-  char *d = (char *)malloc(nb * st + sizeof(size_t));
-  *((size_t *)d) = nb;
-  return (d + sizeof(size_t));
-}
-char *_resize_array(char *a, size_t nb, size_t st) {
-  char *d = (char *)realloc(a, nb * st + sizeof(size_t));
-  *((size_t *)d) = nb;
-  return (d + sizeof(size_t));
-}
-size_t _len_array(char *a) { return *((size_t *)(a - sizeof(size_t))); }
-
 void c_Program(FILE *f, Program *p, Module *m) {
   Program_reset_module_finished(p);
   c_check_types(&global);
@@ -4993,21 +4981,23 @@ void c_Program(FILE *f, Program *p, Module *m) {
   fputs("}\n", f);
 
   fputs("char *new_array_imp_(size_t nb, size_t st) {\n", f);
-  fputs("  char *d = (char *)malloc(nb * st + sizeof(size_t));\n", f);
-  fputs("  *((size_t *)d) = nb;\n", f);
-  fputs("  return (d + sizeof(size_t));\n", f);
+  fputs("  char *d = (char *)malloc(nb * st + 2 * sizeof(size_t));\n", f);
+  fputs("  ((size_t *)d)[0] = nb;\n", f);
+  fputs("  ((size_t *)d)[1] = nb;\n", f);
+  fputs("  return (d + 2 * sizeof(size_t));\n", f);
   fputs("}\n", f);
   fputs("char *resize_array_imp_(char *a, size_t nb, size_t st) {\n", f);
-  fputs("  char *d = (char *)realloc((a-sizeof(size_t)), nb * st + sizeof(size_t));\n", f);
-  fputs("  *((size_t *)d) = nb;\n", f);
-  fputs("  return (d + sizeof(size_t));\n", f);
+  fputs("  char *d = (char *)realloc((a - 2*sizeof(size_t)), nb * st + 2 * sizeof(size_t));\n", f);
+  fputs("  ((size_t *)d)[0] = nb;\n", f);
+  fputs("  ((size_t *)d)[1] = nb;\n", f);
+  fputs("  return (d + 2 * sizeof(size_t));\n", f);
   fputs("}\n", f);
-  fputs("size_t _len_array(char *a) { return *((size_t *)(a - sizeof(size_t))); }\n", f);
+  fputs("size_t _len_array(char *a) { return ((size_t *)(a - 2 * sizeof(size_t)))[0]; }\n", f);
+  fputs("size_t _cap_array(char *a) { return ((size_t *)(a - 2 * sizeof(size_t)))[1]; }\n", f);
 
   fputs("#define __NEW_ARRAY(T, count) ((T *)new_array_imp_((count), sizeof(T)))\n", f);
   fputs("#define __RESIZE_ARRAY(T, a, count) ((T *)resize_array_imp_((char*)a, (count), sizeof(T)))\n", f);
-  fputs("#define __LEN_ARRAY(a) (_len_array((char*)(a)))\n", f);
-  fputs("#define __FREE_ARRAY(a) (free(((char*)a)-sizeof(size_t)))\n", f);
+  fputs("#define __FREE_ARRAY(a) (free(((char*)a) - 2 * sizeof(size_t)))\n", f);
   fputs("#define __NEW_(T, src) ((T *)memcpy(malloc(sizeof(T)), src, sizeof(T)))\n", f);
 
   for (CBlock *cb = p->cblocks; cb; cb = cb->next)
@@ -5089,6 +5079,7 @@ void Program_add_defaults(Program *p) {
 
   Program_declare_macro(p, "ASSERT");
   Program_declare_macro(p, "len");
+  Program_declare_macro(p, "cap");
   Program_declare_macro(p, "offsetof");
   Program_declare_macro(p, "sizeof");
   Program_declare_macro(p, "resize");
