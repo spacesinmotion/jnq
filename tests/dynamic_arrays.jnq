@@ -111,6 +111,7 @@ fn main() i32 {
 
   simple_int()
   simple_struct()
+  as_members()
 
   printf(" ...ok\n")
   return 0
