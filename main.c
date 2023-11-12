@@ -3101,9 +3101,11 @@ Type *c_expression_get_type(Module *m, Expression *e) {
     if (t->kind == FnT)
       return t->fnT->d.returnType;
     if (t->kind == MacroT) {
-      if (strcmp(t->macro_name, "len") == 0 || strcmp(t->macro_name, "offsetof") == 0 ||
-          strcmp(t->macro_name, "cap") == 0 || strcmp(t->macro_name, "sizeof") == 0)
+      if (strcmp(t->macro_name, "len_s") == 0 || strcmp(t->macro_name, "offsetof") == 0 ||
+          strcmp(t->macro_name, "cap_s") == 0 || strcmp(t->macro_name, "sizeof") == 0)
         return &u64;
+      else if (strcmp(t->macro_name, "len") == 0 || strcmp(t->macro_name, "cap") == 0)
+        return &i32;
       else if (strcmp(t->macro_name, "ASSERT") == 0)
         return &Bool;
       else if (strcmp(t->macro_name, "print") == 0)
@@ -3321,14 +3323,17 @@ bool c_check_macro(FILE *f, Call *ca, Location *l) {
     c_parameter(f, &ca->p);
     fprintf(f, ")");
     return true;
-  } else if (strcmp(ca->o->id->name, "len") == 0 || strcmp(ca->o->id->name, "cap") == 0) {
+  } else if (strcmp(ca->o->id->name, "len_s") == 0 || strcmp(ca->o->id->name, "cap_s") == 0 ||
+             strcmp(ca->o->id->name, "len") == 0 || strcmp(ca->o->id->name, "cap") == 0) {
     if (ca->p.len != 1)
       FATAL(l, "'%s' expects exact 1 parameter!", ca->o->id->name);
     Type *arg_type = c_expression_get_type(NULL, ca->p.p[0].p);
 
     switch ((TypeKind)arg_type->kind) {
     case DynArrayT:
-      fprintf(f, "_%s_array((char*)", ca->o->id->name);
+      if (strcmp(ca->o->id->name, "len") == 0 || strcmp(ca->o->id->name, "cap") == 0)
+        fprintf(f, "(int32_t)");
+      fprintf(f, "_%.3s_array((char*)", ca->o->id->name);
       c_expression(f, ca->p.p[0].p);
       fprintf(f, ")");
       return true;
@@ -4260,12 +4265,18 @@ Type *c_Macro_make_variables_typed(VariableStack *s, Program *p, Module *m, cons
       FATAL(&pl.p[0].p->location, "expect dynamic array for macro '%s' got '%s'!", macro_name, Type_name(param[0]).s);
     return param[0]->child;
   } else if (strcmp("sizeof", macro_name) == 0 || strcmp("offsetof", macro_name) == 0 ||
-             strcmp("len", macro_name) == 0 || strcmp("cap", macro_name) == 0) {
+             strcmp("len_s", macro_name) == 0 || strcmp("cap_s", macro_name) == 0) {
     if (nb_param < 1)
       FATAL(&e->location, "missing parameter for macro '%s'!", macro_name);
     if (nb_param > 1)
       FATAL(&e->location, "too much parameter for macro '%s'!", macro_name);
     return &u64;
+  } else if (strcmp("len", macro_name) == 0 || strcmp("cap", macro_name) == 0) {
+    if (nb_param < 1)
+      FATAL(&e->location, "missing parameter for macro '%s'!", macro_name);
+    if (nb_param > 1)
+      FATAL(&e->location, "too much parameter for macro '%s'!", macro_name);
+    return &i32;
   } else if (strcmp("print", macro_name) == 0) {
     return &i32;
   } else if (strcmp("ASSERT", macro_name) == 0) {
@@ -5151,7 +5162,9 @@ void Program_add_defaults(Program *p) {
 
   Program_declare_macro(p, "ASSERT");
   Program_declare_macro(p, "len");
+  Program_declare_macro(p, "len_s");
   Program_declare_macro(p, "cap");
+  Program_declare_macro(p, "cap_s");
   Program_declare_macro(p, "offsetof");
   Program_declare_macro(p, "sizeof");
   Program_declare_macro(p, "resize");

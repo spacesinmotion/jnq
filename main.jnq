@@ -16,13 +16,13 @@ fn main(argc i32, argv[]*char) int
   for (i := 0; i < 10; ++i)
     push(a, rand() % 100)
 
-  for (i := 0; i < len(a) as i32; ++i)
+  for (i := 0; i < len(a) ; ++i)
     print(i, a[i])
 
-  qsort(a, len(a), sizeof(i32), comp)
+  qsort(a, len_s(a), sizeof(i32), comp)
 
   print()
-  for (i := 0; i < len(a) as i32; ++i)
+  for (i := 0; i < len(a) ; ++i)
     print(i, a[i])
 
   delete a

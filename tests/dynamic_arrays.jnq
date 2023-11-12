@@ -14,7 +14,7 @@ fn check_all_doubled_c(a *i32, l i32){
 }
 
 fn check_all_doubled(a[*]i32){
-  for (i := 0; i < len(a) as i32; ++i)
+  for (i := 0; i < len(a) ; ++i)
     ASSERT(a[i] == i * 2)
 }
 
@@ -25,41 +25,43 @@ fn simple_int()
   for (i := 0; i < 32; ++i)
     a[i] = i * 2
 
-  ASSERT(32u == len(a))
-  ASSERT(32u == cap(a))
-  for (i := 0; i < 32; ++i)
+  ASSERT(32u == len_s(a))
+  ASSERT(32u == cap_s(a))
+  ASSERT(32 == len(a))
+  ASSERT(32 == cap(a))
+  for (i := 0; i < len(a); ++i)
     ASSERT(a[i] == i * 2)
-  check_all_doubled_c(a, len(a) as i32)
+  check_all_doubled_c(a, len(a) )
   check_all_doubled(a)
 
   a = resize(a, 64)
-  ASSERT(64u == len(a))
-  ASSERT(64u == cap(a))
+  ASSERT(64 == len(a))
+  ASSERT(64 == cap(a))
 
   a = reserve(a, 42)
-  ASSERT(64u == len(a))
-  ASSERT(64u == cap(a))
+  ASSERT(64 == len(a))
+  ASSERT(64 == cap(a))
 
   a = push(a, 54321)
-  ASSERT(65u == len(a))
-  ASSERT(65u <= cap(a))
-  ASSERT(8000u > cap(a))
+  ASSERT(65 == len(a))
+  ASSERT(65 <= cap(a))
+  ASSERT(8000 > cap(a))
 
   a = reserve(a, 8000)
-  ASSERT(65u == len(a))
-  ASSERT(8000u == cap(a))
+  ASSERT(65 == len(a))
+  ASSERT(8000 == cap(a))
 
   val := pop(a)
   print("len", len(a), "cap", cap(a))
-  ASSERT(len(a) == 64u)
-  ASSERT(8000u == cap(a))
+  ASSERT(len(a) == 64)
+  ASSERT(8000 == cap(a))
   ASSERT(val == 54321)
 
   delete a
 
   a = null
-  ASSERT(0u == len(a))
-  ASSERT(0u == cap(a))
+  ASSERT(0 == len(a))
+  ASSERT(0 == cap(a))
 }
 
 fn simple_struct()
@@ -67,14 +69,14 @@ fn simple_struct()
   printf(" .simple_struct\n")
 
   b := new[3]ABC{}
-  ASSERT(len(b) == 3u)
-  ASSERT(cap(b) == 3u)
-  for (i := 0; i < len(b) as i32; ++i) {
+  ASSERT(len(b) == 3)
+  ASSERT(cap(b) == 3)
+  for (i := 0; i < len(b); ++i) {
     b[i].a = i * 3
     b[i].b = i as f32 / 2.0f
     b[i].c = (i) as char + 'a'
   }
-  for (i := 0; i < len(b) as i32; ++i) {
+  for (i := 0; i < len(b) ; ++i) {
     ASSERT(b[i].a == i * 3)
     ASSERT(b[i].b == i as f32 / 2.0f)
     ASSERT(b[i].c == i as char + 'a')
@@ -92,18 +94,18 @@ fn as_members()
   printf(" .as_members\n")
 
   w := XYZ{null}
-  ASSERT(len(w.a) == 0u)
-  ASSERT(cap(w.a) == 0u)
+  ASSERT(len(w.a) == 0)
+  ASSERT(cap(w.a) == 0)
 
   w.a = new[8]f32{}
 
-  ASSERT(len(w.a) == 8u)
-  ASSERT(cap(w.a) == 8u)
+  ASSERT(len(w.a) == 8)
+  ASSERT(cap(w.a) == 8)
 
-  for (i := 0; i < len(w.a) as i32; ++i)
+  for (i := 0; i < len(w.a) ; ++i)
     w.a[i] = i as f32 * 10.0f
 
-  for (i := 0; i < len(w.a) as i32; ++i)
+  for (i := 0; i < len(w.a) ; ++i)
     ASSERT(w.a[i] == i as f32 * 10.0f)
 }
 
@@ -123,10 +125,10 @@ fn qsort_any_dynamic_array()
   for (i := 0; i < 10; ++i)
     push(a, 100 - i *2)
 
-  for (i := 1; i < len(a) as i32; ++i)
+  for (i := 1; i < len(a) ; ++i)
     ASSERT(a[i -1] > a[i])
-  qsort(a, len(a), sizeof(i32), comp)
-  for (i := 1; i < len(a) as i32; ++i)
+  qsort(a, len_s(a), sizeof(i32), comp)
+  for (i := 1; i < len(a) ; ++i)
     ASSERT(a[i -1] < a[i])
 
   delete a
