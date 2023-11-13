@@ -11,6 +11,12 @@ fn id(s *SomeImp) i32 {
   return s.val
 }
 
+fn compare_render_objects(const a any, const b any) int {
+  da := (a as *SomeAble).id()
+  db := (b as *SomeAble).id()
+  return da > db ? -1 : (da < db ? 1 : 0)
+}
+
 fn main(argc i32, argv[]*char) int
 {
   a := new[]SomeAble{}

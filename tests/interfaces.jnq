@@ -9,6 +9,12 @@ type SomeAble interface {
 fn some(x SomeAble) int {
   return x.id(42) + x.val()
 }
+fn some1(x *SomeAble) int {
+  return x.id(42) + x.val()
+}
+fn some2(x any) int {
+  return(x as *SomeAble).id(42) + (x as *SomeAble).val()
+}
 
 type SomeContainer struct {
   s SomeAble

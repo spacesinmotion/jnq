@@ -4198,9 +4198,9 @@ Type *AdaptParameter_for(Program *p, Type *got, Type *expect, Parameter *param) 
     Type *x = AdaptParameter_for(p, got, expect->child, param);
     if (x != expect->child)
       FATAL(&param->p->location, "internal error constructing interface '%s'", Type_name(expect).s);
-    if (param->p->type != ConstructE)
+    if (param->p->type != BraceE || param->p->brace->o->type != ConstructE)
       FATAL(&param->p->location, "internal error constructing interface '%s'", Type_name(expect).s);
-    param->p->construct->pointer = true;
+    param->p->brace->o->construct->pointer = true;
     Type *xP = Module_find_pointer_type(expect->child->interfaceT->module, expect->child);
     if (!xP) {
       xP = Program_add_type(p, PointerT, "", expect->child->interfaceT->module);
@@ -4374,14 +4374,13 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
     }
 
     int p_len = e->call->p.len;
-    int test_start = 0;
     if (p_len > t->fnT->d.parameter.len && t->fnT->d.parameter.v[t->fnT->d.parameter.len - 1].type != &Ellipsis)
       FATAL(&e->location, "To much parameter for function call");
     if (p_len < t->fnT->d.parameter.len && t->fnT->d.parameter.v[t->fnT->d.parameter.len - 1].type != &Ellipsis)
       FATAL(&e->location, "Missing parameter for function call");
 
     int i = 0;
-    for (int j = test_start; i < e->call->p.len && j < t->fnT->d.parameter.len; ++i, ++j) {
+    for (int j = 0; i < e->call->p.len && j < t->fnT->d.parameter.len; ++i, ++j) {
       Type *pt = j == 0 ? first_param_type : NULL;
       if (!pt)
         pt = c_Expression_make_variables_typed(s, p, m, e->call->p.p[i].p);
