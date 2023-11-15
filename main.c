@@ -2995,20 +2995,6 @@ Type *c_expression_get_type(Module *m, Expression *e) {
   }
   case AccessE: {
     Type *t = c_expression_get_type(m, e->access->o);
-    if (t->kind == StructT && t->structT->member.len > 0) {
-      Variable *delegateV = &t->structT->member.v[0];
-      if ((delegateV->type->kind == PointerT || delegateV->type->kind == ArrayT) &&
-          strcmp(delegateV->name, "__d") == 0) {
-        return delegateV->type->child;
-      }
-    }
-    if (t->kind == PointerT && t->child->kind == StructT && t->child->structT->member.len > 0) {
-      Variable *delegateV = &t->child->structT->member.v[0];
-      if ((delegateV->type->kind == PointerT || delegateV->type->kind == ArrayT) &&
-          strcmp(delegateV->name, "__d") == 0) {
-        return delegateV->type->child;
-      }
-    }
     if (!t->child)
       FATAL(&e->location, "unknown access return type for '%s'", Type_name(t).s);
     return t->child;
@@ -4345,28 +4331,6 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
     if (!Type_convertable(&u64, subt) && Type_convertable(&u64, subt))
       FATAL(&e->access->p->location, "Expect integral type for array subscription, got '%s'", Type_name(subt).s);
     Type *t = c_Expression_make_variables_typed(s, p, m, e->access->o);
-    if (t->kind == StructT && t->structT->member.len > 0) {
-      Variable *delegateV = &t->structT->member.v[0];
-      if ((delegateV->type->kind == PointerT || delegateV->type->kind == ArrayT) &&
-          strcmp(delegateV->name, "__d") == 0) {
-        Expression *cd = Program_new_Expression(p, CDelegateE, e->access->o->location);
-        cd->cdelegate->o = e->access->o;
-        cd->cdelegate->delegate = ".__d";
-        e->access->o = cd;
-        return delegateV->type->child;
-      }
-    }
-    if (t->kind == PointerT && t->child->kind == StructT && t->child->structT->member.len > 0) {
-      Variable *delegateV = &t->child->structT->member.v[0];
-      if ((delegateV->type->kind == PointerT || delegateV->type->kind == ArrayT) &&
-          strcmp(delegateV->name, "__d") == 0) {
-        Expression *cd = Program_new_Expression(p, CDelegateE, e->access->o->location);
-        cd->cdelegate->o = e->access->o;
-        cd->cdelegate->delegate = "->__d";
-        e->access->o = cd;
-        return delegateV->type->child;
-      }
-    }
     if ((TypeKind)t->kind != ArrayT && t->kind != DynArrayT && t->kind != PointerT)
       FATAL(&e->location, "Expect array/pointer type for access got '%s'", Type_name(t).s);
     return t->child;
