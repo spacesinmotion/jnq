@@ -529,7 +529,6 @@ typedef enum TypeKind {
   ArrayT,
   DynArrayT,
   PointerT,
-  VecT,
   PoolT,
   BufT,
   FnT,
@@ -575,7 +574,6 @@ Module *Type_defined_module(Type *t) {
     return t->fnT->module;
   case MacroT:
     return global_module();
-  case VecT:
   case PoolT:
   case BufT:
   case ArrayT:
@@ -619,7 +617,6 @@ LocationRange *Type_location(Type *t) {
     return &t->useT->location;
   case ConstantWrapperT:
     return Type_location(t->child);
-  case VecT:
   case PoolT:
   case BufT:
   case ArrayT:
@@ -967,12 +964,6 @@ BuffString Type_name(Type *t) {
       i += snprintf(ss + i, sizeof(s.s) - i, "*");
       break;
 
-    case VecT:
-      if (t->array_count > 0)
-        i += snprintf(ss + i, sizeof(s.s) - i, "vec[%d]", t->array_count);
-      else
-        i += snprintf(ss + i, sizeof(s.s) - i, "vec[]");
-      break;
     case PoolT:
       if (t->array_count > 0)
         i += snprintf(ss + i, sizeof(s.s) - i, "pool[%d]", t->array_count);
@@ -1081,7 +1072,6 @@ Type *Program_add_type(Program *p, TypeKind k, const char *name, Module *m) {
   case ConstantWrapperT:
     tt->constantModule = m;
     break;
-  case VecT:
   case PoolT:
   case BufT:
   case ArrayT:
@@ -1543,12 +1533,10 @@ TypeKind check_vec_special(State *st) {
     return PoolT;
   if (check_word(st, "buf"))
     return BufT;
-  if (check_word(st, "vec"))
-    return VecT;
   return PlaceHolder;
 }
 
-bool is_vec_special(TypeKind k) { return k == VecT || k == PoolT || k == BufT; }
+bool is_vec_special(TypeKind k) { return k == PoolT || k == BufT; }
 
 bool Program_check_declared_type(Program *p, State *st) {
   skip_whitespace(st);
@@ -2692,12 +2680,6 @@ BuffString Type_special_cname(Type *t) {
       i += snprintf(ss + i, sizeof(s.s) - i, "p");
       break;
 
-    case VecT:
-      if (t->array_count > 0)
-        i += snprintf(ss + i, sizeof(s.s) - i, "_vec_%d_", t->array_count);
-      else
-        i += snprintf(ss + i, sizeof(s.s) - i, "_vec__");
-      break;
     case PoolT:
       if (t->array_count > 0)
         i += snprintf(ss + i, sizeof(s.s) - i, "_pool_%d_", t->array_count);
@@ -2759,7 +2741,6 @@ bool c_type_declare(FILE *f, Type *t, Location *l, const char *var) {
   case ConstantWrapperT:
     c_type_declare(f, tt->child, l, var);
     break;
-  case VecT:
   case BufT:
   case PoolT:
     FATAL(l, "Internal error '%s' should be replaced!", Type_name(t).s);
@@ -2942,7 +2923,6 @@ void c_type(FILE *f, const char *module_name, Type *t) {
   case FnT:
     // todo!??
     break;
-  case VecT:
   case PoolT:
   case BufT:
     FATALX("'%s' should be replaced here that kind", Type_name(t).s);
@@ -3352,7 +3332,6 @@ bool c_check_macro(FILE *f, Call *ca, Location *l) {
     case CEnumT:
     case InterfaceT:
     case PointerT:
-    case VecT:
     case PoolT:
     case BufT:
     case MacroT:
@@ -3448,9 +3427,7 @@ void c_expression(FILE *f, Expression *e) {
   }
 
   case ConstructE: {
-    if (e->construct->type->kind == VecT) {
-      FATAL(&e->construct->p.p[0].p->location, "vec type should be replaced!");
-    } else if (e->construct->type->kind == InterfaceT) {
+    if (e->construct->type->kind == InterfaceT) {
       if (e->construct->p.len == 0) {
         fprintf(f, "(%s%s){NULL, NULL}", Type_defined_module(e->construct->type)->c_name, e->construct->type->name);
       } else {
@@ -3526,7 +3503,6 @@ void c_expression(FILE *f, Expression *e) {
       fprintf(f, "%s%s", (e->member->o_type->kind == PointerT ? "->" : "."), e->member->member->name);
       break;
 
-    case VecT:
     case PoolT:
     case BufT:
       FATAL(&e->location, "type should be replaced '%s'!", Type_name(e->member->member->type).s);
@@ -3717,7 +3693,6 @@ void c_statements(FILE *f, Statement *s, int indent) {
     case CEnumT:
     case InterfaceT:
     case ArrayT:
-    case VecT:
     case PoolT:
     case BufT:
     case MacroT:
@@ -3952,7 +3927,6 @@ void c_type_forward(FILE *f, const char *module_name, Type *t) {
     break;
   }
 
-  case VecT:
   case PoolT:
   case BufT:
     FATALX("'%s' type should be replaced here!", Type_name(t).s);
@@ -4095,7 +4069,6 @@ Type *Module_find_member(Type *t, const char *name) {
   case UseT:
     FATALX("module name could not be used to access member '%s'!", Type_name(t).s);
 
-  case VecT:
   case PoolT:
   case BufT:
     FATALX("missing find member implementation for '%s'!", Type_name(t).s);
@@ -4931,92 +4904,12 @@ void c_build_buf_from(Program *p, Module *m, TypeList *tl) {
   }
 }
 
-void c_build_vec_from(Program *p, Module *m, TypeList *tl) {
-  BuffString vec_name = Type_special_cname(tl->type);
-  int count = tl->type->array_count;
-  if (count <= 0)
-    count = 16;
-
-  Type *value_type = tl->type->child;
-  Type *value_type_pointer = Module_find_pointer_type(m, value_type);
-  if (!value_type_pointer)
-    FATALX("internal error finding pointer type for '%s'", Type_name(value_type).s);
-
-  Struct *vecS = (Struct *)Program_alloc(p, sizeof(Struct));
-  vecS->module = m;
-  vecS->member = (VariableList){(Variable *)Program_alloc(p, sizeof(Variable) * 3), 3};
-  vecS->member.v[0] = (Variable){"__d", value_type_pointer, null_location, false};
-  vecS->member.v[1] = (Variable){"len", &i32, null_location, false};
-  vecS->member.v[2] = (Variable){"cap", &i32, null_location, false};
-
-  tl->type->structT = vecS;
-  tl->type->kind = StructT;
-  tl->type->child = NULL;
-  tl->type->name = Program_copy_string(p, c_sv(vec_name.s));
-  Type *vec_pointer_type = Module_find_pointer_type(m, tl->type);
-  if (!vec_pointer_type)
-    FATALX("internal error finding pointer type for '%s'", Type_name(tl->type).s);
-
-  {
-    BuffString fn_name = vec_name;
-    strcat(fn_name.s, "push");
-    Function *push = Program_add_type(p, FnT, Program_copy_string(p, c_sv(fn_name.s)), m)->fnT;
-    push->d.returnType = NULL; // value_type;
-    push->d.return_type_location = null_location;
-    push->is_extern_c = false;
-    push->d.parameter = (VariableList){(Variable *)Program_alloc(p, 2 * sizeof(Variable)), 2};
-    push->d.parameter.v[0] = (Variable){"v", vec_pointer_type, null_location, false};
-    push->d.parameter.v[1] = (Variable){"val", value_type, null_location, false};
-
-    BuffString pushfn = str("if(v.len >= v.cap){\n"
-                            "v.cap+=%d\n"
-                            "v.__d=realloc(v.__d as *char, v.cap*sizeof(val) as i32) as %s\n"
-                            "}\n"
-                            "v.__d[v.len++]=val\n"
-                            "}",
-                            count, Type_name(value_type_pointer).s);
-    push->body = Program_parse_scope(p, m, &(State){pushfn.s, null_location});
-  }
-  {
-    BuffString fn_name = vec_name;
-    strcat(fn_name.s, "pop");
-    Function *pop = Program_add_type(p, FnT, Program_copy_string(p, c_sv(fn_name.s)), m)->fnT;
-    pop->d.returnType = value_type;
-    pop->d.return_type_location = null_location;
-    pop->is_extern_c = false;
-    pop->d.parameter = (VariableList){(Variable *)Program_alloc(p, 1 * sizeof(Variable)), 1};
-    pop->d.parameter.v[0] = (Variable){"v", vec_pointer_type, null_location, false};
-
-    pop->body = Program_parse_scope(p, m,
-                                    &(State){"v.len--\n"
-                                             "return v.__d[v.len]\n"
-                                             "}",
-                                             null_location});
-  }
-  {
-    BuffString fn_name = vec_name;
-    strcat(fn_name.s, "free");
-    Function *free = Program_add_type(p, FnT, Program_copy_string(p, c_sv(fn_name.s)), m)->fnT;
-    free->d.returnType = NULL;
-    free->d.return_type_location = null_location;
-    free->is_extern_c = false;
-    free->d.parameter = (VariableList){(Variable *)Program_alloc(p, 1 * sizeof(Variable)), 1};
-    free->d.parameter.v[0] = (Variable){"v", vec_pointer_type, null_location, false};
-    free->body = Program_parse_scope(p, m,
-                                     &(State){"free (v.__d as *char)\n"
-                                              "}",
-                                              null_location});
-  }
-}
-
 void c_build_special_types(Program *p) {
   for (Module *m = p->modules; m; m = m->next) {
     // for (TypeList *tl = m->types; tl; tl = tl->next)
     //   printf("... %s\n", Type_special_cname(tl->type).s);
 
     for (TypeList *tl = m->types; tl; tl = tl->next) {
-      if (tl->type->kind == VecT)
-        c_build_vec_from(p, m, tl);
       if (tl->type->kind == BufT)
         c_build_buf_from(p, m, tl);
       if (tl->type->kind == PoolT)
@@ -5260,7 +5153,6 @@ void write_symbols(Module *m) {
     case ArrayT:
     case DynArrayT:
     case PointerT:
-    case VecT:
     case PoolT:
     case BufT:
     case PlaceHolder:

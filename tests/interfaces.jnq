@@ -49,16 +49,20 @@ fn basic_2_structs_1_interface()
   ASSERT(51 == some(&s2))
 }
 
-fn interface_in_vectors()
+fn interface_in_dyn_arrays()
 {
-  printf(" .interface_in_vectors\n")
+  printf(" .interface_in_dyn_arrays\n")
 
-  v := vec[]SomeAble{}
-  v.push(&Some1{2})
-  v.push(&Some2{3})
+  v := new[]SomeAble{}
+  s1 := Some1{2}
+  push(v, &s1)
+  s2 := Some2{3}
+  push(v, &s2)
 
   ASSERT(86 == some(&v[0]))
   ASSERT(51 == some(&v[1]))
+
+  delete v
 }
 
 fn interface_in_structs()
@@ -122,8 +126,8 @@ fn destroy(ro *RealObject, g *Game) {
 type Game struct {
   object Object
 
-  os1 vec[4]Object
-  os2 vec[4]Object2
+  os1[4]Object
+  os2[4]Object2
 }
 
 fn GameObject_recursive_declaration()
@@ -141,9 +145,9 @@ fn compare_interface_as_pointer()
   p2 := RealObject{}
 
   g := Game{}
-  g.os1.push(&p1)
-  g.os1.push(&p1)
-  g.os1.push(&p2)
+  g.os1[0] = &p1
+  g.os1[1] = &p1
+  g.os1[2] = &p2
 
   ASSERT(g.os1[0] == g.os1[1])
   ASSERT(g.os1[0] != g.os1[2])
@@ -157,7 +161,7 @@ fn main() int
   basic_2_structs_1_interface()
   interface_in_structs()
   interface_could_be_null()
-  interface_in_vectors()
+  interface_in_dyn_arrays()
   GameObject_recursive_declaration()
   compare_interface_as_pointer()
   printf(" ...ok\n")
