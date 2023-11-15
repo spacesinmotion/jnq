@@ -529,7 +529,6 @@ typedef enum TypeKind {
   ArrayT,
   DynArrayT,
   PointerT,
-  PoolT,
   FnT,
   MacroT,
   ConstantWrapperT,
@@ -573,7 +572,6 @@ Module *Type_defined_module(Type *t) {
     return t->fnT->module;
   case MacroT:
     return global_module();
-  case PoolT:
   case ArrayT:
   case DynArrayT:
   case PointerT: {
@@ -615,7 +613,6 @@ LocationRange *Type_location(Type *t) {
     return &t->useT->location;
   case ConstantWrapperT:
     return Type_location(t->child);
-  case PoolT:
   case ArrayT:
   case DynArrayT:
   case PointerT:
@@ -961,12 +958,6 @@ BuffString Type_name(Type *t) {
       i += snprintf(ss + i, sizeof(s.s) - i, "*");
       break;
 
-    case PoolT:
-      if (t->array_count > 0)
-        i += snprintf(ss + i, sizeof(s.s) - i, "pool[%d]", t->array_count);
-      else
-        i += snprintf(ss + i, sizeof(s.s) - i, "pool[]");
-      break;
     case ConstantWrapperT:
       return Type_name(t->child);
       break;
@@ -1063,7 +1054,6 @@ Type *Program_add_type(Program *p, TypeKind k, const char *name, Module *m) {
   case ConstantWrapperT:
     tt->constantModule = m;
     break;
-  case PoolT:
   case ArrayT:
   case DynArrayT:
     tt->array_count = 0;
@@ -1518,30 +1508,12 @@ bool Program_parse_use_path(Program *p, Module *m, State *st) {
   return true;
 }
 
-TypeKind check_vec_special(State *st) {
-  if (check_word(st, "pool"))
-    return PoolT;
-  return PlaceHolder;
-}
-
-bool is_vec_special(TypeKind k) { return k == PoolT; }
-
 bool Program_check_declared_type(Program *p, State *st) {
   skip_whitespace(st);
   State old = *st;
 
   if (check_op(st, "*")) {
     if (Program_check_declared_type(p, st))
-      return true;
-    *st = old;
-  }
-
-  TypeKind vec_t = check_vec_special(st);
-  if (vec_t != PlaceHolder && check_op(st, "[")) {
-    int dummy;
-    Type *t_dummy;
-    read_int(st, &dummy, &t_dummy);
-    if (check_op(st, "]") && Program_check_declared_type(p, st))
       return true;
     *st = old;
   }
@@ -1595,13 +1567,6 @@ Type *Module_find_array_type(Module *m, int count, Type *child) {
   return NULL;
 }
 
-Type *Module_find_vec_type(Module *m, TypeKind vt, int count, Type *child) {
-  for (TypeList *tl = m->types; tl; tl = tl->next)
-    if (tl->type->kind == vt && tl->type->array_count == count && tl->type->child == child)
-      return tl->type;
-  return NULL;
-}
-
 Type *Program_parse_declared_type(Program *p, Module *m, State *st) {
   skip_whitespace(st);
   State old = *st;
@@ -1618,48 +1583,6 @@ Type *Program_parse_declared_type(Program *p, Module *m, State *st) {
         td->child = c;
       }
       return td;
-    }
-    *st = old;
-  }
-
-  TypeKind vec_t = check_vec_special(st);
-  if (vec_t != PlaceHolder) {
-    if (check_op(st, "[")) {
-      int count = 0;
-      Type *t_count;
-      read_int(st, &count, &t_count);
-      if (check_op(st, "]")) {
-        Type *c = Program_parse_declared_type(p, m, st);
-        if (c) {
-          Module *cm = Type_defined_module(c);
-          if (!cm)
-            FATALX("internal problem finding module for type");
-          Type *td = Module_find_vec_type(cm, vec_t, count, c);
-          if (!td) {
-            td = Program_add_type_after(p, vec_t, cm, c);
-            td->array_count = count;
-            td->child = c;
-
-            Type *value_type_array = Module_find_array_type(cm, count, c);
-            if (!value_type_array) {
-              value_type_array = Program_add_type_after(p, ArrayT, cm, c);
-              value_type_array->array_count = count;
-              value_type_array->child = c;
-            }
-            Type *value_type_pointer = Module_find_pointer_type(cm, c);
-            if (!value_type_pointer) {
-              value_type_pointer = Program_add_type_after(p, PointerT, cm, c);
-              value_type_pointer->child = c;
-            }
-            Type *vec_t_pointer_type = Module_find_pointer_type(cm, td);
-            if (!vec_t_pointer_type) {
-              vec_t_pointer_type = Program_add_type(p, PointerT, "", cm);
-              vec_t_pointer_type->child = td;
-            }
-          }
-          return td;
-        }
-      }
     }
     *st = old;
   }
@@ -2668,12 +2591,6 @@ BuffString Type_special_cname(Type *t) {
       i += snprintf(ss + i, sizeof(s.s) - i, "p");
       break;
 
-    case PoolT:
-      if (t->array_count > 0)
-        i += snprintf(ss + i, sizeof(s.s) - i, "_pool_%d_", t->array_count);
-      else
-        i += snprintf(ss + i, sizeof(s.s) - i, "_pool__");
-      break;
     case ConstantWrapperT:
       return Type_special_cname(t->child);
     case UseT:
@@ -2722,9 +2639,6 @@ bool c_type_declare(FILE *f, Type *t, Location *l, const char *var) {
     break;
   case ConstantWrapperT:
     c_type_declare(f, tt->child, l, var);
-    break;
-  case PoolT:
-    FATAL(l, "Internal error '%s' should be replaced!", Type_name(t).s);
     break;
   case UseT:
     FATAL(l, "Can't use module '%s' as type!", Type_name(t).s);
@@ -2903,9 +2817,6 @@ void c_type(FILE *f, const char *module_name, Type *t) {
   case MacroT:
   case FnT:
     // todo!??
-    break;
-  case PoolT:
-    FATALX("'%s' should be replaced here that kind", Type_name(t).s);
     break;
   case DynArrayT:
   case ArrayT:
@@ -3312,7 +3223,6 @@ bool c_check_macro(FILE *f, Call *ca, Location *l) {
     case CEnumT:
     case InterfaceT:
     case PointerT:
-    case PoolT:
     case MacroT:
     case FnT:
     case ConstantWrapperT:
@@ -3480,10 +3390,6 @@ void c_expression(FILE *f, Expression *e) {
     case ArrayT:
       c_expression(f, e->member->o);
       fprintf(f, "%s%s", (e->member->o_type->kind == PointerT ? "->" : "."), e->member->member->name);
-      break;
-
-    case PoolT:
-      FATAL(&e->location, "type should be replaced '%s'!", Type_name(e->member->member->type).s);
       break;
 
       break;
@@ -3671,7 +3577,6 @@ void c_statements(FILE *f, Statement *s, int indent) {
     case CEnumT:
     case InterfaceT:
     case ArrayT:
-    case PoolT:
     case MacroT:
     case FnT:
     case ConstantWrapperT:
@@ -3904,10 +3809,6 @@ void c_type_forward(FILE *f, const char *module_name, Type *t) {
     break;
   }
 
-  case PoolT:
-    FATALX("'%s' type should be replaced here!", Type_name(t).s);
-    break;
-
   case ConstantWrapperT:
   case UseT:
     break;
@@ -4044,10 +3945,6 @@ Type *Module_find_member(Type *t, const char *name) {
   }
   case UseT:
     FATALX("module name could not be used to access member '%s'!", Type_name(t).s);
-
-  case PoolT:
-    FATALX("missing find member implementation for '%s'!", Type_name(t).s);
-    break;
 
   case BaseT:
   case ArrayT:
@@ -4376,7 +4273,7 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
           FATAL(&pa->p->location, "Named construction '%s' for none struct type '%s'!", pa->name,
                 Type_name(e->construct->type).s);
       }
-    if (e->construct->type->kind == ArrayT || is_vec_special(e->construct->type->kind)) {
+    if (e->construct->type->kind == ArrayT) {
       if (e->construct->type->array_count > 0 && e->construct->p.len > e->construct->type->array_count)
         FATAL(&e->location, "Too many initializer for array of '%s'!", Type_name(e->construct->type).s);
       for (Parameter *pa = e->construct->p.p; pa < e->construct->p.p + e->construct->p.len; ++pa) {
@@ -4726,114 +4623,10 @@ void c_check_types(Module *m) {
   }
 }
 
-void c_build_pool_from(Program *p, Module *m, TypeList *tl) {
-  BuffString pool_name = Type_special_cname(tl->type);
-  int count = tl->type->array_count;
-  if (count <= 0)
-    count = 128;
-
-  Type *value_type = tl->type->child;
-  Type *value_type_array = Module_find_array_type(m, count, value_type);
-  if (!value_type_array)
-    FATALX("internal error finding array type for '%s'", Type_name(value_type).s);
-  Type *value_type_pointer = Module_find_pointer_type(m, value_type);
-  if (!value_type_pointer)
-    FATALX("internal error finding pointer type for '%s'", Type_name(value_type).s);
-
-  Struct *poolS = (Struct *)Program_alloc(p, sizeof(Struct));
-  poolS->module = m;
-  poolS->member = (VariableList){(Variable *)Program_alloc(p, sizeof(Variable) * 3), 3};
-  poolS->member.v[0] = (Variable){"__d", value_type_array, null_location, false};
-  poolS->member.v[1] = (Variable){"__l", &i32, null_location, false};
-  poolS->member.v[2] = (Variable){"__f", value_type_pointer, null_location, false};
-
-  tl->type->structT = poolS;
-  tl->type->kind = StructT;
-  tl->type->child = NULL;
-  tl->type->name = Program_copy_string(p, c_sv(pool_name.s));
-  Type *pool_pointer_type = Module_find_pointer_type(m, tl->type);
-  if (!pool_pointer_type)
-    FATALX("internal error finding pool pointer type for '%s'", Type_name(tl->type).s);
-
-  {
-    BuffString fn_name = pool_name;
-    strcat(fn_name.s, "create");
-    Function *create = Program_add_type(p, FnT, Program_copy_string(p, c_sv(fn_name.s)), m)->fnT;
-    create->d.returnType = value_type_pointer;
-    create->d.return_type_location = null_location;
-    create->is_extern_c = false;
-    create->d.parameter = (VariableList){(Variable *)Program_alloc(p, 2 * sizeof(Variable)), 2};
-    create->d.parameter.v[0] = (Variable){"p", pool_pointer_type, null_location, false};
-    create->d.parameter.v[1] = (Variable){"val", value_type, null_location, false};
-
-    BuffString pushfn = str("if(p.__f){\n"
-                            "b := p.__f\n"
-                            "p.__f = *(b as **%s)\n"
-                            "*b = val\n"
-                            "return b\n"
-                            "}\n"
-                            "ASSERT(p.__l<%d)\n"
-                            "b := &p.__d[p.__l++]\n"
-                            "*b = val\n"
-                            "return b\n"
-                            "}",
-                            Type_name(value_type).s, count);
-    create->body = Program_parse_scope(p, m, &(State){pushfn.s, null_location});
-  }
-  {
-    BuffString fn_name = pool_name;
-    strcat(fn_name.s, "remove");
-    Function *remove = Program_add_type(p, FnT, Program_copy_string(p, c_sv(fn_name.s)), m)->fnT;
-    remove->d.returnType = NULL;
-    remove->d.return_type_location = null_location;
-    remove->is_extern_c = false;
-    remove->d.parameter = (VariableList){(Variable *)Program_alloc(p, 2 * sizeof(Variable)), 2};
-    remove->d.parameter.v[0] = (Variable){"v", pool_pointer_type, null_location, false};
-    remove->d.parameter.v[1] = (Variable){"b", value_type_pointer, null_location, true};
-
-    BuffString removefn = str("fo := b as **%s;\n"
-                              "*fo=v.__f\n"
-                              "v.__f=fo as *%s\n"
-                              "}",
-                              Type_name(value_type).s, Type_name(value_type).s);
-    remove->body = Program_parse_scope(p, m, &(State){removefn.s, null_location});
-  }
-  {
-    BuffString fn_name = pool_name;
-    strcat(fn_name.s, "empty");
-    Function *remove = Program_add_type(p, FnT, Program_copy_string(p, c_sv(fn_name.s)), m)->fnT;
-    remove->d.returnType = &Bool;
-    remove->d.return_type_location = null_location;
-    remove->is_extern_c = false;
-    remove->d.parameter = (VariableList){(Variable *)Program_alloc(p, 1 * sizeof(Variable)), 1};
-    remove->d.parameter.v[0] = (Variable){"v", pool_pointer_type, null_location, true};
-    BuffString removefn = str("if (v.__f) return true;\n"
-                              "return v.__l < %d\n"
-                              "}",
-                              count);
-    remove->body = Program_parse_scope(p, m, &(State){removefn.s, null_location});
-  }
-}
-
-void c_build_special_types(Program *p) {
-  for (Module *m = p->modules; m; m = m->next) {
-    // for (TypeList *tl = m->types; tl; tl = tl->next)
-    //   printf("... %s\n", Type_special_cname(tl->type).s);
-
-    for (TypeList *tl = m->types; tl; tl = tl->next) {
-      if (tl->type->kind == PoolT)
-        c_build_pool_from(p, m, tl);
-    }
-  }
-}
-
 void c_Program(FILE *f, Program *p, Module *m) {
   Program_reset_module_finished(p);
   c_check_types(&global);
   c_check_types(m);
-
-  Program_reset_module_finished(p);
-  c_build_special_types(p);
 
   fputs("#include <ctype.h>\n", f);
   fputs("#include <stdint.h>\n", f);
@@ -5062,7 +4855,6 @@ void write_symbols(Module *m) {
     case ArrayT:
     case DynArrayT:
     case PointerT:
-    case PoolT:
     case PlaceHolder:
     case ConstantWrapperT:
       break;
