@@ -4769,9 +4769,6 @@ void Program_declare_macro(Program *p, const char *name) {
 }
 
 void Program_add_defaults(Program *p) {
-  Program_parse_fn(p, &global, &(State){"realloc(d *char, s int) *char\n", fn_location}, true);
-  Program_parse_fn(p, &global, &(State){"free(d *char)\n", fn_location}, true);
-
   Program_declare_macro(p, "ASSERT");
   Program_declare_macro(p, "len");
   Program_declare_macro(p, "len_s");

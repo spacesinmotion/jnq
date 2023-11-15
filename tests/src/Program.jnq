@@ -2,17 +2,9 @@
 use Module, TypeList from Module
 use * from Type
 use * from Statement
+use * from C.str
+use free from C.stdlib
 use State, StartState from State
-
-cfn strncpy(d *char, s *char, l int) *char
-
-cfn strcpy(d *char, s *char) *char
-
-cfn strcat(d *char, s *char)
-
-cfn strcmp(a *char, b *char) int
-
-cfn strlen(a *char) int
 
 type MemoryArena struct {
   buffer *char
@@ -45,7 +37,7 @@ fn alloc(p *Program, size u64) *char {
 
 fn copy_string(p *Program, s *char, l int) *char {
   id := p.alloc((l + 1) as u64);
-  strncpy(id, s, l);
+  strncpy(id, s, l as size_t);
   id[l] = '\0';
   return id;
 }
@@ -63,7 +55,7 @@ fn reset_module_finished(p * Program) {
 }
 
 fn add_module(p *Program, pathc *char) *Module {
-  size := strlen(pathc);
+  size := strlen(pathc) as i32;
   path := p.copy_string(pathc, size);
   cname := p.copy_string(pathc, size + 1);
   for (c := cname; *c; ++c)
@@ -209,7 +201,7 @@ fn new_Statement(p *Program, t StatementType, n *Statement)*Statement {
 fn parse_sub_file(p *Program, path *char, parent *Module) *Module {
   tempPath := [256]char{}
   strcpy(tempPath, parent.path);
-  l := strlen(tempPath) - 1;
+  l := (strlen(tempPath) as i32) - 1;
   while (l >= 0) {
     if (tempPath[l] == '.') {
       tempPath[l + 1] = '\0';
@@ -239,7 +231,7 @@ fn parse_file(p *Program, path *char) *Module {
   if (!code)
     return null;
 
-  st_path := p.copy_string(tempPath, strlen(tempPath));
+  st_path := p.copy_string(tempPath, strlen(tempPath) as i32);
   st := StartState(code, st_path);
   m = p.add_module(path);
   //p.parse_module(p, m, &st);
