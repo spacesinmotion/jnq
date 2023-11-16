@@ -1324,16 +1324,10 @@ bool check_key_word(const char *b, const char *e) {
   //   return true;
   if ((e - b) == 3 && strncmp(b, "for", 3) == 0)
     return true;
-  if ((e - b) == 3 && strncmp(b, "vec", 3) == 0)
-    return true;
-  if ((e - b) == 3 && strncmp(b, "buf", 3) == 0)
-    return true;
   // if ((e - b) == 3 && strncmp(b, "use", 3) == 0)
   //   return true;
   // if ((e - b) == 4 && strncmp(b, "type", 4) == 0)
   //   return true;
-  if ((e - b) == 4 && strncmp(b, "pool", 4) == 0)
-    return true;
   if ((e - b) == 5 && strncmp(b, "while", 5) == 0)
     return true;
   return false;
