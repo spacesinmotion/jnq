@@ -191,12 +191,8 @@ fn slices_as_return_value_test()
   delete aa
 }
 
-type Dec struct {
-  f[3]f32,
-}
-
 fn main() i32 {
-  print("slices")
+  print("array slices")
 
   starting_test()
   simple_int()

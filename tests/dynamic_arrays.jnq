@@ -164,6 +164,21 @@ fn interface_in_dynamic_array()
   delete a
 }
 
+fn create_an_array(l i32) [*]i32 {
+  return reserve(new[]i32{}, l)
+}
+
+fn dynamic_array_as_return_value()
+{
+  printf(" .dynamic_array_as_return_value\n")
+
+  a := create_an_array(42)
+  ASSERT(len(a) == 0)
+  ASSERT(cap(a) == 42)
+
+  delete a
+}
+
 fn main() i32 {
   printf("dynamic arrays\n")
 
@@ -172,6 +187,7 @@ fn main() i32 {
   as_members()
   qsort_any_dynamic_array()
   interface_in_dynamic_array()
+  dynamic_array_as_return_value()
 
   printf(" ...ok\n")
   return 0

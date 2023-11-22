@@ -123,6 +123,7 @@ typedef struct Call Call;
 typedef struct Construct Construct;
 typedef struct New New;
 typedef struct Access Access;
+typedef struct Slice Slice;
 typedef struct MemberAccess MemberAccess;
 typedef struct Cast Cast;
 typedef struct UnaryPrefix UnaryPrefix;
@@ -162,6 +163,7 @@ typedef enum ExpressionType {
   ConstructE,
   NewE,
   AccessE,
+  SliceE,
   MemberAccessE,
   AsCast,
   UnaryPrefixE,
@@ -182,6 +184,7 @@ typedef PACK(struct Expression {
     Construct *construct;
     New *newE;
     Access *access;
+    Slice *slice;
     MemberAccess *member;
     Cast *cast;
     UnaryPrefix *unpre;
@@ -298,6 +301,12 @@ typedef struct Access {
   Expression *o;
   Expression *p;
 } Access;
+
+typedef struct Slice {
+  Expression *o;
+  Expression *begin;
+  Expression *end;
+} Slice;
 
 typedef struct MemberAccess {
   Expression *o;
@@ -529,6 +538,7 @@ typedef enum TypeKind {
   ArrayT,
   DynArrayT,
   PointerT,
+  SliceT,
   FnT,
   MacroT,
   ConstantWrapperT,
@@ -573,6 +583,7 @@ Module *Type_defined_module(Type *t) {
   case MacroT:
     return global_module();
   case ArrayT:
+  case SliceT:
   case DynArrayT:
   case PointerT: {
     if (!t->child)
@@ -614,6 +625,7 @@ LocationRange *Type_location(Type *t) {
   case ConstantWrapperT:
     return Type_location(t->child);
   case ArrayT:
+  case SliceT:
   case DynArrayT:
   case PointerT:
   case PlaceHolder:
@@ -948,6 +960,9 @@ BuffString Type_name(Type *t) {
     case DynArrayT:
       i += snprintf(ss + i, sizeof(s.s) - i, "new[%d]", t->array_count);
       break;
+    case SliceT:
+      i += snprintf(ss + i, sizeof(s.s) - i, "[:]");
+      break;
     case ArrayT:
       if (t->array_count > 0)
         i += snprintf(ss + i, sizeof(s.s) - i, "[%d]", t->array_count);
@@ -1054,6 +1069,7 @@ Type *Program_add_type(Program *p, TypeKind k, const char *name, Module *m) {
   case ConstantWrapperT:
     tt->constantModule = m;
     break;
+  case SliceT:
   case ArrayT:
   case DynArrayT:
     tt->array_count = 0;
@@ -1212,6 +1228,10 @@ Expression *Program_new_Expression(Program *p, ExpressionType t, Location l) {
     e->access = (Access *)Program_alloc(p, sizeof(Access));
     e->access->o = NULL;
     e->access->p = NULL;
+    break;
+  case SliceE:
+    e->slice = (Slice *)Program_alloc(p, sizeof(Slice));
+    e->slice->o = e->slice->begin = e->slice->end = NULL;
     break;
   case MemberAccessE:
     e->member = (MemberAccess *)Program_alloc(p, sizeof(MemberAccess));
@@ -1513,7 +1533,7 @@ bool Program_check_declared_type(Program *p, State *st) {
   }
 
   if (check_op(st, "[")) {
-    if (!check_op(st, "*")) {
+    if (!check_op(st, "*") && !check_op(st, ":")) {
       int count = -1;
       Type *t_count;
       read_int(st, &count, &t_count);
@@ -1547,6 +1567,13 @@ Type *Module_find_pointer_type(Module *m, Type *child) {
   return NULL;
 }
 
+Type *Module_find_slice_type(Module *m, Type *child) {
+  for (TypeList *tl = m->types; tl; tl = tl->next)
+    if (tl->type->kind == SliceT && tl->type->child == child)
+      return tl->type;
+  return NULL;
+}
+
 Type *Module_find_dyn_array_type(Module *m, Type *child) {
   for (TypeList *tl = m->types; tl; tl = tl->next)
     if (tl->type->kind == DynArrayT && tl->type->child == child)
@@ -1561,12 +1588,12 @@ Type *Module_find_array_type(Module *m, int count, Type *child) {
   return NULL;
 }
 
-Type *Program_parse_declared_type(Program *p, Module *m, State *st) {
+Type *Program_parse_declared_type(Program *p, Module *m, State *st, bool as_argument) {
   skip_whitespace(st);
   State old = *st;
 
   if (check_op(st, "*")) {
-    Type *c = Program_parse_declared_type(p, m, st);
+    Type *c = Program_parse_declared_type(p, m, st, as_argument);
     if (c) {
       Module *cm = Type_defined_module(c);
       if (!cm)
@@ -1584,7 +1611,7 @@ Type *Program_parse_declared_type(Program *p, Module *m, State *st) {
   if (check_op(st, "[")) {
     if (check_op(st, "*")) {
       if (check_op(st, "]")) {
-        Type *c = Program_parse_declared_type(p, m, st);
+        Type *c = Program_parse_declared_type(p, m, st, as_argument);
         if (c) {
           Module *cm = Type_defined_module(c);
           if (!cm)
@@ -1598,12 +1625,26 @@ Type *Program_parse_declared_type(Program *p, Module *m, State *st) {
           return td;
         }
       }
+    } else if (as_argument && check_op(st, "]")) {
+      Type *c = Program_parse_declared_type(p, m, st, as_argument);
+      if (c) {
+        Module *cm = Type_defined_module(c);
+        if (!cm)
+          FATALX("internal problem finding module for type");
+        Type *td = Module_find_slice_type(cm, c);
+        if (!td) {
+          td = Program_add_type(p, SliceT, "", cm);
+          // td->array_count = -1;
+          td->child = c;
+        }
+        return td;
+      }
     } else {
       int count = -1;
       Type *t_count;
       read_int(st, &count, &t_count);
       if (check_op(st, "]")) {
-        Type *c = Program_parse_declared_type(p, m, st);
+        Type *c = Program_parse_declared_type(p, m, st, as_argument);
         if (c) {
           Module *cm = Type_defined_module(c);
           if (!cm)
@@ -1655,7 +1696,7 @@ Variable Program_parse_variable_declaration(Program *p, Module *m, State *st) {
     const char *name_end = st->c;
     skip_whitespace(st);
     if (!check_whitespace_for_nl(st)) {
-      if ((type = Program_parse_declared_type(p, m, st))) {
+      if ((type = Program_parse_declared_type(p, m, st, true))) {
         return (Variable){Program_copy_string(p, be_sv(name_beg, name_end)), type, old.location, is_const};
       }
     }
@@ -1738,7 +1779,7 @@ bool Program_parse_fn_decl(Program *p, Module *m, FunctionDecl *fnd, State *st) 
     skip_whitespace(st);
     fnd->return_type_location = st->location;
     if (!check_type_key_word_at(st->c))
-      fnd->returnType = Program_parse_declared_type(p, m, st);
+      fnd->returnType = Program_parse_declared_type(p, m, st, true);
     return true;
   }
 
@@ -1995,7 +2036,7 @@ Expression *Program_parse_construction(Program *p, Module *m, State *st) {
 
   if (Program_check_declared_type(p, st) && check_op(st, "{")) {
     *st = old;
-    Type *type = Program_parse_declared_type(p, m, st);
+    Type *type = Program_parse_declared_type(p, m, st, false);
     if (type && check_op(st, "{")) {
       Expression *construct = Program_new_Expression(p, ConstructE, old.location);
       construct->construct->p = Program_parse_named_parameter_list(p, m, st);
@@ -2069,11 +2110,22 @@ Expression *Program_parse_suffix_expression(Program *p, Module *m, State *st, Ex
   }
 
   if (check_op(st, "[")) {
-    Expression *acc = Program_new_Expression(p, AccessE, old.location);
-    acc->access->o = e;
-    acc->access->p = Program_parse_expression(p, m, st);
-    if (!acc->access->p)
+    Expression *a = Program_parse_expression(p, m, st);
+    if (!a)
       FATAL(&st->location, "missing '[]' content");
+    Expression *acc = NULL;
+    if (check_op(st, ":")) {
+      acc = Program_new_Expression(p, SliceE, old.location);
+      acc->slice->o = e;
+      acc->slice->begin = a;
+      acc->slice->end = Program_parse_expression(p, m, st);
+      if (!acc->slice->end)
+        FATAL(&st->location, "missing slice end in '[]' content");
+    } else {
+      acc = Program_new_Expression(p, AccessE, old.location);
+      acc->access->o = e;
+      acc->access->p = a;
+    }
     if (!check_op(st, "]"))
       FATAL(&st->location, "missing closing ']' for subscription '%s'", st->c);
     acc = Program_parse_suffix_expression(p, m, st, acc);
@@ -2093,7 +2145,7 @@ Expression *Program_parse_suffix_expression(Program *p, Module *m, State *st, Ex
   if (check_word(st, "as")) {
     Expression *cast = Program_new_Expression(p, AsCast, old.location);
     cast->cast->o = e;
-    cast->cast->type = Program_parse_declared_type(p, m, st);
+    cast->cast->type = Program_parse_declared_type(p, m, st, true);
     return cast;
   }
   return e;
@@ -2575,6 +2627,9 @@ BuffString Type_special_cname(Type *t) {
     case DynArrayT:
       i += snprintf(ss + i, sizeof(s.s) - i, "_n_%d_", t->array_count);
       break;
+    case SliceT:
+      i += snprintf(ss + i, sizeof(s.s) - i, "_s_");
+      break;
     case ArrayT:
       if (t->array_count > 0)
         i += snprintf(ss + i, sizeof(s.s) - i, "_%d_", t->array_count);
@@ -2613,9 +2668,11 @@ bool c_type_declare(FILE *f, Type *t, Location *l, const char *var) {
 
   bool hasVarWritten = false;
   Type *tt = t->child;
-  while (tt && tt->kind == ArrayT)
-    tt = tt->child;
-  hasVarWritten = c_type_declare(f, tt, l, var);
+  if ((TypeKind)t->kind != SliceT) {
+    while (tt && tt->kind == ArrayT)
+      tt = tt->child;
+    hasVarWritten = c_type_declare(f, tt, l, var);
+  }
   switch ((TypeKind)t->kind) {
   case ArrayT:
     fprintf(f, " %s", var);
@@ -2627,6 +2684,10 @@ bool c_type_declare(FILE *f, Type *t, Location *l, const char *var) {
       t = t->child;
     }
     return true;
+  case SliceT:
+    fprintf(f, "Slice_");
+    break;
+
   case DynArrayT:
   case PointerT:
     fprintf(f, "*");
@@ -2813,6 +2874,7 @@ void c_type(FILE *f, const char *module_name, Type *t) {
     // todo!??
     break;
   case DynArrayT:
+  case SliceT:
   case ArrayT:
   case PointerT:
   case ConstantWrapperT:
@@ -2891,6 +2953,14 @@ void jnq_expression(FILE *f, Expression *e) {
     jnq_expression(f, e->access->o);
     fprintf(f, "[");
     jnq_expression(f, e->access->p);
+    fprintf(f, "]");
+    break;
+  case SliceE:
+    jnq_expression(f, e->slice->o);
+    fprintf(f, "[");
+    jnq_expression(f, e->slice->begin);
+    fprintf(f, ":");
+    jnq_expression(f, e->slice->end);
     fprintf(f, "]");
     break;
   case MemberAccessE:
@@ -2991,6 +3061,12 @@ Type *c_expression_get_type(Module *m, Expression *e) {
     Type *t = c_expression_get_type(m, e->access->o);
     if (!t->child)
       FATAL(&e->location, "unknown access return type for '%s'", Type_name(t).s);
+    return t->child;
+  }
+  case SliceE: {
+    Type *t = c_expression_get_type(m, e->slice->o);
+    if (!t || !t->child)
+      FATAL(&e->location, "unknown slice return type for '%s'", Type_name(t).s);
     return t->child;
   }
 
@@ -3194,6 +3270,14 @@ bool c_check_macro(FILE *f, Call *ca, Location *l) {
       fprintf(f, "%d", arg_type->array_count);
       return true;
 
+    case SliceT:
+      fprintf(f, "(");
+      if (strcmp(ca->o->id->name, "len") == 0 || strcmp(ca->o->id->name, "cap") == 0)
+        fprintf(f, "(int32_t)");
+      c_expression(f, ca->p.p[0].p);
+      fprintf(f, ".l)");
+      return true;
+
     case UseT:
     case BaseT:
     case StructT:
@@ -3326,10 +3410,41 @@ void c_expression(FILE *f, Expression *e) {
   }
 
   case AccessE: {
-    c_expression(f, e->access->o);
-    fprintf(f, "[");
-    c_expression(f, e->access->p);
-    fprintf(f, "]");
+    Type *type_to_access = c_expression_get_type(NULL, e->access->o);
+    if (type_to_access && (TypeKind)type_to_access->kind == SliceT) {
+      fprintf(f, "(*(");
+      c_type_declare(f, type_to_access->child, &e->location, ".:.");
+      fprintf(f, "*)__slice_member(");
+      c_expression(f, e->access->o);
+      fprintf(f, ", sizeof(");
+      c_type_declare(f, type_to_access->child, &e->location, ".:.");
+      fprintf(f, "), ");
+      c_expression(f, e->access->p);
+      fprintf(f, "))");
+
+    } else {
+      c_expression(f, e->access->o);
+      fprintf(f, "[");
+      c_expression(f, e->access->p);
+      fprintf(f, "]");
+    }
+    break;
+  }
+
+  case SliceE: {
+    Type *type_to_access = c_expression_get_type(NULL, e->access->o);
+    if (!type_to_access || !type_to_access->child)
+      FATAL(&e->location, "Error creating slice type");
+
+    fprintf(f, "__slice_from(");
+    c_expression(f, e->slice->o);
+    fprintf(f, ", sizeof(");
+    c_type_declare(f, type_to_access->child, &e->location, ".:.");
+    fprintf(f, "), ");
+    c_expression(f, e->slice->begin);
+    fprintf(f, ", ");
+    c_expression(f, e->slice->end);
+    fprintf(f, ")");
     break;
   }
 
@@ -3368,6 +3483,7 @@ void c_expression(FILE *f, Expression *e) {
     case PointerT:
     case DynArrayT:
     case ArrayT:
+    case SliceT:
       c_expression(f, e->member->o);
       fprintf(f, "%s%s", (e->member->o_type->kind == PointerT ? "->" : "."), e->member->member->name);
       break;
@@ -3560,6 +3676,7 @@ void c_statements(FILE *f, Statement *s, int indent) {
     case MacroT:
     case FnT:
     case ConstantWrapperT:
+    case SliceT:
     case PlaceHolder:
       FATAL(&s->deleteS->e->location, "Can't delete type '%s'!", Type_name(arg_type).s);
       break;
@@ -3798,6 +3915,7 @@ void c_type_forward(FILE *f, const char *module_name, Type *t) {
     // todo?!?
     break;
   case ArrayT:
+  case SliceT:
   case DynArrayT:
   case PointerT:
     break;
@@ -3928,6 +4046,7 @@ Type *Module_find_member(Type *t, const char *name) {
 
   case BaseT:
   case ArrayT:
+  case SliceT:
   case DynArrayT:
   case PointerT:
   case MacroT:
@@ -4043,12 +4162,39 @@ Type *AdaptParameter_for(Program *p, Type *got, Type *expect, Parameter *param) 
     prefix->unpre->o = param->p;
     param->p = prefix;
     return xP;
+  } else if (expect->kind == PointerT && got->kind == SliceT && expect->child == got->child) {
+    Type *xP = Module_find_pointer_type(Type_defined_module(expect->child), expect->child);
+    if (!xP) {
+      xP = Program_add_type(p, PointerT, "", Type_defined_module(expect->child));
+      xP->child = expect->child;
+    }
+    Expression *mem = Program_new_Expression(p, MemberAccessE, param->p->location);
+    mem->member->o = param->p;
+    mem->member->o_type = &Any;
+    mem->member->member = (Identifier *)Program_alloc(p, sizeof(Identifier));
+    mem->member->member->name = "d";
+    mem->member->member->type = &Any;
+    Expression *cast = Program_new_Expression(p, AsCast, param->p->location);
+    cast->cast->o = mem;
+    cast->cast->type = xP;
+    param->p = cast;
+    return xP;
+
   } else if (got->kind == PointerT && expect == got->child) {
     Expression *prefix = Program_new_Expression(p, UnaryPrefixE, param->p->location);
     prefix->unpre->op = "*";
     prefix->unpre->o = param->p;
     param->p = prefix;
     return expect;
+  } else if (got->kind == SliceT && expect == &Any) {
+    Expression *mem = Program_new_Expression(p, MemberAccessE, param->p->location);
+    mem->member->o = param->p;
+    mem->member->o_type = &Any;
+    mem->member->member = (Identifier *)Program_alloc(p, sizeof(Identifier));
+    mem->member->member->name = "d";
+    mem->member->member->type = &Any;
+    param->p = mem;
+    return &Any;
   }
 
   return got;
@@ -4322,12 +4468,30 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
   }
   case AccessE: {
     Type *subt = c_Expression_make_variables_typed(s, p, m, e->access->p);
-    if (!Type_convertable(&u64, subt) && Type_convertable(&u64, subt))
+    if (!Type_convertable(&u64, subt) && !Type_convertable(&i64, subt))
       FATAL(&e->access->p->location, "Expect integral type for array subscription, got '%s'", Type_name(subt).s);
     Type *t = c_Expression_make_variables_typed(s, p, m, e->access->o);
-    if ((TypeKind)t->kind != ArrayT && t->kind != DynArrayT && t->kind != PointerT)
+    if ((TypeKind)t->kind != ArrayT && t->kind != DynArrayT && t->kind != PointerT && t->kind != SliceT)
       FATAL(&e->location, "Expect array/pointer type for access got '%s'", Type_name(t).s);
     return t->child;
+  }
+  case SliceE: {
+    Type *begT = c_Expression_make_variables_typed(s, p, m, e->slice->begin);
+    if (!Type_convertable(&u64, begT) && !Type_convertable(&i64, begT))
+      FATAL(&e->slice->begin->location, "Expect integral type for slice subscription, got '%s'", Type_name(begT).s);
+    Type *endT = c_Expression_make_variables_typed(s, p, m, e->slice->end);
+    if (!Type_convertable(&u64, endT) && !Type_convertable(&i64, endT))
+      FATAL(&e->slice->end->location, "Expect integral type for slice subscription, got '%s'", Type_name(endT).s);
+    Type *t = c_Expression_make_variables_typed(s, p, m, e->slice->o);
+    if ((TypeKind)t->kind != ArrayT && t->kind != DynArrayT && t->kind != PointerT)
+      FATAL(&e->location, "Expect array/pointer type for slice creation got '%s'", Type_name(t).s);
+    Module *cm = Type_defined_module(t->child);
+    Type *st = Module_find_slice_type(cm, t->child);
+    if (!st) {
+      st = Program_add_type(p, SliceT, "", cm);
+      st->child = t->child;
+    }
+    return st;
   }
   case AsCast:
     c_Expression_make_variables_typed(s, p, m, e->cast->o);
@@ -4641,6 +4805,14 @@ void c_Program(FILE *f, Program *p, Module *m) {
   fputs("  return (d + 2 * sizeof(size_t));\n", f);
   fputs("}\n", f);
 
+  fputs("typedef struct Slice_ {void *d; size_t l;} Slice_; \n", f);
+  fputs("Slice_ __slice_from(void *d, size_t st, size_t b, size_t e) {\n", f);
+  fputs("  return (Slice_){d+st*b, e-b};\n", f);
+  fputs("}\n", f);
+  fputs("void* __slice_member(Slice_ s, size_t st, size_t o) {\n", f);
+  fputs("  return (s.d + st * o);\n", f);
+  fputs("}\n", f);
+
   fputs("#define __NEW_ARRAY(T, count) ((T *)new_array_imp_((count), sizeof(T)))\n", f);
   fputs("#define __resize_ARRAY(T, a, count) ((T *)resize_array_imp_((char*)a, (count), sizeof(T)))\n", f);
   fputs("#define __reserve_ARRAY(T, a, count) ((T *)reserve_array_imp_((char*)a, (count), sizeof(T)))\n", f);
@@ -4809,6 +4981,7 @@ void write_symbols(Module *m) {
     case BaseT:
     case ArrayT:
     case DynArrayT:
+    case SliceT:
     case PointerT:
     case PlaceHolder:
     case ConstantWrapperT:
