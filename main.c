@@ -3166,7 +3166,7 @@ bool c_check_macro(FILE *f, Call *ca, Location *l) {
       if (i >= 128)
         FATAL(&ca->p.p[i].p->location, "Internal error to much parameter for 'print' macro.");
       param[i] = c_expression_get_type(NULL, ca->p.p[i].p);
-      if (param[i] == &String || param[i] == &Bool)
+      if (param[i] == &String || param[i] == &Bool || (param[i]->kind == PointerT && param[i]->child == &Char))
         fprintf(f, "%%s");
       else if (param[i] == &Char)
         fprintf(f, "%%c");
