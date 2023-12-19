@@ -3837,25 +3837,24 @@ void c_Module_constants(FILE *f, Module *m) {
     return;
   m->finished = true;
 
-  if (m->constants) {
-    for (TypeList *tl = m->types; tl; tl = tl->next)
-      if (tl->type->kind == UseT)
-        c_Module_constants(f, tl->type->useT->module);
+  for (TypeList *tl = m->types; tl; tl = tl->next)
+    if (tl->type->kind == UseT)
+      c_Module_constants(f, tl->type->useT->module);
 
-    for (ConstantList *cl = m->constants; cl; cl = cl->next) {
-      if (cl->is_extern_c)
-        continue;
-      if ((ExpressionType)cl->autotype->type == AutoTypeE) {
-        AutoTypeDeclaration *a = cl->autotype->autotype;
-        char t_name[256];
-        snprintf(t_name, sizeof(t_name), "%s%s", m->c_name, a->name);
-        if (!c_type_declare(f, a->type, &cl->autotype->location, t_name))
-          fprintf(f, " %s", t_name);
-        fprintf(f, " = ");
-        c_expression(f, a->e);
-      }
-      fprintf(f, ";\n");
+  for (ConstantList *cl = m->constants; cl; cl = cl->next) {
+    if (cl->is_extern_c)
+      continue;
+    if ((ExpressionType)cl->autotype->type == AutoTypeE) {
+      AutoTypeDeclaration *a = cl->autotype->autotype;
+      char t_name[256];
+      printf("--- %s%s\n", m->c_name, a->name);
+      snprintf(t_name, sizeof(t_name), "%s%s", m->c_name, a->name);
+      if (!c_type_declare(f, a->type, &cl->autotype->location, t_name))
+        fprintf(f, " %s", t_name);
+      fprintf(f, " = ");
+      c_expression(f, a->e);
     }
+    fprintf(f, ";\n");
   }
 }
 
