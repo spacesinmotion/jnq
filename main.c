@@ -2669,7 +2669,7 @@ bool c_type_declare(FILE *f, Type *t, Location *l, const char *var) {
 
   bool hasVarWritten = false;
   Type *tt = t->child;
-  if ((TypeKind)t->kind != SliceT) {
+  if ((TypeKind)t->kind != SliceT && (TypeKind)t->kind != ConstantWrapperT) {
     while (tt && tt->kind == ArrayT)
       tt = tt->child;
     hasVarWritten = c_type_declare(f, tt, l, var);
@@ -2694,7 +2694,7 @@ bool c_type_declare(FILE *f, Type *t, Location *l, const char *var) {
     fprintf(f, "*");
     break;
   case ConstantWrapperT:
-    c_type_declare(f, tt->child, l, var);
+    return c_type_declare(f, t->child, l, var);
     break;
   case UseT:
     FATAL(l, "Can't use module '%s' as type!", Type_name(t).s);
@@ -3261,6 +3261,8 @@ bool c_check_macro(FILE *f, Call *ca, Location *l) {
     if (ca->p.len != 1)
       FATAL(l, "'%s' expects exact 1 parameter!", ca->o->id->name);
     Type *arg_type = c_expression_get_type(NULL, ca->p.p[0].p);
+    if ((TypeKind)arg_type->kind == ConstantWrapperT)
+      arg_type = arg_type->child;
 
     switch ((TypeKind)arg_type->kind) {
     case DynArrayT:
@@ -3847,8 +3849,8 @@ void c_Module_constants(FILE *f, Module *m) {
     if ((ExpressionType)cl->autotype->type == AutoTypeE) {
       AutoTypeDeclaration *a = cl->autotype->autotype;
       char t_name[256];
-      printf("--- %s%s\n", m->c_name, a->name);
       snprintf(t_name, sizeof(t_name), "%s%s", m->c_name, a->name);
+
       if (!c_type_declare(f, a->type, &cl->autotype->location, t_name))
         fprintf(f, " %s", t_name);
       fprintf(f, " = ");
@@ -4295,10 +4297,13 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
     return e->baseconst->type;
 
   case IdentifierA: {
-    if ((e->id->type = VariableStack_find(s, e->id->name)))
+    if ((e->id->type = VariableStack_find(s, e->id->name))) {
+      if ((TypeKind)e->id->type->kind == ConstantWrapperT)
+        return e->id->type->child;
       return e->id->type;
+    }
     if ((e->id->type = Module_constant_type(m, c_sv(e->id->name))))
-      return e->id->type;
+      return e->id->type->child;
     if ((e->id->type = Module_find_type(m, c_sv(e->id->name))))
       return e->id->type;
     FATAL(&e->location, "unknown type for '%s'", e->id->name);

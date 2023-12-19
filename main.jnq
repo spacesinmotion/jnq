@@ -1,33 +1,14 @@
 
-type Some struct {
-  id i32,
-  d bool,
-}
-
-fn dead(s *Some) bool {
-  return s.d
-}
-fn destroy(s *Some)  {
-}
+hash := [
+  1, 2, 3, 4, 5,
+]
 
 fn main() int {
   print("any_type\n")
 
-  list_of_some := new[]Some{}
-  list_of_some = push(list_of_some, Some{0, false})
-  list_of_some = push(list_of_some, Some{1, true})
-  list_of_some = push(list_of_some, Some{2, false})
-  list_of_some = push(list_of_some, Some{3, false})
-
-  for (i := len(list_of_some) - 1; i >= 0; --i) {
-    if (list_of_some[i].dead())
-      list_of_some[i] = pop(list_of_some)
-  }
-
-  ASSERT(len(list_of_some) == 3)
-  ASSERT(list_of_some[0].id == 0)
-  ASSERT(list_of_some[1].id == 3)
-  ASSERT(list_of_some[2].id == 2)
+  ASSERT(len(hash) == 5)
+  for (i := 0; i < len(hash); ++i)
+    ASSERT(hash[i] == i + 1)
 
   print(" ...ok\n")
   return 0
