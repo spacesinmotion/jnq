@@ -1,0 +1,29 @@
+
+
+fn any_type_null_test() {
+  print("..any_type_null_test\n")
+
+  any_null := null as any
+
+  ASSERT(any_null == null)
+  ASSERT(null == any_null)
+  ASSERT(!(any_null != null))
+  ASSERT(!(null != any_null))
+
+  x := null as *char
+  ASSERT(!x)
+  ASSERT(!any_null)
+
+  y := 2
+  any_null = &y
+  ASSERT(any_null)
+}
+
+fn main() int {
+  print("any_type\n")
+
+  any_type_null_test()
+
+  print(" ...ok\n")
+  return 0
+}

@@ -179,6 +179,23 @@ fn dynamic_array_as_return_value()
   delete a
 }
 
+fn dynamic_array_null_test() {
+  print("..dynamic_array_null_test\n")
+
+  dyn_null := null as[*]i32
+
+  ASSERT(dyn_null == null)
+  ASSERT(null == dyn_null)
+  ASSERT(!(dyn_null != null))
+  ASSERT(!(null != dyn_null))
+
+  ASSERT(!dyn_null)
+
+  dyn_null = new[]i32{}
+  ASSERT(dyn_null)
+  delete dyn_null
+}
+
 fn main() i32 {
   printf("dynamic arrays\n")
 
@@ -188,6 +205,7 @@ fn main() i32 {
   qsort_any_dynamic_array()
   interface_in_dynamic_array()
   dynamic_array_as_return_value()
+  dynamic_array_null_test()
 
   printf(" ...ok\n")
   return 0

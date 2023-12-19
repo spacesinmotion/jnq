@@ -1,211 +1,27 @@
 
-use printf from C.stdio
-use qsort from C.stdlib
 
-type ABC struct {
-  a i32,
-  b f32,
-  c char,
+fn dynamic_array_null_test() {
+  print("..dynamic_array_null_test\n")
+
+  dyn_null := null as[*]i32
+
+  ASSERT(dyn_null == null)
+  ASSERT(null == dyn_null)
+  ASSERT(!(dyn_null != null))
+  ASSERT(!(null != dyn_null))
+
+  ASSERT(!dyn_null)
+
+  dyn_null = new[]i32{}
+  ASSERT(dyn_null)
+  delete dyn_null
 }
 
-fn check_all_doubled_c(a *i32, l i32){
-  for (i := 0; i < l; ++i)
-    ASSERT(a[i] == i * 2)
-}
+fn main() int {
+  print("any_type\n")
 
-fn check_all_doubled(a[]i32){
-  for (i := 0; i < len(a) ; ++i)
-    ASSERT(a[i] == i * 2)
-}
+  dynamic_array_null_test()
 
-fn simple_int()
-{
-  print(" .simple_int")
-  aa := new[32]i32{}
-  for (i := 0; i < 32; ++i)
-    aa[i] = i * 2
-
-  a := aa[0: 32]
-
-  ASSERT(32u == len_s(a))
-  ASSERT(32u == cap_s(a))
-  ASSERT(32 == len(a))
-  ASSERT(32 == cap(a))
-  for (i := 0; i < len(a); ++i)
-    ASSERT(a[i] == i * 2)
-  check_all_doubled_c(a, len(a))
-  check_all_doubled(a)
-
-  delete aa
-}
-
-fn simple_struct()
-{
-  print(" .simple_struct")
-
-  bb := new[3]ABC{}
-  b := bb[0 : 2]
-  ASSERT(len(b) == 2)
-  ASSERT(cap(b) == 2)
-  for (i := 0; i < len(b); ++i) {
-    b[i].a = i * 3
-    b[i].b = i as f32 / 2.0f
-    b[i].c = (i) as char + 'a'
-  }
-  for (i := 0; i < len(b) ; ++i) {
-    ASSERT(b[i].a == i * 3)
-    ASSERT(b[i].b == i as f32 / 2.0f)
-    ASSERT(b[i].c == i as char + 'a')
-  }
-
-  delete bb
-}
-
-type XYZ struct {
-  a[]f32,
-}
-
-fn as_members()
-{
-  print(" .as_members")
-
-  w := XYZ{}
-  ASSERT(len(w.a) == 0)
-  ASSERT(cap(w.a) == 0)
-
-  aa := new[8]f32{}
-  w.a = aa[2 : 7]
-
-  ASSERT(len(w.a) == 5)
-  ASSERT(cap(w.a) == 5)
-
-  for (i := 0; i < len(w.a) ; ++i)
-    w.a[i] = i as f32 * 10.0f
-
-  for (i := 0; i < len(w.a) ; ++i) {
-    ASSERT(w.a[i] == i as f32 * 10.0f)
-    ASSERT(aa[i + 2] == i as f32 * 10.0f)
-  }
-
-  delete aa
-}
-
-fn comp(const ap any, const bp any) i32 {
-  a := *(ap as *i32)
-  b := *(bp as *i32)
-  if (a < b) return -1
-  if (a > b) return 1
-  return 0
-}
-
-fn qsort_any_slice()
-{
-  print(" .qsort_any_slice")
-
-  aa := new[]i32{}
-  for (i := 0; i < 100; ++i)
-    push(aa, 100 - i *2)
-
-  a := aa[12: 86]
-  for (i := 1; i < len(a) ; ++i)
-    ASSERT(a[i -1] > a[i])
-  qsort(a, len_s(a), sizeof(i32), comp)
-  for (i := 1; i < len(a) ; ++i) {
-    ASSERT(a[i - 1] < a[i])
-    ASSERT(a[i] == aa[i + 12])
-  }
-
-  delete aa
-}
-
-type SomeAble interface {
-  fn id(s *SomeAble) i32
-}
-
-type SomeImp struct {
-  val i32
-}
-
-fn id(s *SomeImp) i32 {
-  return s.val
-}
-
-fn interface_in_slice()
-{
-  print(" .interface_in_slice")
-
-  aa := new[]SomeAble{}
-  push(aa, null)
-  push(aa, null)
-
-  a := aa[1: len(aa)]
-  ASSERT(len(a) == 1)
-  x := SomeImp{42}
-
-  a[0] = &x
-  ASSERT(aa[0] == null)
-  ASSERT(aa[1] != null)
-  ASSERT(a[0].id() == 42)
-  ASSERT(aa[1].id() == 42)
-
-  delete aa
-}
-
-fn starting_test()
-{
-  print(" .starting_test")
-  a := reserve(new[]int{}, 12)
-
-  for (i := 0; i < cap(a); ++i)
-    push(a, i + 1)
-  ASSERT(len(a) == 12 && cap(a) == 12)
-
-  b := a[1: 4]
-  ASSERT(len(b) == 3);
-  ASSERT(b[0] == 2);
-  ASSERT(b[1] == 3);
-
-  b[1] = 42;
-  ASSERT(b[1] == 42);
-  ASSERT(a[2] == 42);
-
-  delete a
-}
-
-fn relevant_sub_list(list[*]int, a int) []int {
-  return list[a: len(list)]
-}
-
-fn slices_as_return_value_test()
-{
-  print(" .slices_as_return_value_test")
-
-  aa := reserve(new[]int{}, 12)
-  for (i := 0; i < cap(aa); ++i)
-    push(aa, i + 1)
-
-  a := relevant_sub_list(aa, 4)
-  ASSERT(len(a) == 12 - 4)
-  ASSERT(a[0] == 5)
-
-  delete aa
-}
-
-type Dec struct {
-  f[3]f32,
-}
-
-fn main() i32 {
-  print("slices")
-
-  starting_test()
-  simple_int()
-  simple_struct()
-  as_members()
-  qsort_any_slice()
-  interface_in_slice()
-  slices_as_return_value_test()
-
-  print(" ...ok")
+  print(" ...ok\n")
   return 0
 }

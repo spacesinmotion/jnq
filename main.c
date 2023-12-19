@@ -880,9 +880,9 @@ bool Type_equal(Type *t1, Type *t2) {
     return Type_equal(t1, t2->child);
 
   if (t1 == &Null)
-    return t2 == &Null || t2->kind == PointerT || t2->kind == DynArrayT || t2->kind == InterfaceT;
+    return t2 == &Null || t2->kind == PointerT || t2->kind == DynArrayT || t2->kind == InterfaceT || t2 == &Any;
   if (t2 == &Null)
-    return t1 == &Null || t1->kind == PointerT || t1->kind == DynArrayT || t1->kind == InterfaceT;
+    return t1 == &Null || t1->kind == PointerT || t1->kind == DynArrayT || t1->kind == InterfaceT || t2 == &Any;
 
   if ((t1->kind == PointerT && t2->kind == ArrayT) || (t2->kind == PointerT && t1->kind == ArrayT))
     return Type_equal(t1->child, t2->child);
@@ -892,9 +892,6 @@ bool Type_equal(Type *t1, Type *t2) {
   if (t1 == &String && t2->kind == PointerT && t2->child == &Char)
     return true;
   if (t2 == &String && t1->kind == PointerT && t1->child == &Char)
-    return true;
-
-  if ((t1 == &Bool && t2->kind == PointerT) || (t2 == &Bool && t1->kind == PointerT))
     return true;
 
   if (t1 == &Ellipsis || t2 == &Ellipsis)
@@ -942,6 +939,10 @@ bool Type_convertable(Type *expect, Type *got) {
 
   if (expect == &Any &&
       ((TypeKind)got->kind == ArrayT || (TypeKind)got->kind == PointerT || (TypeKind)got->kind == DynArrayT)) {
+    return true;
+  }
+
+  if (expect == &Bool && (got == &Any || (TypeKind)got->kind == PointerT) || (TypeKind)got->kind == DynArrayT) {
     return true;
   }
 
@@ -4271,7 +4272,7 @@ Type *c_Macro_make_variables_typed(VariableStack *s, Program *p, Module *m, cons
       FATAL(&e->location, "missing parameter for macro '%s'!", macro_name);
     if (nb_param > 1)
       FATAL(&e->location, "too much parameter for macro '%s'!", macro_name);
-    if (param[0] != &Bool && param[0]->kind != PointerT)
+    if (!Type_convertable(&Bool, param[0]))
       FATAL(&pl.p[0].p->location, "expect boolean condition for macro '%s' got '%s'!", macro_name,
             Type_name(param[0]).s);
 
@@ -4534,7 +4535,7 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
         FATAL(&e->location, "dereferenceing none pointer type '%s'!", Type_name(st).s);
       return st->child;
     } else if (strcmp(e->unpre->op, "!") == 0) {
-      if (st != &Bool && st->kind != PointerT)
+      if (!Type_convertable(&Bool, st))
         FATAL(&e->location, "wrong type for '!' operator '%s'", Type_name(st).s);
       return &Bool;
     }
