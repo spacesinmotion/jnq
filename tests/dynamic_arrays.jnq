@@ -196,6 +196,37 @@ fn dynamic_array_null_test() {
   delete dyn_null
 }
 
+type Some struct {
+  id i32,
+  d bool,
+}
+
+fn dead(s *Some) bool {
+  return s.d
+}
+
+fn pop_on_check_test() {
+  print("..pop_on_check_test\n")
+
+  list_of_some := new[]Some{}
+  list_of_some = push(list_of_some, Some{0, false})
+  list_of_some = push(list_of_some, Some{1, true})
+  list_of_some = push(list_of_some, Some{2, false})
+  list_of_some = push(list_of_some, Some{3, false})
+
+  for (i := len(list_of_some) - 1; i >= 0; --i) {
+    if (list_of_some[i].dead())
+      list_of_some[i] = pop(list_of_some)
+  }
+
+  ASSERT(len(list_of_some) == 3)
+  ASSERT(list_of_some[0].id == 0)
+  ASSERT(list_of_some[1].id == 3)
+  ASSERT(list_of_some[2].id == 2)
+
+  delete list_of_some
+}
+
 fn main() i32 {
   printf("dynamic arrays\n")
 
@@ -206,6 +237,7 @@ fn main() i32 {
   interface_in_dynamic_array()
   dynamic_array_as_return_value()
   dynamic_array_null_test()
+  pop_on_check_test()
 
   printf(" ...ok\n")
   return 0

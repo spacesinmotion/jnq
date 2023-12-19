@@ -2888,7 +2888,7 @@ void c_type(FILE *f, const char *module_name, Type *t) {
 
 void c_expression(FILE *f, Expression *e);
 
-void c_parameter(FILE *f, ParameterList *pl) {
+void c_parameter(FILE *f, ParameterList *pl, bool braces) {
   if (pl->len == 0)
     return;
 
@@ -2897,7 +2897,11 @@ void c_parameter(FILE *f, ParameterList *pl) {
       fprintf(f, ", ");
     if (pl->p[i].name)
       fprintf(f, ".%s = ", pl->p[i].name);
+    if (braces)
+      fprintf(f, "(");
     c_expression(f, pl->p[i].p);
+    if (braces)
+      fprintf(f, ")");
   }
 }
 
@@ -3154,7 +3158,7 @@ bool c_check_macro(FILE *f, Call *ca, Location *l) {
     if (ca->p.len != 1)
       FATAL(l, "'ASSERT' expects exact 1 parameter!");
     fprintf(f, "assert_imp_(\"%s\", %d, %d, ", l->file ? l->file : "", l->line, l->column);
-    c_parameter(f, &ca->p);
+    c_parameter(f, &ca->p, false);
     fprintf(f, ", \"'");
     jnq_expression(f, ca->p.p[0].p);
     fprintf(f, "'\")");
@@ -3237,7 +3241,7 @@ bool c_check_macro(FILE *f, Call *ca, Location *l) {
     if (c_type_declare(f, arg_type->child, l, "<<>>"))
       FATAL(l, "Type '%s' not working as dynamic array!", Type_name(arg_type).s);
     fprintf(f, ", ");
-    c_parameter(f, &ca->p);
+    c_parameter(f, &ca->p, true);
     fprintf(f, ")");
     return true;
   } else if (strcmp(ca->o->id->name, "pop") == 0 || strcmp(ca->o->id->name, "back") == 0 ||
@@ -3249,7 +3253,7 @@ bool c_check_macro(FILE *f, Call *ca, Location *l) {
     if (c_type_declare(f, arg_type->child, l, "<<>>"))
       FATAL(l, "Type '%s' not working as dynamic array!", Type_name(arg_type).s);
     fprintf(f, ", ");
-    c_parameter(f, &ca->p);
+    c_parameter(f, &ca->p, true);
     fprintf(f, ")");
     return true;
   } else if (strcmp(ca->o->id->name, "len_s") == 0 || strcmp(ca->o->id->name, "cap_s") == 0 ||
@@ -3354,7 +3358,7 @@ void c_expression(FILE *f, Expression *e) {
 
     c_expression(f, e->call->o);
     fprintf(f, "(");
-    c_parameter(f, &e->call->p);
+    c_parameter(f, &e->call->p, false);
     fprintf(f, ")");
     break;
   }
@@ -3404,7 +3408,7 @@ void c_expression(FILE *f, Expression *e) {
         fprintf(f, "{");
       else
         FATAL(&e->location, "unexpect type for construction (or missing impementation)");
-      c_parameter(f, &e->construct->p);
+      c_parameter(f, &e->construct->p, false);
       fprintf(f, "}");
     }
     break;
@@ -4798,12 +4802,13 @@ void c_Program(FILE *f, Program *p, Module *m) {
   fputs("  ((size_t *)d)[0]++;\n", f);
   fputs("  return (d + 2 * sizeof(size_t));\n", f);
   fputs("}\n", f);
-  fputs("char *pop_array_imp_(char *a, size_t st) {\n", f);
-  fputs("  if (_len_array(a) == 0)\n", f);
-  fputs("    return a;\n", f);
-  fputs("  char *d = (char *)(a - 2*sizeof(size_t));\n", f);
+  fputs("char *pop_array_imp_(char **a, size_t st) {\n", f);
+  fputs("  if (_len_array(*a) == 0)\n", f);
+  fputs("    return *a;\n", f);
+  fputs("  char *d = (char *)((*a) - 2*sizeof(size_t));\n", f);
   fputs("  ((size_t *)d)[0]--;\n", f);
-  fputs("  return (d + 2 * sizeof(size_t));\n", f);
+  fputs("  d = (d + 2 * sizeof(size_t));\n", f);
+  fputs("  return &d[st * _len_array(d)];\n", f);
   fputs("}\n", f);
 
   fputs("typedef struct Slice_ {void *d; size_t l;} Slice_; \n", f);
@@ -4821,7 +4826,7 @@ void c_Program(FILE *f, Program *p, Module *m) {
   fputs("#define __push_ARRAY(T, a, val) (a = (T *)prepare_push_array_imp_((char*)a, sizeof(T)), "
         "a[_len_array((char*)a)-1] = val, a)\n",
         f);
-  fputs("#define __pop_ARRAY(T, a) (a = (T *)pop_array_imp_((char*)a, sizeof(T)), a[_len_array((char*)a)])\n", f);
+  fputs("#define __pop_ARRAY(T, a) *((T*)pop_array_imp_((char**)&a, sizeof(T)))\n", f);
   fputs("#define __back_ARRAY(T, a) (a[_len_array((char*)a)-1])\n", f);
   fputs("#define __FREE_ARRAY(a) (free(((char*)a) - 2 * sizeof(size_t)))\n", f);
   fputs("#define __NEW_(T, src) ((T *)memcpy(malloc(sizeof(T)), src, sizeof(T)))\n", f);
