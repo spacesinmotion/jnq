@@ -5183,19 +5183,17 @@ int run(Program *p, const char *exec, int argc, char *argv[]) {
   remove("jnq_bin.pdb");
 #endif
 
-  if (error == 0) {
-    int percent = (int)(100.0 * (double)p->arena.len / (double)p->arena.cap);
-    if (percent > 90) {
-      printf("-------------------------------------\n");
-      printf("       memory usage %3d%% (%zu/%zu)\n", percent, p->arena.len, p->arena.cap);
-    }
+  int percent = (int)(100.0 * (double)p->arena.len / (double)p->arena.cap);
+  if (percent > 90) {
+    printf("-------------------------------------\n");
+    printf("       memory usage %3d%% (%zu/%zu)\n", percent, p->arena.len, p->arena.cap);
   }
   return error;
 }
 
 int main(int argc, char *argv[]) {
-  char buffer[1024 * 1024];
-  Program p = Program_new(buffer, 1024 * 1024);
+  char buffer[1024 * 1024 * 4];
+  Program p = Program_new(buffer, sizeof(buffer));
   Program_add_defaults(&p);
 
   parse_command_line(&p, argc, argv);
