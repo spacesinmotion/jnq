@@ -4277,6 +4277,8 @@ Type *c_Macro_make_variables_typed(VariableStack *s, Program *p, Module *m, cons
       FATAL(&e->location, "missing parameter for macro '%s'!", macro_name);
     if (nb_param > 1)
       FATAL(&e->location, "too much parameter for macro '%s'!", macro_name);
+    if (!param[0])
+      FATAL(&pl.p[0].p->location, "void type in macro '%s'!", macro_name);
     if (!Type_convertable(&Bool, param[0]))
       FATAL(&pl.p[0].p->location, "expect boolean condition for macro '%s' got '%s'!", macro_name,
             Type_name(param[0]).s);
@@ -4319,6 +4321,8 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
 
   case MemberAccessE: {
     Type *t = c_Expression_make_variables_typed(s, p, m, e->member->o);
+    if (!t)
+      FATAL(&e->location, "member '%s' access to 'void' type", e->member->member->name);
     if ((TypeKind)t->kind == ConstantWrapperT)
       t = t->child;
     e->member->o_type = t;
@@ -4553,7 +4557,11 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
     return c_Expression_make_variables_typed(s, p, m, e->unpre->o);
   case BinaryOperationE: {
     Type *t1 = c_Expression_make_variables_typed(s, p, m, e->binop->o1);
+    if (!t1)
+      FATAL(&e->location, "void left side in binary expression '%s'", e->binop->op->op);
     Type *t2 = c_Expression_make_variables_typed(s, p, m, e->binop->o2);
+    if (!t2)
+      FATAL(&e->location, "void right side in binary expression '%s'", e->binop->op->op);
     if (t1->kind == InterfaceT && (strcmp(e->binop->op->op, "==") == 0 || strcmp(e->binop->op->op, "!=") == 0)) {
       Expression *cd = Program_new_Expression(p, CDelegateE, e->binop->o1->location);
       Expression *br = Program_new_Expression(p, BraceE, e->binop->o2->location);

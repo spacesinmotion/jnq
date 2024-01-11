@@ -1,14 +1,15 @@
 
-hash := [
-  1, 2, 3, 4, 5,
-]
+fn stuff() {
+  return 42
+}
+
+fn stuff_with_int(x i32) {
+}
 
 fn main() int {
   print("any_type\n")
 
-  ASSERT(len(hash) == 5)
-  for (i := 0; i < len(hash); ++i)
-    ASSERT(hash[i] == i + 1)
+  stuff().tostring()
 
   print(" ...ok\n")
   return 0
