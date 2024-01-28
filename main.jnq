@@ -1,16 +1,8 @@
 
-fn stuff() {
-  return 42
-}
-
-fn stuff_with_int(x i32) {
-}
-
 fn main() int {
-  print("any_type\n")
+  print("some \"string\" escape\\")
 
-  stuff().tostring()
-
-  print(" ...ok\n")
+  print("...ok \n ")
   return 0
 }
+ 

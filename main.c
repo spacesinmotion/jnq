@@ -1923,10 +1923,12 @@ Expression *Program_parse_atom(Program *p, State *st) {
   if (check_op(st, "\"")) {
     Expression *e = Program_new_Expression(p, BaseA, old.location);
     e->baseconst->type = &String;
+    bool slash_escaped = false;
     if (st->c[0] != '"') {
-      while (st->c[1] != '"') {
+      while (st->c[1] != '"' || (st->c[0] == '\\' && !slash_escaped)) {
         if (!st->c[0])
           FATAL(&old.location, "unclosed string constant");
+        slash_escaped = st->c[0] == '\\';
         State_skip(st, 1);
       }
       State_skip(st, 1);
