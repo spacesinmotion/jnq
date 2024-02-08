@@ -2130,8 +2130,11 @@ Expression *Program_parse_suffix_expression(Program *p, Module *m, State *st, Ex
       acc->slice->o = e;
       acc->slice->begin = a;
       acc->slice->end = Program_parse_expression(p, m, st);
-      if (!acc->slice->end)
-        FATAL(&st->location, "missing slice end in '[]' content");
+      if (!acc->slice->end) {
+        acc->slice->end = Program_new_Expression(p, BaseA, st->location);
+        acc->slice->end->baseconst->text = "0";
+        acc->slice->end->baseconst->type = &i32;
+      }
     } else {
       acc = Program_new_Expression(p, AccessE, old.location);
       acc->access->o = e;
@@ -4870,20 +4873,23 @@ void c_Program(FILE *f, Program *p, Module *m) {
   fputs("}\n", f);
 
   fputs("typedef struct Slice_ {void *d; int64_t l;} Slice_; \n", f);
+  fputs("void __slice_check_bounds(int64_t *b, int64_t *e, int64_t l) {\n", f);
+  fputs("  *b = *b >= 0 ? *b : l + *b;\n", f);
+  fputs("  *e = *e > 0 ? *e : l + *e;\n", f);
+  fputs("  *e = *e >= l ? l : *e;\n", f);
+  fputs("  *b = *b >= *e ? *e : *b;\n", f);
+  fputs("  *b = *b < 0 ? 0 : *b;\n", f);
+  fputs("}\n", f);
   fputs("Slice_ __slice_from_dyn_array(void *d, size_t st, int64_t b, int64_t e) {\n", f);
-  fputs("  b = b >= 0 ? b : _len_array((char*)d) + b;\n", f);
-  fputs("  e = e >= 0 ? e : _len_array((char*)d) + e;\n", f);
+  fputs("  __slice_check_bounds(&b, &e, _len_array((char*)d));\n", f);
   fputs("  return (Slice_){d+st*b, e-b};\n", f);
   fputs("}\n", f);
   fputs("Slice_ __slice_from_array(void *d, size_t st, int64_t max, int64_t b, int64_t e) {\n", f);
-  fputs("  b = b >= 0 ? b : (max/st) + b;\n", f);
-  fputs("  e = e >= 0 ? e : (max/st) + e;\n", f);
-  fputs("  e = e >= (max/st) ? (max/st) : e;\n", f);
+  fputs("  __slice_check_bounds(&b, &e, (max/st));\n", f);
   fputs("  return (Slice_){d+st*b, e-b};\n", f);
   fputs("}\n", f);
   fputs("Slice_ __slice_from_slice(Slice_ s, size_t st, int64_t b, int64_t e) {\n", f);
-  fputs("  b = b >= 0 ? b : s.l + b;\n", f);
-  fputs("  e = e >= 0 ? e : s.l + e;\n", f);
+  fputs("  __slice_check_bounds(&b, &e, s.l);\n", f);
   fputs("  return (Slice_){s.d + st*b, e-b};\n", f);
   fputs("}\n", f);
   fputs("void* __slice_member(Slice_ s, size_t st, size_t o) {\n", f);

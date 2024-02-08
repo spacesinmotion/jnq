@@ -248,8 +248,22 @@ fn negative_indices()
   dc := db[0 : -4]
   ASSERT(len(dc) == 12 - 4 - 4)
 
-  cc = bb[-6 : -4]
+  cc = da[0: 1243]
+  ASSERT(len(cc) == 12)
+  cc = da[-20: 1243]
+  ASSERT(len(cc) == 12)
+  cc = da[-20: 1]
+  ASSERT(len(cc) == 1)
+  cc = da[-20: 0]
+  ASSERT(len(cc) == 12)
+  cc = da[-20: ]
+  ASSERT(len(cc) == 12)
+  cc = da[-6 : -4]
   ASSERT(len(cc) == 2)
+  cc = da[-4 : ]
+  ASSERT(len(cc) == 4)
+  cc = da[-4 : -6]
+  ASSERT(len(cc) == 0)
 
   delete da
 }
