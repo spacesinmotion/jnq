@@ -1108,6 +1108,9 @@ void format_scopex(Formatter *f, State *st, int indent, char end, bool skip_end)
       format_if_like(f, st, indent);
     } else if (expect_word(f, st, "else")) {
       format_else_like(f, st, indent);
+    } else if (expect_word(f, st, "return")) {
+      if (after_space_line(*st) != '\n')
+        expect_l_space(f, st, " ");
     } else if (expect_word(f, st, "do")) {
       format_dowhile_like(f, st, indent);
     } else if (expect_word(f, st, "ccode") || expect_word(f, st, "cmain")) {
