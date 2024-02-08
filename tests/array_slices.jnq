@@ -191,6 +191,28 @@ fn slices_as_return_value_test()
   delete aa
 }
 
+fn array_default_cast_to_slices()
+{
+  print(" .array_default_cast_to_slices")
+
+  aa := [12]int{}
+  for (i := 0; i < len(aa); ++i)
+    aa[i] = 2 * i
+  check_all_doubled(aa)
+}
+
+fn dynamic_array_default_cast_to_slices()
+{
+  print(" .dynamic_array_default_cast_to_slices")
+
+  aa := reserve(new[]int{}, 12)
+  for (i := 0; i < cap(aa); ++i)
+    push(aa, 2 * i)
+  check_all_doubled(aa)
+
+  delete aa
+}
+
 fn main() i32 {
   print("array slices")
 
@@ -201,6 +223,8 @@ fn main() i32 {
   qsort_any_slice()
   interface_in_slice()
   slices_as_return_value_test()
+  array_default_cast_to_slices()
+  dynamic_array_default_cast_to_slices()
 
   print(" ...ok")
   return 0

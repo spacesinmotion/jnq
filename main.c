@@ -933,6 +933,11 @@ bool Type_convertable(Type *expect, Type *got) {
       return true;
   }
 
+  if (expect->kind == SliceT && (got->kind == ArrayT || got->kind == DynArrayT) &&
+      Type_convertable(expect->child, got->child)) {
+    return true;
+  }
+
   if (expect == &FnPtr && (TypeKind)got->kind == FnT) {
     return true;
   }
@@ -3441,7 +3446,7 @@ void c_expression(FILE *f, Expression *e) {
   }
 
   case SliceE: {
-    Type *type_to_access = c_expression_get_type(NULL, e->access->o);
+    Type *type_to_access = c_expression_get_type(NULL, e->slice->o);
     if (!type_to_access || !type_to_access->child)
       FATAL(&e->location, "Error creating slice type");
 
@@ -4194,6 +4199,24 @@ Type *AdaptParameter_for(Program *p, Type *got, Type *expect, Parameter *param) 
     prefix->unpre->o = param->p;
     param->p = prefix;
     return expect;
+
+  } else if (expect->kind == SliceT && (got->kind == ArrayT || got->kind == DynArrayT) && expect->child == got->child) {
+    Expression *sa = Program_new_Expression(p, SliceE, param->p->location);
+    sa->slice->o = param->p;
+    sa->slice->begin = Program_new_Expression(p, BaseA, param->p->location);
+    sa->slice->begin->baseconst->text = "0";
+    sa->slice->begin->baseconst->type = &i32;
+    sa->slice->end = Program_new_Expression(p, CallE, param->p->location);
+    sa->slice->end->call->o = Program_new_Expression(p, IdentifierA, param->p->location);
+    sa->slice->end->call->o->id->name = "len";
+    sa->slice->end->call->o->id->type = NULL;
+    sa->slice->end->call->p.len = 1;
+    sa->slice->end->call->p.p = (Parameter *)Program_alloc(p, 2 * sizeof(Parameter));
+    sa->slice->end->call->p.p[0].name = NULL;
+    sa->slice->end->call->p.p[0].p = param->p;
+    param->p = sa;
+    return expect;
+
   } else if (got->kind == SliceT && expect == &Any) {
     Expression *mem = Program_new_Expression(p, MemberAccessE, param->p->location);
     mem->member->o = param->p;
