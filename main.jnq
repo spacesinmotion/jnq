@@ -1,17 +1,23 @@
 
-fn print_list(a[]int) {
+type Point struct {
+  x i32,
+  y i32,
+}
+
+fn print_list(a[]int){
   for (i := 0; i < len(a); ++i)
     print(i, a[i])
 }
 
-fn main() int {
+fn main()int {
   print("some escape")
 
-  a := new[12]int{}
-  for (i := 0; i < len(a); ++i) {
-    a[i] = i * i + 1
+  a := new[12]    int{}
+  {
+    for (i := 0; i < len(a); ++i) {
+      a[i] = i * i + 1
+    }
   }
-
   print_list(a)
 
   delete a
