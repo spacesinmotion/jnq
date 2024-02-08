@@ -3082,7 +3082,7 @@ Type *c_expression_get_type(Module *m, Expression *e) {
     Type *t = c_expression_get_type(m, e->slice->o);
     if (!t || !t->child)
       FATAL(&e->location, "unknown slice return type for '%s'", Type_name(t).s);
-    return t->child;
+    return t;
   }
 
   case AsCast:
@@ -3453,11 +3453,29 @@ void c_expression(FILE *f, Expression *e) {
     if (!type_to_access || !type_to_access->child)
       FATAL(&e->location, "Error creating slice type");
 
-    fprintf(f, "__slice_from(");
+    switch (type_to_access->kind) {
+    case DynArrayT:
+      fprintf(f, "__slice_from_dyn_array(");
+      break;
+    case ArrayT:
+      fprintf(f, "__slice_from_array(");
+      break;
+    case SliceT:
+      fprintf(f, "__slice_from_slice(");
+      break;
+    default:
+      FATAL(&e->location, "Problem with slice creation for '%s'", Type_name(type_to_access).s);
+      break;
+    }
     c_expression(f, e->slice->o);
     fprintf(f, ", sizeof(");
     c_type_declare(f, type_to_access->child, &e->location, ".:.");
     fprintf(f, "), ");
+    if ((TypeKind)type_to_access->kind == ArrayT) {
+      fprintf(f, "sizeof(");
+      c_expression(f, e->slice->o);
+      fprintf(f, "), ");
+    }
     c_expression(f, e->slice->begin);
     fprintf(f, ", ");
     c_expression(f, e->slice->end);
@@ -4524,7 +4542,7 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
     if (!Type_convertable(&u64, endT) && !Type_convertable(&i64, endT))
       FATAL(&e->slice->end->location, "Expect integral type for slice subscription, got '%s'", Type_name(endT).s);
     Type *t = c_Expression_make_variables_typed(s, p, m, e->slice->o);
-    if ((TypeKind)t->kind != ArrayT && t->kind != DynArrayT && t->kind != PointerT)
+    if ((TypeKind)t->kind != ArrayT && t->kind != DynArrayT && t->kind != PointerT && t->kind != SliceT)
       FATAL(&e->location, "Expect array/pointer type for slice creation got '%s'", Type_name(t).s);
     Module *cm = Type_defined_module(t->child);
     Type *st = Module_find_slice_type(cm, t->child);
@@ -4851,9 +4869,22 @@ void c_Program(FILE *f, Program *p, Module *m) {
   fputs("  return &d[st * _len_array(d)];\n", f);
   fputs("}\n", f);
 
-  fputs("typedef struct Slice_ {void *d; size_t l;} Slice_; \n", f);
-  fputs("Slice_ __slice_from(void *d, size_t st, size_t b, size_t e) {\n", f);
+  fputs("typedef struct Slice_ {void *d; int64_t l;} Slice_; \n", f);
+  fputs("Slice_ __slice_from_dyn_array(void *d, size_t st, int64_t b, int64_t e) {\n", f);
+  fputs("  b = b >= 0 ? b : _len_array((char*)d) + b;\n", f);
+  fputs("  e = e >= 0 ? e : _len_array((char*)d) + e;\n", f);
   fputs("  return (Slice_){d+st*b, e-b};\n", f);
+  fputs("}\n", f);
+  fputs("Slice_ __slice_from_array(void *d, size_t st, int64_t max, int64_t b, int64_t e) {\n", f);
+  fputs("  b = b >= 0 ? b : (max/st) + b;\n", f);
+  fputs("  e = e >= 0 ? e : (max/st) + e;\n", f);
+  fputs("  e = e >= (max/st) ? (max/st) : e;\n", f);
+  fputs("  return (Slice_){d+st*b, e-b};\n", f);
+  fputs("}\n", f);
+  fputs("Slice_ __slice_from_slice(Slice_ s, size_t st, int64_t b, int64_t e) {\n", f);
+  fputs("  b = b >= 0 ? b : s.l + b;\n", f);
+  fputs("  e = e >= 0 ? e : s.l + e;\n", f);
+  fputs("  return (Slice_){s.d + st*b, e-b};\n", f);
   fputs("}\n", f);
   fputs("void* __slice_member(Slice_ s, size_t st, size_t o) {\n", f);
   fputs("  return (s.d + st * o);\n", f);
@@ -5251,5 +5282,5 @@ int main(int argc, char *argv[]) {
   if (error == 0 && p.mode == Run)
     error = run(&p, p.output, argc, argv);
 
-  return error;
+  return error == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }

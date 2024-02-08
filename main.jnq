@@ -9,19 +9,53 @@ fn print_list(a[]int){
     print(i, a[i])
 }
 
-fn main()int {
-  print("some escape")
+fn negative_indices()
+{
+  print(" .negative_indices")
 
-  a := new[12]int{}
-
-  for (i := 0; i < len(a); ++i) {
-    a[i] = i * i + 1
+  da := new[12]int{}
+  aa := [12]int{}
+  for (i := 0; i < len(aa); ++i) {
+    aa[i] = 2 * i
+    da[i] = 2 * i
   }
-  print_list(a)
 
-  delete a
+  bb := aa[0 : -4]
+  ASSERT(len(bb) == 12 - 4)
+  db := da[0 : -4]
+  ASSERT(len(db) == 12 - 4)
 
-  print("...ok \n ")
+  cc := bb[0 : -4]
+  ASSERT(len(cc) == 12 - 4 - 4)
+  dc := db[0 : -4]
+  ASSERT(len(dc) == 12 - 4 - 4)
+
+  cc = bb[-6 : -4]
+  ASSERT(len(cc) == 2)
+
+  // cc = bb[-4 : ]
+  // ASSERT(len(cc) == 4)
+
+  delete da
+}
+
+fn len_clamped_to_range() {
+  print(" .len_clamped_to_range")
+
+  aa := [12]int{}
+  for (i := 0; i < len(aa); ++i)
+    aa[i] = 2 * i
+
+  bb := aa[0 : 14]
+  print(len(bb))
+  ASSERT(len(bb) == 12)
+}
+
+fn main()int {
+  negative_indices()
+  len_clamped_to_range()
+
+  print("...ok", 1, 2, 3)
   return 0
 }
 

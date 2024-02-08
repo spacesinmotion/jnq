@@ -14,7 +14,7 @@ fn check_all_doubled_c(a *i32, l i32){
 }
 
 fn check_all_doubled(a[]i32){
-  for (i := 0; i < len(a) ; ++i)
+  for (i := 0; i < len(a); ++i)
     ASSERT(a[i] == i * 2)
 }
 
@@ -52,7 +52,7 @@ fn simple_struct()
     b[i].b = i as f32 / 2.0f
     b[i].c = (i) as char + 'a'
   }
-  for (i := 0; i < len(b) ; ++i) {
+  for (i := 0; i < len(b); ++i) {
     ASSERT(b[i].a == i * 3)
     ASSERT(b[i].b == i as f32 / 2.0f)
     ASSERT(b[i].c == i as char + 'a')
@@ -79,10 +79,10 @@ fn as_members()
   ASSERT(len(w.a) == 5)
   ASSERT(cap(w.a) == 5)
 
-  for (i := 0; i < len(w.a) ; ++i)
+  for (i := 0; i < len(w.a); ++i)
     w.a[i] = i as f32 * 10.0f
 
-  for (i := 0; i < len(w.a) ; ++i) {
+  for (i := 0; i < len(w.a); ++i) {
     ASSERT(w.a[i] == i as f32 * 10.0f)
     ASSERT(aa[i + 2] == i as f32 * 10.0f)
   }
@@ -107,10 +107,10 @@ fn qsort_any_slice()
     push(aa, 100 - i *2)
 
   a := aa[12: 86]
-  for (i := 1; i < len(a) ; ++i)
+  for (i := 1; i < len(a); ++i)
     ASSERT(a[i -1] > a[i])
   qsort(a, len_s(a), sizeof(i32), comp)
-  for (i := 1; i < len(a) ; ++i) {
+  for (i := 1; i < len(a); ++i) {
     ASSERT(a[i - 1] < a[i])
     ASSERT(a[i] == aa[i + 12])
   }
@@ -213,6 +213,47 @@ fn dynamic_array_default_cast_to_slices()
   delete aa
 }
 
+fn slice_from_slices()
+{
+  print(" .slice_from_slices")
+
+  aa := [12]int{}
+  for (i := 0; i < len(aa); ++i)
+    aa[i] = 2 * i
+
+  bb := aa[0 : 8]
+  check_all_doubled(bb)
+  cc := bb[0 : 4]
+  check_all_doubled(cc)
+}
+
+fn negative_indices()
+{
+  print(" .negative_indices")
+
+  da := new[12]int{}
+  aa := [12]int{}
+  for (i := 0; i < len(aa); ++i) {
+    aa[i] = 2 * i
+    da[i] = 2 * i
+  }
+
+  bb := aa[0 : -4]
+  ASSERT(len(bb) == 12 - 4)
+  db := da[0 : -4]
+  ASSERT(len(db) == 12 - 4)
+
+  cc := bb[0 : -4]
+  ASSERT(len(cc) == 12 - 4 - 4)
+  dc := db[0 : -4]
+  ASSERT(len(dc) == 12 - 4 - 4)
+
+  cc = bb[-6 : -4]
+  ASSERT(len(cc) == 2)
+
+  delete da
+}
+
 fn main() i32 {
   print("array slices")
 
@@ -225,6 +266,8 @@ fn main() i32 {
   slices_as_return_value_test()
   array_default_cast_to_slices()
   dynamic_array_default_cast_to_slices()
+  slice_from_slices()
+  negative_indices()
 
   print(" ...ok")
   return 0
