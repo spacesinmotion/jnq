@@ -1,4 +1,8 @@
 
+fn is_ok(b bool) {
+  print(b)
+}
+
 type Point interface {
   fn x(p *Point) i32,
   fn y(p *Point) i32,
@@ -7,7 +11,12 @@ type Point interface {
 fn main()int {
   a := Point{}
 
-  ASSERT(a != null)
+  ASSERT(!a)
+
+  b := false
+  b = a
+
+  is_ok(a == null)
 
   print("...ok", 1, 2, 3)
   return 0

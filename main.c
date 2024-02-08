@@ -948,7 +948,8 @@ bool Type_convertable(Type *expect, Type *got) {
     return true;
   }
 
-  if (expect == &Bool && (got == &Any || (TypeKind)got->kind == PointerT || (TypeKind)got->kind == DynArrayT)) {
+  if (expect == &Bool && (got == &Any || (TypeKind)got->kind == PointerT || (TypeKind)got->kind == DynArrayT ||
+                          (TypeKind)got->kind == InterfaceT)) {
     return true;
   }
 
@@ -4256,6 +4257,16 @@ Type *AdaptParameter_for(Program *p, Type *got, Type *expect, Parameter *param) 
     mem->member->member->type = &Any;
     param->p = mem;
     return &Any;
+
+  } else if (got->kind == InterfaceT && expect == &Bool) {
+    Expression *mem = Program_new_Expression(p, MemberAccessE, param->p->location);
+    mem->member->o = param->p;
+    mem->member->o_type = &Any;
+    mem->member->member = (Identifier *)Program_alloc(p, sizeof(Identifier));
+    mem->member->member->name = "self";
+    mem->member->member->type = &Any;
+    param->p = mem;
+    return &Bool;
   }
 
   return got;
@@ -4337,6 +4348,7 @@ Type *c_Macro_make_variables_typed(VariableStack *s, Program *p, Module *m, cons
     if (!Type_convertable(&Bool, param[0]))
       FATAL(&pl.p[0].p->location, "expect boolean condition for macro '%s' got '%s'!", macro_name,
             Type_name(param[0]).s);
+    param[0] = AdaptParameter_for(p, param[0], &Bool, &pl.p[0]);
 
     return &Bool;
   }
@@ -4604,6 +4616,14 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
     } else if (strcmp(e->unpre->op, "!") == 0) {
       if (!Type_convertable(&Bool, st))
         FATAL(&e->location, "wrong type for '!' operator '%s'", Type_name(st).s);
+      if (st->kind == InterfaceT) {
+        Expression *cd = Program_new_Expression(p, CDelegateE, e->unpre->o->location);
+        Expression *br = Program_new_Expression(p, BraceE, e->unpre->o->location);
+        br->brace->o = e->unpre->o;
+        cd->cdelegate->o = br;
+        cd->cdelegate->delegate = ".self";
+        e->unpre->o = cd;
+      }
       return &Bool;
     }
     return st;
@@ -4637,6 +4657,15 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
     }
     if (t1 != t2 && t1->kind == InterfaceT && strcmp(e->binop->op->op, "=") == 0) {
       e->binop->o2 = Interface_construct(p, t2, t1, e->binop->o2);
+      return t1;
+    }
+    if (t1 != t2 && t2->kind == InterfaceT && t1 == &Bool && strcmp(e->binop->op->op, "=") == 0) {
+      Expression *cd = Program_new_Expression(p, CDelegateE, e->binop->o2->location);
+      Expression *br = Program_new_Expression(p, BraceE, e->binop->o2->location);
+      br->brace->o = e->binop->o2;
+      cd->cdelegate->o = br;
+      cd->cdelegate->delegate = ".self";
+      e->binop->o2 = cd;
       return t1;
     }
     if (!Type_convertable(t1, t2) && !Type_convertable(t2, t1)) {
