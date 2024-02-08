@@ -784,6 +784,7 @@ Type f64 = (Type){"f64", .c_name = "double", BaseT, NULL};
 Type String = (Type){"string", .c_name = "char *", BaseT, NULL};
 Type FnPtr = (Type){"fn_ptr", .c_name = "void *", BaseT, NULL};
 Type Any = (Type){"any", .c_name = "void *", BaseT, NULL};
+Type Void = (Type){"void", .c_name = "void", BaseT, NULL};
 
 Type Ellipsis = (Type){"...", .structT = &(Struct){{}, &global, (LocationRange){}}, BaseT, NULL};
 
@@ -1786,6 +1787,8 @@ bool Program_parse_fn_decl(Program *p, Module *m, FunctionDecl *fnd, State *st) 
     fnd->return_type_location = st->location;
     if (!check_type_key_word_at(st->c))
       fnd->returnType = Program_parse_declared_type(p, m, st, true);
+    if (!fnd->returnType)
+      fnd->returnType = &Void;
     return true;
   }
 
@@ -2671,7 +2674,7 @@ BuffString Type_special_cname(Type *t) {
 }
 
 bool c_type_declare(FILE *f, Type *t, Location *l, const char *var) {
-  if (!t)
+  if (!t || t == &Void)
     return false;
 
   bool hasVarWritten = false;
@@ -2785,7 +2788,7 @@ void c_fn_decl(FILE *f, const char *module_name, Function *fn, const char *fn_na
 
 void c_fn_pointer_decl(FILE *f, Type *tfn, bool named) {
   Function *fn = tfn->fnT;
-  if (fn->d.returnType) {
+  if (fn->d.returnType && fn->d.returnType != &Void) {
     if (c_type_declare(f, fn->d.returnType, &fn->d.return_type_location, ""))
       FATALX("array return type not supported -> c backend!");
   } else
@@ -2849,7 +2852,7 @@ void c_interface(FILE *f, const char *module_name, const char *name, Interface *
     Type *fnt = &intf->methods.fns[i];
     c_fn_decl(f, module_name, fnt->fnT, fnt->name);
     fprintf(f, " {\n  ");
-    if (fnt->fnT->d.returnType)
+    if (fnt->fnT->d.returnType && fnt->fnT->d.returnType != &Void)
       fprintf(f, "return ");
 
     fprintf(f, "%s->tab->%s(%s->self", fnt->fnT->d.parameter.v[0].name, fnt->name, fnt->fnT->d.parameter.v[0].name);
@@ -3766,7 +3769,7 @@ void c_statements(FILE *f, Statement *s, int indent) {
 }
 
 void c_fn_decl(FILE *f, const char *module_name, Function *fn, const char *fn_name) {
-  if (fn->d.returnType) {
+  if (fn->d.returnType && fn->d.returnType != &Void) {
     if (c_type_declare(f, fn->d.returnType, &fn->d.return_type_location, ""))
       FATALX("array return type not supported -> c backend!");
   } else
@@ -3885,7 +3888,7 @@ void c_Module_fn(FILE *f, Module *m) {
 }
 
 void c_fn_forward_fn(FILE *f, const char *module_name, const char *fn_name, Function *fn) {
-  if (fn->d.returnType) {
+  if (fn->d.returnType && fn->d.returnType != &Void) {
     if (c_type_declare(f, fn->d.returnType, &fn->d.return_type_location, ""))
       FATALX("array return type not supported -> c backend!");
   } else
