@@ -3082,6 +3082,8 @@ Type *c_expression_get_type(Module *m, Expression *e) {
   }
   case AccessE: {
     Type *t = c_expression_get_type(m, e->access->o);
+    if (t == &String)
+      return &Char;
     if (!t->child)
       FATAL(&e->location, "unknown access return type for '%s'", Type_name(t).s);
     return t->child;
@@ -4549,6 +4551,8 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
     if (!Type_convertable(&u64, subt) && !Type_convertable(&i64, subt))
       FATAL(&e->access->p->location, "Expect integral type for array subscription, got '%s'", Type_name(subt).s);
     Type *t = c_Expression_make_variables_typed(s, p, m, e->access->o);
+    if (t == &String)
+      return &Char;
     if ((TypeKind)t->kind != ArrayT && t->kind != DynArrayT && t->kind != PointerT && t->kind != SliceT)
       FATAL(&e->location, "Expect array/pointer type for access got '%s'", Type_name(t).s);
     return t->child;

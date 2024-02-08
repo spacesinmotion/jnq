@@ -1,12 +1,17 @@
 
-use printf from C.stdio
+fn access_single_chars() {
+  print(" .access_single_charst")
+
+  text := "Hello World!!"
+  ASSERT(text[0] == 'H')
+  ASSERT(text[6] == 'W')
+}
 
 fn main() int {
-  printf("strings\n")
+  print("strings")
 
-  // check empty string
-  printf("")
+  access_single_chars()
 
-  printf(" ...ok\n")
+  print("...ok")
   return 0
 }
