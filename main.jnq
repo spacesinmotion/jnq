@@ -1,69 +1,13 @@
 
-type Point struct {
-  x i32,
-  y i32,
-}
-
-fn print_list(a[]int){
-  for (i := 0; i < len(a); ++i)
-    print(i, a[i])
-}
-
-fn negative_indices()
-{
-  print(" .negative_indices")
-
-  da := new[12]int{}
-  aa := [12]int{}
-  for (i := 0; i < len(aa); ++i) {
-    aa[i] = 2 * i
-    da[i] = 2 * i
-  }
-
-  bb := aa[0 : -4]
-  ASSERT(len(bb) == 12 - 4)
-  db := da[0 : -4]
-  ASSERT(len(db) == 12 - 4)
-
-  cc := bb[0 : -4]
-  ASSERT(len(cc) == 12 - 4 - 4)
-  dc := db[0 : -4]
-  ASSERT(len(dc) == 12 - 4 - 4)
-
-  cc = da[-20: 1243]
-  print(len(cc))
-  ASSERT(len(cc) == 12)
-
-  cc = da[-6 : -4]
-  print(len(cc))
-  ASSERT(len(cc) == 2)
-
-  cc = da[-4 : ]
-  print(len(cc))
-  ASSERT(len(cc) == 4)
-
-  cc = da[-4 : -6]
-  print(len(cc))
-  ASSERT(len(cc) == 0)
-
-  delete da
-}
-
-fn len_clamped_to_range() {
-  print(" .len_clamped_to_range")
-
-  aa := [12]int{}
-  for (i := 0; i < len(aa); ++i)
-    aa[i] = 2 * i
-
-  bb := aa[0 : 14]
-  print(len(bb))
-  ASSERT(len(bb) == 12)
+type Point interface {
+  fn x(p *Point) i32,
+  fn y(p *Point) i32,
 }
 
 fn main()int {
-  negative_indices()
-  len_clamped_to_range()
+  a := Point{}
+
+  ASSERT(a != null)
 
   print("...ok", 1, 2, 3)
   return 0

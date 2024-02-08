@@ -2922,6 +2922,8 @@ void jnq_expression(FILE *f, Expression *e) {
   if (!e)
     return;
 
+  printf("Whaa %d\n", e->type);
+
   switch ((ExpressionType)e->type) {
   case BaseA:
     fprintf(f, "%s", e->baseconst->text);
@@ -3016,6 +3018,10 @@ void jnq_expression(FILE *f, Expression *e) {
     break;
 
   case CDelegateE:
+    if (e->cdelegate->o->type == BraceE)
+      jnq_expression(f, e->cdelegate->o->brace->o);
+    else
+      jnq_expression(f, e->cdelegate->o);
     break;
   }
 }
