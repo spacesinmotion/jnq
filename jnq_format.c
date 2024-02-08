@@ -1043,6 +1043,7 @@ void format_dowhile_like(Formatter *f, State *st, int indent) {
 }
 
 void format_scopex(Formatter *f, State *st, int indent, char end, bool skip_end) {
+  const int line_at_start = st->location.line;
   if (after_space(*st) == end) {
     expect_space(f, st, "");
   } else if (after_space_line(*st) == '\n') {
@@ -1066,7 +1067,7 @@ void format_scopex(Formatter *f, State *st, int indent, char end, bool skip_end)
         skip_lines(f, st, nl - 2);
       else
         State_skip(st);
-      char n = after_space_line(*st);
+      const char n = after_space_line(*st);
       if (n == end && end != '\0') {
         expect_indent_line(f, st, indent < 2 ? 0 : indent - 2);
         State_skip(st);
@@ -1088,18 +1089,21 @@ void format_scopex(Formatter *f, State *st, int indent, char end, bool skip_end)
         expect_space(f, st, " ");
       else {
         const char next = after_space_line(*st);
-        if (next == '}') {
-          expect_space(f, st, "\n");
-          expect_indent_line(f, st, indent < 2 ? 0 : indent - 2);
-        } else if (next != '\n')
+        if (end != '\n' && end != '\0' && next == end && line_at_start < st->location.line)
+          expect_indent(f, st, indent < 2 ? 0 : indent - 2);
+        else if (next != '\n')
           expect_l_space(f, st, "");
       }
     } else if (*st->c == '[') {
       State_skip(st);
       format_scopex(f, st, indent + 2, ']', true);
+      if (end != '\n' && end != '\0' && after_space_line(*st) == end && line_at_start < st->location.line)
+        expect_indent(f, st, indent < 2 ? 0 : indent - 2);
     } else if (*st->c == '(') {
       State_skip(st);
       format_scopex(f, st, indent + 2, ')', true);
+      if (end != '\n' && end != '\0' && after_space_line(*st) == end && line_at_start < st->location.line)
+        expect_indent(f, st, indent < 2 ? 0 : indent - 2);
     } else if (expect_op(f, st, "//")) {
       while (*st->c && *st->c != '\n')
         State_skip(st);
@@ -1135,9 +1139,12 @@ void format_scopex(Formatter *f, State *st, int indent, char end, bool skip_end)
         expect_indent_line(f, st, 1);
     } else if ((t = check_bin_op(*st))) {
       State_skip_n(st, strlen(t));
-      if (strcmp(".", t) == 0 && after_space_line(*st) != '\n')
+      const char n = after_space_line(*st);
+      if (end != '\n' && end != '\0' && n == end && line_at_start < st->location.line) {
+        expect_indent(f, st, indent < 2 ? 0 : indent - 2);
+      } else if (strcmp(".", t) == 0 && n != '\n')
         expect_l_space(f, st, "");
-      else if (after_space_line(*st) != '\n')
+      else if (n != '\n')
         expect_l_space(f, st, " ");
     } else if (*st->c == ',' || *st->c == ';') {
       State_skip(st);
@@ -1150,7 +1157,9 @@ void format_scopex(Formatter *f, State *st, int indent, char end, bool skip_end)
         expect_l_space(f, st, " ");
       else {
         const char n = after_space_line(*st);
-        if (n == '{' && end != '\0')
+        if (n == end && end != '\n' && end != '\0' && line_at_start < st->location.line) {
+          expect_indent(f, st, indent < 2 ? 0 : indent - 2);
+        } else if (n == '{' && end != '\0')
           expect_l_space(f, st, "");
         else if (n == '(' || n == '[' || n == ')' || n == ']' || n == '}' || n == ';' || n == ',' || n == '.' ||
                  n == '\n')
