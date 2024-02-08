@@ -2923,8 +2923,6 @@ void jnq_expression(FILE *f, Expression *e) {
   if (!e)
     return;
 
-  printf("Whaa %d\n", e->type);
-
   switch ((ExpressionType)e->type) {
   case BaseA:
     fprintf(f, "%s", e->baseconst->text);
@@ -4224,7 +4222,7 @@ Type *AdaptParameter_for(Program *p, Type *got, Type *expect, Parameter *param) 
     param->p = cast;
     return xP;
 
-  } else if (got->kind == PointerT && expect == got->child) {
+  } else if (got->kind == PointerT && expect == got->child && expect != &Bool) {
     Expression *prefix = Program_new_Expression(p, UnaryPrefixE, param->p->location);
     prefix->unpre->op = "*";
     prefix->unpre->o = param->p;
