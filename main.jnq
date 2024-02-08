@@ -7,11 +7,20 @@ fn print_list(a[]int) {
 fn main() int {
   print("some escape")
 
-  a := new[12]int{}
-  for (i := 0; i < len(a); ++i)
+  if (true) {
+    a := new[12]int{}
+  } else
+    print("noo")
+  for (i := 0; i < len(a); ++i) {
     a[i] = i * i + 1
+  }
 
   print_list(a)
+  {
+    for (i := 0; i < len(a); ++i) {
+      print(print_list(a), a)
+    }
+  }
 
   delete a
 
