@@ -25,7 +25,6 @@ type fBaseTypes struct {
 
 type pBaseTypes struct {
   b *char,
-  x string,
 }
 
 fn none_narrowing_conversation_construct() {

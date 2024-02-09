@@ -1,9 +1,11 @@
 
 fn main()int {
   text := "Hello World"
+  print(len(text), text)
+  sub := text[6: 8]
+  print(len(sub), sub)
 
-  print(text[0])
-  ASSERT(text[0] == 'H')
+  print(text[-4: -2])
 
   print("...ok", 1, 2, 3)
   return 0

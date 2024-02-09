@@ -781,7 +781,7 @@ Type u32 = (Type){"u32", .c_name = "uint32_t", BaseT, NULL};
 Type u64 = (Type){"u64", .c_name = "uint64_t", BaseT, NULL};
 Type f32 = (Type){"f32", .c_name = "float", BaseT, NULL};
 Type f64 = (Type){"f64", .c_name = "double", BaseT, NULL};
-Type String = (Type){"string", .c_name = "char *", BaseT, NULL};
+Type String = (Type){"string", .c_name = "char[]", BaseT, NULL};
 Type FnPtr = (Type){"fn_ptr", .c_name = "void *", BaseT, NULL};
 Type Any = (Type){"any", .c_name = "void *", BaseT, NULL};
 Type Void = (Type){"void", .c_name = "void", BaseT, NULL};
@@ -832,8 +832,6 @@ Type *Module_find_type(Module *m, StringView name) {
     return &Char;
   if (sv_eq(name, (StringView){WChar.name, 7}))
     return &WChar;
-  if (sv_eq(name, (StringView){String.name, 6}))
-    return &String;
   if (sv_eq(name, (StringView){FnPtr.name, 6}))
     return &FnPtr;
   if (sv_eq(name, (StringView){Any.name, 3}))
@@ -2681,6 +2679,11 @@ bool c_type_declare(FILE *f, Type *t, Location *l, const char *var) {
   if (!t || t == &Void)
     return false;
 
+  if (t == &String) {
+    fprintf(f, " char %s[]", var);
+    return true;
+  }
+
   bool hasVarWritten = false;
   Type *tt = t->child;
   if ((TypeKind)t->kind != SliceT && (TypeKind)t->kind != ConstantWrapperT) {
@@ -3090,6 +3093,12 @@ Type *c_expression_get_type(Module *m, Expression *e) {
   }
   case SliceE: {
     Type *t = c_expression_get_type(m, e->slice->o);
+    if (t == &String) {
+      Type *st = Module_find_slice_type(global_module(), &Char);
+      if (!st)
+        FATAL(&e->location, "internal problem finding slice type for '%s'", Type_name(&Char).s);
+      return st;
+    }
     if (!t || !t->child)
       FATAL(&e->location, "unknown slice return type for '%s'", Type_name(t).s);
     return t;
@@ -3215,6 +3224,8 @@ bool c_check_macro(FILE *f, Call *ca, Location *l) {
         fprintf(f, "%%g");
       else if (param[i] == &f64)
         fprintf(f, "%%g");
+      else if (param[i]->kind == SliceT && param[i]->child == &Char)
+        fprintf(f, "%%s");
       else if (param[i] == &Any || param[i]->kind == PointerT || param[i]->kind == DynArrayT)
         fprintf(f, "%%p");
       else
@@ -3231,6 +3242,10 @@ bool c_check_macro(FILE *f, Call *ca, Location *l) {
         fprintf(f, " ((");
         c_expression(f, pl->p[i].p);
         fprintf(f, " )?\"true\":\"false\")");
+      } else if (param[i]->kind == SliceT && param[i]->child == &Char) {
+        fprintf(f, " debug_tmp_string_(");
+        c_expression(f, pl->p[i].p);
+        fprintf(f, ")");
       } else
         c_expression(f, pl->p[i].p);
     }
@@ -3281,8 +3296,18 @@ bool c_check_macro(FILE *f, Call *ca, Location *l) {
     if (ca->p.len != 1)
       FATAL(l, "'%s' expects exact 1 parameter!", ca->o->id->name);
     Type *arg_type = c_expression_get_type(NULL, ca->p.p[0].p);
+
     if ((TypeKind)arg_type->kind == ConstantWrapperT)
       arg_type = arg_type->child;
+
+    if (arg_type == &String) {
+      if (strcmp(ca->o->id->name, "len") == 0 || strcmp(ca->o->id->name, "cap") == 0)
+        fprintf(f, "(int32_t)");
+      fprintf(f, "sizeof(");
+      c_expression(f, ca->p.p[0].p);
+      fprintf(f, ")");
+      return true;
+    }
 
     switch ((TypeKind)arg_type->kind) {
     case DynArrayT:
@@ -3460,28 +3485,26 @@ void c_expression(FILE *f, Expression *e) {
 
   case SliceE: {
     Type *type_to_access = c_expression_get_type(NULL, e->slice->o);
-    if (!type_to_access || !type_to_access->child)
+    if (!type_to_access || (!type_to_access->child && type_to_access != &String))
       FATAL(&e->location, "Error creating slice type");
 
-    switch (type_to_access->kind) {
-    case DynArrayT:
+    if (type_to_access->kind == DynArrayT) {
       fprintf(f, "__slice_from_dyn_array(");
-      break;
-    case ArrayT:
+    } else if (type_to_access->kind == ArrayT || type_to_access == &String) {
       fprintf(f, "__slice_from_array(");
-      break;
-    case SliceT:
+    } else if (type_to_access->kind == SliceT) {
       fprintf(f, "__slice_from_slice(");
-      break;
-    default:
+    } else
       FATAL(&e->location, "Problem with slice creation for '%s'", Type_name(type_to_access).s);
-      break;
-    }
+
     c_expression(f, e->slice->o);
     fprintf(f, ", sizeof(");
-    c_type_declare(f, type_to_access->child, &e->location, ".:.");
+    if (type_to_access == &String)
+      fprintf(f, "char");
+    else
+      c_type_declare(f, type_to_access->child, &e->location, ".:.");
     fprintf(f, "), ");
-    if ((TypeKind)type_to_access->kind == ArrayT) {
+    if ((TypeKind)type_to_access->kind == ArrayT || type_to_access == &String) {
       fprintf(f, "sizeof(");
       c_expression(f, e->slice->o);
       fprintf(f, "), ");
@@ -4363,6 +4386,8 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
 
   switch ((ExpressionType)e->type) {
   case BaseA:
+    // if (e->baseconst->type == &String)
+    //   FATAL(&e->location, "need convert to Slice");
     return e->baseconst->type;
 
   case IdentifierA: {
@@ -4565,13 +4590,14 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
     if (!Type_convertable(&u64, endT) && !Type_convertable(&i64, endT))
       FATAL(&e->slice->end->location, "Expect integral type for slice subscription, got '%s'", Type_name(endT).s);
     Type *t = c_Expression_make_variables_typed(s, p, m, e->slice->o);
-    if ((TypeKind)t->kind != ArrayT && t->kind != DynArrayT && t->kind != PointerT && t->kind != SliceT)
+    if ((TypeKind)t->kind != ArrayT && t->kind != DynArrayT && t->kind != PointerT && t->kind != SliceT && t != &String)
       FATAL(&e->location, "Expect array/pointer type for slice creation got '%s'", Type_name(t).s);
-    Module *cm = Type_defined_module(t->child);
-    Type *st = Module_find_slice_type(cm, t->child);
+    Type *child = t == &String ? &Char : t->child;
+    Module *cm = Type_defined_module(child);
+    Type *st = Module_find_slice_type(cm, child);
     if (!st) {
       st = Program_add_type(p, SliceT, "", cm);
-      st->child = t->child;
+      st->child = child;
     }
     return st;
   }
@@ -4931,6 +4957,11 @@ void c_Program(FILE *f, Program *p, Module *m) {
   fputs("}\n", f);
   fputs("void* __slice_member(Slice_ s, size_t st, size_t o) {\n", f);
   fputs("  return (s.d + st * o);\n", f);
+  fputs("}\n", f);
+  fputs("char *debug_tmp_string_(Slice_ s) {\n", f);
+  fputs("  static char b[512] = {0};\n", f);
+  fputs("  snprintf(b, sizeof(b), \"%.*s\", (int)s.l, (const char*)s.d);\n", f);
+  fputs("  return b;\n", f);
   fputs("}\n", f);
 
   fputs("#define __NEW_ARRAY(T, count) ((T *)new_array_imp_((count), sizeof(T)))\n", f);

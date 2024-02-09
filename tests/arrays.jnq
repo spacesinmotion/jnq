@@ -69,7 +69,7 @@ type Dec struct {
 }
 
 type Comp struct {
-  name string,
+  name *char,
   tri[3]Dec,
 }
 

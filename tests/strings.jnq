@@ -1,4 +1,11 @@
 
+fn len_of_string() {
+  print(" .len_of_string")
+
+  text := "Hello World!!"
+  ASSERT(len(text) == 14)
+}
+
 fn access_single_chars() {
   print(" .access_single_charst")
 
@@ -7,10 +14,27 @@ fn access_single_chars() {
   ASSERT(text[6] == 'W')
 }
 
+fn check_slice_arg_len(s[]char, l i32) {
+  ASSERT(len(s) == l)
+}
+
+fn access_slices_of_chars() {
+  print(" .access_slices_of_chars")
+
+  text := "Hello World!!"
+  sub := text[6: 8]
+  ASSERT(len(sub) == 2)
+  ASSERT(sub[0] == 'W')
+  ASSERT(sub[1] == 'o')
+  check_slice_arg_len(text[-5: -2], 3)
+}
+
 fn main() int {
   print("strings")
 
+  len_of_string()
   access_single_chars()
+  access_slices_of_chars()
 
   print("...ok")
   return 0
