@@ -1,5 +1,9 @@
 
 fn main()int {
+  more_text := [
+    "A", "B", "C"
+  ]
+
   text := "Hello World"
   print(len(text), text)
   sub := text[6: 8]

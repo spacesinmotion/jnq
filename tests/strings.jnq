@@ -29,12 +29,22 @@ fn access_slices_of_chars() {
   check_slice_arg_len(text[-5: -2], 3)
 }
 
+fn arrays_of_strings() {
+  print(" .arrays_of_strings")
+
+  more_text := [
+    "A", "B", "C"
+  ]
+  ASSERT(len(more_text) == 3)
+}
+
 fn main() int {
   print("strings")
 
   len_of_string()
   access_single_chars()
   access_slices_of_chars()
+  arrays_of_strings()
 
   print("...ok")
   return 0

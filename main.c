@@ -781,7 +781,7 @@ Type u32 = (Type){"u32", .c_name = "uint32_t", BaseT, NULL};
 Type u64 = (Type){"u64", .c_name = "uint64_t", BaseT, NULL};
 Type f32 = (Type){"f32", .c_name = "float", BaseT, NULL};
 Type f64 = (Type){"f64", .c_name = "double", BaseT, NULL};
-Type String = (Type){"string", .c_name = "char[]", BaseT, NULL};
+Type String = (Type){"string", .c_name = "char *", BaseT, NULL};
 Type FnPtr = (Type){"fn_ptr", .c_name = "void *", BaseT, NULL};
 Type Any = (Type){"any", .c_name = "void *", BaseT, NULL};
 Type Void = (Type){"void", .c_name = "void", BaseT, NULL};
@@ -2675,11 +2675,11 @@ BuffString Type_special_cname(Type *t) {
   return s;
 }
 
-bool c_type_declare(FILE *f, Type *t, Location *l, const char *var) {
+bool c_type_declare_rec(FILE *f, Type *t, Location *l, const char *var, bool start) {
   if (!t || t == &Void)
     return false;
 
-  if (t == &String) {
+  if (t == &String && start) {
     fprintf(f, " char %s[]", var);
     return true;
   }
@@ -2689,7 +2689,7 @@ bool c_type_declare(FILE *f, Type *t, Location *l, const char *var) {
   if ((TypeKind)t->kind != SliceT && (TypeKind)t->kind != ConstantWrapperT) {
     while (tt && tt->kind == ArrayT)
       tt = tt->child;
-    hasVarWritten = c_type_declare(f, tt, l, var);
+    hasVarWritten = c_type_declare_rec(f, tt, l, var, false);
   }
   switch ((TypeKind)t->kind) {
   case ArrayT:
@@ -2711,7 +2711,7 @@ bool c_type_declare(FILE *f, Type *t, Location *l, const char *var) {
     fprintf(f, "*");
     break;
   case ConstantWrapperT:
-    return c_type_declare(f, t->child, l, var);
+    return c_type_declare_rec(f, t->child, l, var, true);
     break;
   case UseT:
     FATAL(l, "Can't use module '%s' as type!", Type_name(t).s);
@@ -2733,7 +2733,7 @@ bool c_type_declare(FILE *f, Type *t, Location *l, const char *var) {
     FATAL(l, "Cant handle macro '%s' as type!", t->macro_name);
     break;
   case FnT:
-    if (c_type_declare(f, t->fnT->d.returnType, l, ""))
+    if (c_type_declare_rec(f, t->fnT->d.returnType, l, "", true))
       FATAL(l, "I don't know right now how to handle array function pointer stuff!");
     fprintf(f, "(*())");
     break;
@@ -2743,6 +2743,8 @@ bool c_type_declare(FILE *f, Type *t, Location *l, const char *var) {
   }
   return hasVarWritten;
 }
+
+bool c_type_declare(FILE *f, Type *t, Location *l, const char *var) { return c_type_declare_rec(f, t, l, var, true); }
 
 void c_enum_entry_list(FILE *f, const char *module_name, EnumEntry *head) {
   for (EnumEntry *e = head; e; e = e->next) {
