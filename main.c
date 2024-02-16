@@ -487,6 +487,7 @@ typedef PACK(struct Interface {
 typedef PACK(struct EnumEntry {
   const char *name;
   EnumEntry *next;
+  Location location;
   int value;
   bool valueSet;
 }) EnumEntry;
@@ -1756,6 +1757,7 @@ EnumEntry *Program_parse_enum_entry_list(Program *p, State *st) {
     State old = *st;
     EnumEntry *e = (EnumEntry *)Program_alloc(p, sizeof(EnumEntry));
     if (check_identifier(st)) {
+      e->location = old.location;
       e->name = Program_copy_string(p, be_sv(old.c, st->c));
       e->valueSet = false;
       if (check_op(st, "=")) {
@@ -5097,11 +5099,100 @@ void init_lib_path() {
   strcat(lib_path, "lib.");
 }
 
+void write_symbol_range(FILE *f, LocationRange ll) {
+  fprintf(f, "\"uri\":\"file://%s\",", ll.file);
+  fprintf(f, "\"line\":%d,", ll.start_line);
+  fprintf(f, "\"column\":%d,", ll.start_column);
+  fprintf(f, "\"end_line\":%d,", ll.end_line);
+  fprintf(f, "\"end_column\":%d", ll.end_column);
+}
+
+void write_symbol_enum(FILE *f, const char *enumtype, EnumEntry *ee) {
+  fprintf(f, "{");
+  fprintf(f, "\"name\":\"%s\",", ee->name);
+  fprintf(f, "\"kind\":\"enummember\",");
+  fprintf(f, "\"containerName\":\"%s\",", enumtype);
+  write_symbol_range(f, (LocationRange){ee->location.file, ee->location.line, ee->location.column, ee->location.line,
+                                        ee->location.column + strlen(ee->name)});
+  fprintf(f, "}");
+}
+
+void write_symbol_member(FILE *f, const char *struct_type, Variable *v) {
+  fprintf(f, "{");
+  fprintf(f, "\"name\":\"%s\",", v->name);
+  fprintf(f, "\"kind\":\"property\",");
+  fprintf(f, "\"containerName\":\"%s\",", struct_type);
+  write_symbol_range(f, (LocationRange){v->location.file, v->location.line, v->location.column, v->location.line,
+                                        v->location.column + strlen(v->name)});
+  fprintf(f, "}");
+}
+
+void write_symbol_method(FILE *f, const char *interface_type, const char *method_name, LocationRange *lr) {
+  fprintf(f, "{");
+  fprintf(f, "\"name\":\"%s\",", method_name);
+  fprintf(f, "\"kind\":\"method\",");
+  fprintf(f, "\"containerName\":\"%s\",", interface_type);
+  write_symbol_range(f, *lr);
+  fprintf(f, "}");
+}
+
+void write_symbol_for(FILE *f, Type *t, LocationRange *ll) {
+  fprintf(f, "{");
+  fprintf(f, "\"name\":\"%s\",", t->name);
+  switch ((TypeKind)t->kind) {
+  case StructT:
+  case CStructT:
+  case UnionT:
+    fprintf(f, "\"kind\":\"struct\",");
+    break;
+  case MacroT:
+  case FnT:
+    fprintf(f, "\"kind\":\"fn\",");
+    break;
+  case EnumT:
+  case CEnumT:
+    fprintf(f, "\"kind\":\"enum\",");
+    break;
+  case InterfaceT:
+    fprintf(f, "\"kind\":\"interface\",");
+    break;
+  case UseT:
+    fprintf(f, "\"kind\":\"import\",");
+    break;
+  case BaseT:
+  case ArrayT:
+  case DynArrayT:
+  case SliceT:
+  case PointerT:
+  case PlaceHolder:
+  case ConstantWrapperT:
+    break;
+  }
+
+  write_symbol_range(f, *ll);
+
+  fprintf(f, "}");
+}
+
 void write_symbols(Module *m) {
   FILE *f = stdout;
 
   fprintf(f, "[\n");
   bool first = true;
+  for (ConstantList *cl = m->constants; cl; cl = cl->next) {
+    if ((ExpressionType)cl->autotype->type != AutoTypeE)
+      continue;
+    if (!first)
+      fprintf(f, ",\n");
+    first = false;
+
+    fprintf(f, "{");
+    fprintf(f, "\"name\":\"%s\",", cl->autotype->autotype->name);
+    fprintf(f, "\"kind\":\"constant\",");
+    Location *l = &cl->autotype->location;
+    write_symbol_range(f, (LocationRange){l->file, l->line, l->column, l->line, l->column + 100});
+    fprintf(f, "}");
+  }
   for (TypeList *l = m->types; l; l = l->next) {
     LocationRange *ll = Type_location(l->type);
     if (!ll)
@@ -5109,46 +5200,31 @@ void write_symbols(Module *m) {
     if (!first)
       fprintf(f, ",\n");
     first = false;
-    fprintf(f, "{");
-    fprintf(f, "\"name\":\"%s\",", l->type->name);
-    switch ((TypeKind)l->type->kind) {
-    case StructT:
-    case CStructT:
-    case UnionT:
-      fprintf(f, "\"kind\":\"struct\",");
-      break;
-    case MacroT:
-    case FnT:
-      fprintf(f, "\"kind\":\"fn\",");
-      break;
-    case EnumT:
-    case CEnumT:
-      fprintf(f, "\"kind\":\"enum\",");
-      break;
-    case InterfaceT:
-      fprintf(f, "\"kind\":\"interface\",");
-      break;
-    case UseT:
-      fprintf(f, "\"kind\":\"import\",");
-      break;
-    case BaseT:
-    case ArrayT:
-    case DynArrayT:
-    case SliceT:
-    case PointerT:
-    case PlaceHolder:
-    case ConstantWrapperT:
-      break;
-    }
-    fprintf(f, "\"uri\":\"file://%s\",", ll->file);
-    fprintf(f, "\"line\":%d,", ll->start_line);
-    fprintf(f, "\"column\":%d,", ll->start_column);
-    fprintf(f, "\"end_line\":%d,", ll->end_line);
-    fprintf(f, "\"end_column\":%d", ll->end_column);
 
-    fprintf(f, "}");
+    write_symbol_for(f, l->type, ll);
+    if ((TypeKind)l->type->kind == EnumT || (TypeKind)l->type->kind == CEnumT) {
+      EnumEntry *ee = l->type->enumT->entries;
+      while (ee) {
+        fprintf(f, ",\n");
+        write_symbol_enum(f, l->type->name, ee);
+        ee = ee->next;
+      }
+    } else if ((TypeKind)l->type->kind == StructT || (TypeKind)l->type->kind == UnionT ||
+               (TypeKind)l->type->kind == CStructT) {
+      VariableList vl = l->type->structT->member;
+      for (int i = 0; i < vl.len; ++i) {
+        fprintf(f, ",\n");
+        write_symbol_member(f, l->type->name, &vl.v[i]);
+      }
+    } else if ((TypeKind)l->type->kind == InterfaceT) {
+      FnVec fl = l->type->interfaceT->methods;
+      for (int i = 0; i < fl.len; ++i) {
+        fprintf(f, ",\n");
+        write_symbol_method(f, l->type->name, fl.fns[i].name, ll);
+      }
+    }
   }
-  fprintf(f, "]\n");
+  fprintf(f, "\n]\n");
 }
 
 #ifdef WIN32

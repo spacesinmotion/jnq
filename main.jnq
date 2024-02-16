@@ -1,4 +1,45 @@
 
+use MemoryArena from tests.src.Program
+
+type StatementType enum {
+  ExpressionS,
+  Return,
+  Break,
+  Continue,
+  Case,
+  Default,
+  Scope,
+  If,
+  For,
+  While,
+  DoWhile,
+  Switch,
+}
+
+type State struct {
+  file *char
+  c *char
+  line int
+
+  column int
+}
+
+fn StartState(c *char, file *char) State {
+  return State{
+    file: file,
+    c: c,
+    line: 1,
+    column: 1
+  }
+}
+
+type SomeAble interface {
+  fn id(s *SomeAble, f int) int
+  fn val(s *SomeAble) int
+}
+
+A_CONST := 123545
+
 fn main()int {
   more_text := [
     "A", "B", "C"
