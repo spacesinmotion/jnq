@@ -666,9 +666,10 @@ typedef struct CBlock {
 
 typedef enum ProgramMode {
   Run = 0,
-  Symbols = 1,
-  Build = 2,
-  Transpile = 3,
+  Symbols,
+  Declaration,
+  Build,
+  Transpile,
 } ProgramMode;
 
 typedef struct Program {
@@ -5257,19 +5258,29 @@ int symbols(Program *p, const char *file) {
   return 0;
 }
 
-void parse_command_line(Program *p, int argc, char *argv[]) {
+typedef struct CommandLineArgs {
+  ProgramMode mode;
+  const char *output;
+  const char *main_file;
+  int line, column;
+} CommandLineArgs;
+
+CommandLineArgs parse_command_line(int argc, char *argv[]) {
   if (argc <= 1)
     FATALX("missing command line arguments\n");
 
+  CommandLineArgs args = (CommandLineArgs){Run, JNQ_BIN, NULL, 0, 0};
   int start = 2;
-  if (strcmp(argv[1], "symbols") == 0) {
-    p->mode = Symbols;
-  } else if (strcmp(argv[1], "build") == 0)
-    p->mode = Build;
+  if (strcmp(argv[1], "symbols") == 0)
+    args.mode = Symbols;
+  else if (strcmp(argv[1], "declaration") == 0)
+    args.mode = Declaration;
+  else if (strcmp(argv[1], "build") == 0)
+    args.mode = Build;
   else if (strcmp(argv[1], "transpile") == 0)
-    p->mode = Transpile;
+    args.mode = Transpile;
   else if (strcmp(argv[1], "run") == 0)
-    p->mode = Run;
+    args.mode = Run;
   else
     start = 1;
 
@@ -5278,7 +5289,7 @@ void parse_command_line(Program *p, int argc, char *argv[]) {
     if (strcmp(argv[i], "--") == 0)
       break;
     if (strcmp(argv[i], "-o") == 0 && i + 1 < argc) {
-      p->output = argv[i + 1];
+      args.output = argv[i + 1];
       i++;
     } else {
       int len = strlen(argv[i]);
@@ -5287,10 +5298,12 @@ void parse_command_line(Program *p, int argc, char *argv[]) {
     }
   }
 
-  if (main_file < 0 && p->mode != Symbols)
+  if (main_file < 0 && args.mode != Symbols && args.mode != Declaration)
     FATALX("missing input file\n");
   if (main_file >= 0)
-    p->main_file = argv[main_file];
+    args.main_file = argv[main_file];
+
+  return args;
 }
 
 Module *parse_main(Program *p) {
@@ -5412,10 +5425,15 @@ int run(Program *p, const char *exec, int argc, char *argv[]) {
 
 int main(int argc, char *argv[]) {
   char buffer[1024 * 1024 * 4];
+
+  CommandLineArgs args = parse_command_line(argc, argv);
+
   Program p = Program_new(buffer, sizeof(buffer));
   Program_add_defaults(&p);
 
-  parse_command_line(&p, argc, argv);
+  p.mode = args.mode;
+  p.main_file = args.main_file;
+  p.output = args.output;
 
   if (p.mode == Symbols)
     return symbols(&p, p.main_file);
