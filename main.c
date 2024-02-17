@@ -54,6 +54,31 @@ LocationRange NewRange(Location s, Location e) {
   };
 }
 
+LocationRange NewRangeLength(Location s, int l) {
+  return (LocationRange){
+      .file = s.file,
+      .start_line = s.line,
+      .start_column = s.column,
+      .end_line = s.line,
+      .end_column = s.column + l,
+  };
+}
+
+LocationRange NewRangeWord(Location s, const char *e) { return NewRangeLength(s, strlen(e)); }
+
+Location RangeStart(LocationRange r) { return (Location){r.file, r.start_line, r.start_column}; }
+bool RangeOk(LocationRange r) { return r.start_line > 0 && r.start_column > 0; }
+
+bool inRange(LocationRange r, int line, int column) {
+  if (line < r.start_line || line > r.end_line)
+    return false;
+  if (line == r.start_line && column < r.start_column)
+    return false;
+  if (line == r.end_line && column > r.end_column)
+    return false;
+  return true;
+}
+
 typedef struct State {
   const char *c;
   Location location;
@@ -75,6 +100,15 @@ jmp_buf long_jump_end;
 void FATAL(Location *l, const char *format, ...) {
   va_list args;
   fprintf(stderr, "%s:%hu:%hu: error: ", l->file, l->line, l->column);
+  va_start(args, format);
+  vfprintf(stderr, format, args);
+  va_end(args);
+  fputs("\n", stderr);
+  longjmp(long_jump_end, 1);
+}
+void FATALR(LocationRange l, const char *format, ...) {
+  va_list args;
+  fprintf(stderr, "%s:%hu:%hu: error: ", l.file, l.start_line, l.start_column);
   va_start(args, format);
   vfprintf(stderr, format, args);
   va_end(args);
@@ -133,7 +167,6 @@ typedef struct TernaryOperation TernaryOperation;
 
 typedef struct CDelegate CDelegate;
 
-typedef struct DeclarationStatement DeclarationStatement;
 typedef struct ExpressionStatement ExpressionStatement;
 
 typedef struct ReturnStatement ReturnStatement;
@@ -193,7 +226,7 @@ typedef PACK(struct Expression {
     TernaryOperation *ternop;
     CDelegate *cdelegate;
   };
-  Location location;
+  LocationRange range;
   uint8_t type;
 }) Expression;
 
@@ -216,7 +249,6 @@ typedef enum StatementType {
 typedef struct Statement Statement;
 typedef PACK(struct Statement {
   union {
-    DeclarationStatement *declare;
     ExpressionStatement *express;
     ReturnStatement *ret;
     BreakStatement *brk;
@@ -1200,10 +1232,9 @@ Statement *Program_new_Statement(Program *p, StatementType t, Statement *n) {
   return s;
 }
 
-Expression *Program_new_Expression(Program *p, ExpressionType t, Location l) {
+Expression *Program_new_Expression(Program *p, ExpressionType t) {
   Expression *e = (Expression *)Program_alloc(p, sizeof(Expression));
   e->type = t;
-  e->location = l;
   switch ((ExpressionType)t) {
   case BaseA:
     e->baseconst = (BaseConst *)Program_alloc(p, sizeof(BaseConst));
@@ -1417,7 +1448,7 @@ bool read_float(State *st, double *f) {
 Module *Program_parse_file(Program *p, const char *path);
 
 Module *Program_parse_sub_file(Program *p, const char *path, Module *parent) {
-  if (p->mode == Symbols)
+  if (p->mode == Symbols || p->mode == Declaration)
     return Program_add_module(p, path);
 
   char tempPath[256];
@@ -1893,27 +1924,30 @@ Expression *Program_parse_atom(Program *p, State *st) {
 
     bool isTrue = l == 4 && strncmp(old.c, "true", 4) == 0;
     if (isTrue || (l == 5 && strncmp(old.c, "false", 5) == 0)) {
-      Expression *b = Program_new_Expression(p, BaseA, old.location);
+      Expression *b = Program_new_Expression(p, BaseA);
       b->baseconst->text = isTrue ? "true" : "false";
       b->baseconst->type = &Bool;
+      b->range = NewRangeWord(old.location, b->baseconst->text);
       return b;
     }
 
     if (l == 4 && strncmp(old.c, "null", 4) == 0) {
-      Expression *nu = Program_new_Expression(p, BaseA, old.location);
+      Expression *nu = Program_new_Expression(p, BaseA);
       nu->baseconst->text = "null";
       nu->baseconst->type = &Null;
+      nu->range = NewRangeWord(old.location, nu->baseconst->text);
       return nu;
     }
 
-    Expression *e = Program_new_Expression(p, IdentifierA, old.location);
+    Expression *e = Program_new_Expression(p, IdentifierA);
     e->id->name = Program_copy_string(p, be_sv(old.c, st->c));
     e->id->type = NULL;
+    e->range = NewRangeWord(old.location, e->id->name);
     return e;
   }
 
   if (check_op(st, "'")) {
-    Expression *e = Program_new_Expression(p, BaseA, old.location);
+    Expression *e = Program_new_Expression(p, BaseA);
     e->baseconst->type = &Char;
     if (!st->c[0])
       FATAL(&st->location, "unclosed char constant");
@@ -1927,11 +1961,12 @@ Expression *Program_parse_atom(Program *p, State *st) {
     if (st->c[0] != '\'')
       FATAL(&st->location, "Wrong char constant '%s' '%c'", e->baseconst->text, st->c[0]);
     State_skip(st, 1);
+    e->range = NewRangeLength(old.location, strlen(e->baseconst->text) + 2);
     return e;
   }
 
   if (check_op(st, "\"")) {
-    Expression *e = Program_new_Expression(p, BaseA, old.location);
+    Expression *e = Program_new_Expression(p, BaseA);
     e->baseconst->type = &String;
     bool slash_escaped = false;
     if (st->c[0] != '"') {
@@ -1945,6 +1980,7 @@ Expression *Program_parse_atom(Program *p, State *st) {
     }
 
     e->baseconst->text = Program_copy_string(p, be_sv(old.c + 1, st->c));
+    e->range = NewRangeLength(old.location, strlen(e->baseconst->text) + 2);
     State_skip(st, 1);
     return e;
   }
@@ -1956,13 +1992,14 @@ Expression *Program_parse_atom(Program *p, State *st) {
   int temp_i;
   Type *t_temp_i;
   if (read_int(st, &temp_i, &t_temp_i) && (!is_float || st->c >= f.c)) {
-    Expression *e = Program_new_Expression(p, BaseA, old.location);
+    Expression *e = Program_new_Expression(p, BaseA);
     e->baseconst->type = t_temp_i;
     e->baseconst->text = Program_copy_string(p, be_sv(old.c, st->c));
+    e->range = NewRangeWord(old.location, e->baseconst->text);
     return e;
   } else if (is_float) {
     *st = f;
-    Expression *e = Program_new_Expression(p, BaseA, old.location);
+    Expression *e = Program_new_Expression(p, BaseA);
     if (st->c[0] == 'f') {
       e->baseconst->type = &f32;
       State_skip(st, 1);
@@ -1970,6 +2007,7 @@ Expression *Program_parse_atom(Program *p, State *st) {
       e->baseconst->type = &f64;
     }
     e->baseconst->text = Program_copy_string(p, be_sv(old.c, st->c));
+    e->range = NewRangeWord(old.location, e->baseconst->text);
     return e;
   }
 
@@ -2051,16 +2089,18 @@ Expression *Program_parse_construction(Program *p, Module *m, State *st) {
     *st = old;
     Type *type = Program_parse_declared_type(p, m, st, false);
     if (type && check_op(st, "{")) {
-      Expression *construct = Program_new_Expression(p, ConstructE, old.location);
+      Expression *construct = Program_new_Expression(p, ConstructE);
       construct->construct->p = Program_parse_named_parameter_list(p, m, st);
       if (construct->construct->p.len == 0)
         construct->construct->p = Program_parse_parameter_list(p, m, st);
       if (!check_op(st, "}"))
         FATAL(&st->location, "unfinished constructor call, missing '}'");
       construct->construct->type = type;
+      construct->range = NewRange(old.location, st->location);
       if (new_construct) {
-        Expression *new_c = Program_new_Expression(p, NewE, new_loc.location);
+        Expression *new_c = Program_new_Expression(p, NewE);
         new_c->newE->o = construct;
+        new_c->range = NewRange(new_loc.location, st->location);
         return new_c;
       }
       return construct;
@@ -2078,11 +2118,12 @@ Expression *Program_parse_array_construction(Program *p, Module *m, State *st) {
   State old = *st;
 
   if (check_op(st, "[")) {
-    Expression *construct = Program_new_Expression(p, ConstructE, old.location);
+    Expression *construct = Program_new_Expression(p, ConstructE);
     construct->construct->p = Program_parse_parameter_list(p, m, st);
     if (!check_op(st, "]"))
       FATAL(&st->location, "unfinished constructor call, missing ']'");
     construct->construct->type = NULL;
+    construct->range = NewRange(old.location, st->location);
     return construct;
   }
 
@@ -2103,21 +2144,23 @@ Expression *Program_parse_suffix_expression(Program *p, Module *m, State *st, Ex
     if (!check_identifier(st))
       FATAL(&st->location, "missing id for member access");
     const char *member = Program_copy_string(p, be_sv(b, st->c));
-    Expression *ma = Program_new_Expression(p, MemberAccessE, old.location);
+    Expression *ma = Program_new_Expression(p, MemberAccessE);
     ma->member->o = e;
     ma->member->o_type = NULL;
     ma->member->member = (Identifier *)Program_alloc(p, sizeof(Identifier));
     ma->member->member->name = member;
     ma->member->member->type = NULL;
+    ma->range = NewRange(old.location, st->location);
     ma = Program_parse_suffix_expression(p, m, st, ma);
     return ma;
   }
 
   bool decrement = check_op(st, "--");
   if (decrement || check_op(st, "++")) {
-    Expression *post = Program_new_Expression(p, UnaryPostfixE, old.location);
+    Expression *post = Program_new_Expression(p, UnaryPostfixE);
     post->unpost->o = e;
     post->unpost->op = decrement ? "--" : "++";
+    post->range = NewRangeLength(old.location, 2);
     post = Program_parse_suffix_expression(p, m, st, post);
     return post;
   }
@@ -2128,40 +2171,44 @@ Expression *Program_parse_suffix_expression(Program *p, Module *m, State *st, Ex
       FATAL(&st->location, "missing '[]' content");
     Expression *acc = NULL;
     if (check_op(st, ":")) {
-      acc = Program_new_Expression(p, SliceE, old.location);
+      acc = Program_new_Expression(p, SliceE);
       acc->slice->o = e;
       acc->slice->begin = a;
       acc->slice->end = Program_parse_expression(p, m, st);
       if (!acc->slice->end) {
-        acc->slice->end = Program_new_Expression(p, BaseA, st->location);
+        acc->slice->end = Program_new_Expression(p, BaseA);
         acc->slice->end->baseconst->text = "0";
         acc->slice->end->baseconst->type = &i32;
+        acc->slice->end->range = NewRangeLength(st->location, 0);
       }
     } else {
-      acc = Program_new_Expression(p, AccessE, old.location);
+      acc = Program_new_Expression(p, AccessE);
       acc->access->o = e;
       acc->access->p = a;
     }
     if (!check_op(st, "]"))
       FATAL(&st->location, "missing closing ']' for subscription '%s'", st->c);
+    acc->range = NewRange(old.location, st->location);
     acc = Program_parse_suffix_expression(p, m, st, acc);
     return acc;
   }
 
   if (check_op(st, "(")) {
-    Expression *call = Program_new_Expression(p, CallE, old.location);
+    Expression *call = Program_new_Expression(p, CallE);
     call->call->o = e;
     call->call->p = Program_parse_parameter_list(p, m, st);
     if (!check_op(st, ")"))
       FATAL(&st->location, "unfinished function call, missing ')'");
+    call->range = NewRange(old.location, st->location);
     call = Program_parse_suffix_expression(p, m, st, call);
     return call;
   }
 
   if (check_word(st, "as")) {
-    Expression *cast = Program_new_Expression(p, AsCast, old.location);
+    Expression *cast = Program_new_Expression(p, AsCast);
     cast->cast->o = e;
     cast->cast->type = Program_parse_declared_type(p, m, st, true);
+    cast->range = NewRange(old.location, st->location);
     return cast;
   }
   return e;
@@ -2174,11 +2221,12 @@ Expression *Program_parse_auto_declaration_(Program *p, Module *m, State *st) {
   if (check_identifier(st)) {
     const char *ne = st->c;
     if (check_op(st, ":=")) {
-      Expression *at = Program_new_Expression(p, AutoTypeE, old.location);
+      Expression *at = Program_new_Expression(p, AutoTypeE);
       at->autotype->e = Program_parse_expression(p, m, st);
       if (!at->autotype->e)
         FATAL(&st->location, "missing expression for auto assignment ");
       at->autotype->name = Program_copy_string(p, be_sv(old.c, ne));
+      at->range = NewRange(old.location, st->location);
       return at;
     }
   }
@@ -2196,9 +2244,10 @@ Expression *Program_parse_cconst_declaration(Program *p, State *st) {
     if (check_op(st, ":=")) {
       skip_whitespace(st);
       if (check_word(st, "cconst")) {
-        Expression *at = Program_new_Expression(p, AutoTypeE, old.location);
+        Expression *at = Program_new_Expression(p, AutoTypeE);
         at->autotype->name = Program_copy_string(p, be_sv(old.c, ne));
         at->autotype->e = NULL;
+        at->range = NewRange(old.location, st->location);
         return at;
       }
     }
@@ -2210,18 +2259,20 @@ Expression *Program_parse_cconst_declaration(Program *p, State *st) {
 
 Expression *Program_parse_unary_operand(Program *p, Module *m, State *st) {
   Expression *prefix = NULL;
+  Location startL = st->location;
   const char *un_pre_ops[] = {"++", "--", "*", "~", "!", "-", "+", "&"};
   for (size_t i = 0; i < sizeof(un_pre_ops) / sizeof(const char *); ++i) {
     if (check_op(st, un_pre_ops[i])) {
-      prefix = Program_new_Expression(p, UnaryPrefixE, back(st, i < 2 ? 2 : 1));
+      prefix = Program_new_Expression(p, UnaryPrefixE);
       prefix->unpre->op = un_pre_ops[i];
       break;
     }
   }
 
   Expression *e = NULL;
+  Location startB = st->location;
   if (check_op(st, "(")) {
-    e = Program_new_Expression(p, BraceE, back(st, 1));
+    e = Program_new_Expression(p, BraceE);
     e->brace->o = Program_parse_expression(p, m, st);
     if (!e->brace->o)
       FATAL(&st->location, "missing '(' content");
@@ -2241,9 +2292,12 @@ Expression *Program_parse_unary_operand(Program *p, Module *m, State *st) {
   if (!e)
     return NULL;
 
+  e->range = NewRange(startB, st->location);
+
   e = Program_parse_suffix_expression(p, m, st, e);
   if (prefix) {
     prefix->unpre->o = e;
+    prefix->range = NewRange(startL, st->location);
     return prefix;
   }
   return e;
@@ -2255,8 +2309,9 @@ Expression *Program_parse_bin_operator(Program *p, State *st) {
 
   for (size_t i = 0; i < sizeof(ops) / sizeof(BinOp); ++i) {
     if (check_op(st, ops[i].op)) {
-      Expression *bin = Program_new_Expression(p, BinaryOperationE, back(st, strlen(ops[i].op)));
+      Expression *bin = Program_new_Expression(p, BinaryOperationE);
       bin->binop->op = &ops[i];
+      bin->range = NewRange(back(st, strlen(ops[i].op)), st->location);
       return bin;
     }
   }
@@ -2349,7 +2404,7 @@ Expression *Program_parse_expression(Program *p, Module *m, State *st) {
 
   State old = *st;
   if (check_op(st, "?")) {
-    Expression *e = Program_new_Expression(p, TernaryOperationE, old.location);
+    Expression *e = Program_new_Expression(p, TernaryOperationE);
     e->ternop->condition = yard.val_stack[0];
     if (!(e->ternop->if_e = Program_parse_expression(p, m, st)))
       FATAL(&old.location, "expect 1st expression for ternary operation");
@@ -2364,6 +2419,7 @@ Expression *Program_parse_expression(Program *p, Module *m, State *st) {
       e = e->ternop->condition;
       ternop->condition = cond;
     }
+    e->range = NewRange(old.location, st->location);
     return e;
   }
 
@@ -2747,7 +2803,7 @@ bool c_type_declare_rec(FILE *f, Type *t, Location *l, const char *var, bool sta
   return hasVarWritten;
 }
 
-bool c_type_declare(FILE *f, Type *t, Location *l, const char *var) { return c_type_declare_rec(f, t, l, var, true); }
+bool c_type_declare(FILE *f, Type *t, Location l, const char *var) { return c_type_declare_rec(f, t, &l, var, true); }
 
 void c_enum_entry_list(FILE *f, const char *module_name, EnumEntry *head) {
   for (EnumEntry *e = head; e; e = e->next) {
@@ -2778,7 +2834,7 @@ void c_var_list(FILE *f, VariableList *v, const char *br) {
       fprintf(f, "%s", br);
     if (v->v[i].is_const)
       fprintf(f, "const ");
-    if (!c_type_declare(f, v->v[i].type, &v->v[i].location, v->v[i].name))
+    if (!c_type_declare(f, v->v[i].type, v->v[i].location, v->v[i].name))
       fprintf(f, " %s", v->v[i].name);
   }
 }
@@ -2801,7 +2857,7 @@ void c_fn_decl(FILE *f, const char *module_name, Function *fn, const char *fn_na
 void c_fn_pointer_decl(FILE *f, Type *tfn, bool named) {
   Function *fn = tfn->fnT;
   if (fn->d.returnType && fn->d.returnType != &Void) {
-    if (c_type_declare(f, fn->d.returnType, &fn->d.return_type_location, ""))
+    if (c_type_declare(f, fn->d.returnType, fn->d.return_type_location, ""))
       FATALX("array return type not supported -> c backend!");
   } else
     fprintf(f, "void");
@@ -2810,7 +2866,7 @@ void c_fn_pointer_decl(FILE *f, Type *tfn, bool named) {
     Variable *v = &fn->d.parameter.v[i];
     if (i > 0) {
       fprintf(f, ", ");
-      c_type_declare(f, v->type, &v->location, "");
+      c_type_declare(f, v->type, v->location, "");
     } else
       fprintf(f, "void*");
   }
@@ -3043,12 +3099,12 @@ Type *c_expression_get_type(Module *m, Expression *e) {
 
   case IdentifierA: {
     if (!e->id->type)
-      FATAL(&e->location, "unknown type for '%s'", e->id->name);
+      FATALR(e->range, "unknown type for '%s'", e->id->name);
     return e->id->type;
   }
   case AutoTypeE: {
     if (!e->autotype->type)
-      FATAL(&e->location, "unknown type for '%s'", e->autotype->name);
+      FATALR(e->range, "unknown type for '%s'", e->autotype->name);
     return e->autotype->type;
   }
   case BraceE:
@@ -3056,14 +3112,14 @@ Type *c_expression_get_type(Module *m, Expression *e) {
 
   case MemberAccessE: {
     if (!e->member->member->type)
-      FATAL(&e->location, "unknown type for '%s'", e->member->member->name);
+      FATALR(e->range, "unknown type for '%s'", e->member->member->name);
     return e->member->member->type;
   }
 
   case CallE: {
     Type *t = c_expression_get_type(m, e->call->o);
     if (!t || (t->kind != FnT && t->kind != MacroT))
-      FATAL(&e->location, "Need a function to be called!");
+      FATALR(e->range, "Need a function to be called!");
     if (t->kind == FnT)
       return t->fnT->d.returnType;
     if (t->kind == MacroT) {
@@ -3077,15 +3133,15 @@ Type *c_expression_get_type(Module *m, Expression *e) {
       else if (strcmp(t->macro_name, "print") == 0)
         return &i32;
       else if (strcmp(t->macro_name, "resize") == 0 || strcmp(t->macro_name, "reserve") == 0)
-        FATAL(&e->location, "'%s' may be more complicated here!", t->macro_name);
+        FATALR(e->range, "'%s' may be more complicated here!", t->macro_name);
       else
-        FATAL(&e->location, "Need a function to be called!");
+        FATALR(e->range, "Need a function to be called!");
     }
   }
 
   case ConstructE: {
     if (!e->construct->type)
-      FATAL(&e->location, "unknown construct type");
+      FATALR(e->range, "unknown construct type");
     return e->construct->type;
   }
   case AccessE: {
@@ -3093,7 +3149,7 @@ Type *c_expression_get_type(Module *m, Expression *e) {
     if (t == &String)
       return &Char;
     if (!t->child)
-      FATAL(&e->location, "unknown access return type for '%s'", Type_name(t).s);
+      FATALR(e->range, "unknown access return type for '%s'", Type_name(t).s);
     return t->child;
   }
   case SliceE: {
@@ -3101,33 +3157,33 @@ Type *c_expression_get_type(Module *m, Expression *e) {
     if (t == &String) {
       Type *st = Module_find_slice_type(global_module(), &Char);
       if (!st)
-        FATAL(&e->location, "internal problem finding slice type for '%s'", Type_name(&Char).s);
+        FATALR(e->range, "internal problem finding slice type for '%s'", Type_name(&Char).s);
       return st;
     }
     if (!t || !t->child)
-      FATAL(&e->location, "unknown slice return type for '%s'", Type_name(t).s);
+      FATALR(e->range, "unknown slice return type for '%s'", Type_name(t).s);
     return t;
   }
 
   case AsCast:
     if (!e->cast->type)
-      FATAL(&e->location, "unknown access return type ");
+      FATALR(e->range, "unknown access return type ");
     return e->cast->type;
 
   case NewE: {
     Type *st = c_expression_get_type(m, e->newE->o);
     Module *cm = Type_defined_module(st);
     if (!cm)
-      FATAL(&e->location, "internal problem finding module for type '%s'", Type_name(st).s);
+      FATALR(e->range, "internal problem finding module for type '%s'", Type_name(st).s);
     if ((TypeKind)st->kind == ArrayT) {
       Type *td = Module_find_dyn_array_type(cm, st->child);
       if (!td)
-        FATAL(&e->location, "internal problem finding dynamic array type for '%s'", Type_name(st).s);
+        FATALR(e->range, "internal problem finding dynamic array type for '%s'", Type_name(st).s);
       return td;
     }
     Type *td = Module_find_pointer_type(cm, st);
     if (!td)
-      FATAL(&e->location, "internal problem finding pointer type for '%s'", Type_name(st).s);
+      FATALR(e->range, "internal problem finding pointer type for '%s'", Type_name(st).s);
     return td;
   }
 
@@ -3139,11 +3195,11 @@ Type *c_expression_get_type(Module *m, Expression *e) {
         FATALX("internal problem finding module for type");
       Type *td = Module_find_pointer_type(cm, st);
       if (!td)
-        FATAL(&e->location, "internal problem finding pointer type for '%s'", Type_name(st).s);
+        FATALR(e->range, "internal problem finding pointer type for '%s'", Type_name(st).s);
       return td;
     } else if (strcmp(e->unpre->op, "*") == 0) {
       if (st->kind != PointerT)
-        FATAL(&e->location, "dereferenceing none pointer type '%s'!", Type_name(st).s);
+        FATALR(e->range, "dereferenceing none pointer type '%s'!", Type_name(st).s);
       return st->child;
     } else if (strcmp(e->unpre->op, "!") == 0) {
       return &Bool;
@@ -3158,8 +3214,8 @@ Type *c_expression_get_type(Module *m, Expression *e) {
     Type *t1 = c_expression_get_type(m, e->binop->o1);
     Type *t2 = c_expression_get_type(m, e->binop->o2);
     if (!Type_convertable(t1, t2) && !Type_convertable(t2, t1)) {
-      FATAL(&e->location, "Expect equal types for binary operation '%s' (%s, %s) (%p, %p)", e->binop->op->op,
-            Type_name(t1).s, Type_name(t2).s, t1, t2);
+      FATALR(e->range, "Expect equal types for binary operation '%s' (%s, %s) (%p, %p)", e->binop->op->op,
+             Type_name(t1).s, Type_name(t2).s, t1, t2);
     }
     if (e->binop->op->returns_bool)
       return &Bool;
@@ -3171,16 +3227,16 @@ Type *c_expression_get_type(Module *m, Expression *e) {
     Type *t1 = c_expression_get_type(m, e->ternop->if_e);
     Type *t2 = c_expression_get_type(m, e->ternop->else_e);
     if (!Type_equal(t1, t2))
-      FATAL(&e->location, "Expect equal types for ternary operation (%s, %s)", Type_name(t1).s, Type_name(t2).s);
+      FATALR(e->range, "Expect equal types for ternary operation (%s, %s)", Type_name(t1).s, Type_name(t2).s);
     return t1;
   }
 
   case CDelegateE: {
-    FATAL(&e->location, "internal error: unexpected delegate");
+    FATALR(e->range, "internal error: unexpected delegate");
     return c_expression_get_type(m, e->cdelegate->o);
   }
   }
-  FATAL(&e->location, "unknown type for expression!");
+  FATALR(e->range, "unknown type for expression!");
   return NULL;
 }
 
@@ -3203,7 +3259,7 @@ bool c_check_macro(FILE *f, Call *ca, Location *l) {
     int i = 0;
     for (; i < ca->p.len; ++i) {
       if (i >= 128)
-        FATAL(&ca->p.p[i].p->location, "Internal error to much parameter for 'print' macro.");
+        FATALR(ca->p.p[i].p->range, "Internal error to much parameter for 'print' macro.");
       param[i] = c_expression_get_type(NULL, ca->p.p[i].p);
       if (param[i] == &String || param[i] == &Bool || (param[i]->kind == PointerT && param[i]->child == &Char))
         fprintf(f, "%%s");
@@ -3234,7 +3290,7 @@ bool c_check_macro(FILE *f, Call *ca, Location *l) {
       else if (param[i] == &Any || param[i]->kind == PointerT || param[i]->kind == DynArrayT)
         fprintf(f, "%%p");
       else
-        FATAL(&ca->p.p[i].p->location, "Unhandled input type for 'print' macro '%s'", Type_name(param[i]).s);
+        FATALR(ca->p.p[i].p->range, "Unhandled input type for 'print' macro '%s'", Type_name(param[i]).s);
 
       if (i + 1 < ca->p.len)
         fprintf(f, "\\t");
@@ -3261,13 +3317,13 @@ bool c_check_macro(FILE *f, Call *ca, Location *l) {
     if (ca->p.len != 1)
       FATAL(l, "'offsetof' expects exact 1 parameter!");
     if (ca->p.p[0].p->type != MemberAccessE)
-      FATAL(&ca->p.p[0].p->location, "'offsetof' expects a member description!");
+      FATALR(ca->p.p[0].p->range, "'offsetof' expects a member description!");
     MemberAccess *ma = ca->p.p[0].p->member;
     if (ma->o->type != IdentifierA)
-      FATAL(&ca->p.p[0].p->location, "'offsetof' expects a struct name!");
+      FATALR(ca->p.p[0].p->range, "'offsetof' expects a struct name!");
     Module *mam = Type_defined_module(ma->o_type);
     if (!mam)
-      FATAL(&ca->p.p[0].p->location, "Unknown type!");
+      FATALR(ca->p.p[0].p->range, "Unknown type!");
 
     fprintf(f, "offsetof(%s%s, %s)", (ma->o_type->kind == CStructT ? "" : mam->c_name), ma->o->id->name,
             ma->member->name);
@@ -3278,7 +3334,7 @@ bool c_check_macro(FILE *f, Call *ca, Location *l) {
     if (!arg_type || arg_type->kind != DynArrayT)
       FATAL(l, "Type '%s' not working as dynamic array!", Type_name(arg_type).s);
     fprintf(f, "__%s_ARRAY(", ca->o->id->name);
-    if (c_type_declare(f, arg_type->child, l, "<<>>"))
+    if (c_type_declare(f, arg_type->child, *l, "<<>>"))
       FATAL(l, "Type '%s' not working as dynamic array!", Type_name(arg_type).s);
     fprintf(f, ", ");
     c_parameter(f, &ca->p, true);
@@ -3290,7 +3346,7 @@ bool c_check_macro(FILE *f, Call *ca, Location *l) {
     if (!arg_type || arg_type->kind != DynArrayT)
       FATAL(l, "Type '%s' not working as dynamic array!", Type_name(arg_type).s);
     fprintf(f, "__%s_ARRAY(", ca->o->id->name);
-    if (c_type_declare(f, arg_type->child, l, "<<>>"))
+    if (c_type_declare(f, arg_type->child, *l, "<<>>"))
       FATAL(l, "Type '%s' not working as dynamic array!", Type_name(arg_type).s);
     fprintf(f, ", ");
     c_parameter(f, &ca->p, true);
@@ -3348,7 +3404,7 @@ bool c_check_macro(FILE *f, Call *ca, Location *l) {
     case FnT:
     case ConstantWrapperT:
     case PlaceHolder:
-      FATAL(&ca->p.p[0].p->location, "Can't get 'len' for type '%s'!", Type_name(arg_type).s);
+      FATALR(ca->p.p[0].p->range, "Can't get 'len' for type '%s'!", Type_name(arg_type).s);
       break;
     }
   }
@@ -3374,7 +3430,7 @@ void c_expression(FILE *f, Expression *e) {
 
   case IdentifierA:
     if (!e->id->type)
-      FATAL(&e->location, "unknown type for id '%s'", e->id->name);
+      FATALR(e->range, "unknown type for id '%s'", e->id->name);
     if (e->id->type->kind == FnT && !e->id->type->fnT->is_extern_c)
       fprintf(f, "%s", Type_defined_module(e->id->type)->c_name);
     else if (e->id->type->kind == ConstantWrapperT && e->id->type->constantModule)
@@ -3390,7 +3446,7 @@ void c_expression(FILE *f, Expression *e) {
     break;
 
   case AutoTypeE: {
-    if (!c_type_declare(f, e->autotype->type, &e->location, e->autotype->name))
+    if (!c_type_declare(f, e->autotype->type, RangeStart(e->range), e->autotype->name))
       fprintf(f, " %s", e->autotype->name);
     fprintf(f, " = ");
     c_expression(f, e->autotype->e);
@@ -3405,7 +3461,8 @@ void c_expression(FILE *f, Expression *e) {
   }
 
   case CallE: {
-    if (c_check_macro(f, e->call, &e->location))
+    Location l = RangeStart(e->range);
+    if (c_check_macro(f, e->call, &l))
       return;
 
     c_expression(f, e->call->o);
@@ -3417,14 +3474,14 @@ void c_expression(FILE *f, Expression *e) {
 
   case NewE: {
     if (e->newE->o->type != ConstructE)
-      FATAL(&e->location, "expect construction for 'new'");
+      FATALR(e->range, "expect construction for 'new'");
     Type *t = e->newE->o->construct->type;
     if ((TypeKind)t->kind == ArrayT) {
       int count = t->array_count;
       t = t->child;
       fprintf(f, "__NEW_ARRAY(");
-      if (c_type_declare(f, t, &e->location, "<<>>"))
-        FATAL(&e->location, "Type '%s' not working as dynamic array!", Type_name(t).s);
+      if (c_type_declare(f, t, RangeStart(e->range), "<<>>"))
+        FATALR(e->range, "Type '%s' not working as dynamic array!", Type_name(t).s);
       fprintf(f, ", %d)", count);
       Module_find_pointer_type(Type_defined_module(t), t);
     } else {
@@ -3442,9 +3499,9 @@ void c_expression(FILE *f, Expression *e) {
         fprintf(f, "(%s%s){NULL, NULL}", Type_defined_module(e->construct->type)->c_name, e->construct->type->name);
       } else {
         if (e->construct->p.len != 2)
-          FATAL(&e->location, "Interface construction has wrong number of parameter!");
+          FATALR(e->range, "Interface construction has wrong number of parameter!");
         if (e->construct->p.p[1].p->type != IdentifierA)
-          FATAL(&e->location, "Interface construction has missing table name!");
+          FATALR(e->range, "Interface construction has missing table name!");
         if (e->construct->pointer)
           fprintf(f, "&");
         fprintf(f, "(%s%s){(void *)(", Type_defined_module(e->construct->type)->c_name, e->construct->type->name);
@@ -3459,7 +3516,7 @@ void c_expression(FILE *f, Expression *e) {
       else if (e->construct->type->kind == ArrayT)
         fprintf(f, "{");
       else
-        FATAL(&e->location, "unexpect type for construction (or missing impementation)");
+        FATALR(e->range, "unexpect type for construction (or missing impementation)");
       c_parameter(f, &e->construct->p, false);
       fprintf(f, "}");
     }
@@ -3470,11 +3527,11 @@ void c_expression(FILE *f, Expression *e) {
     Type *type_to_access = c_expression_get_type(NULL, e->access->o);
     if (type_to_access && (TypeKind)type_to_access->kind == SliceT) {
       fprintf(f, "(*(");
-      c_type_declare(f, type_to_access->child, &e->location, ".:.");
+      c_type_declare(f, type_to_access->child, RangeStart(e->range), ".:.");
       fprintf(f, "*)__slice_member(");
       c_expression(f, e->access->o);
       fprintf(f, ", sizeof(");
-      c_type_declare(f, type_to_access->child, &e->location, ".:.");
+      c_type_declare(f, type_to_access->child, RangeStart(e->range), ".:.");
       fprintf(f, "), ");
       c_expression(f, e->access->p);
       fprintf(f, "))");
@@ -3491,7 +3548,7 @@ void c_expression(FILE *f, Expression *e) {
   case SliceE: {
     Type *type_to_access = c_expression_get_type(NULL, e->slice->o);
     if (!type_to_access || (!type_to_access->child && type_to_access != &String))
-      FATAL(&e->location, "Error creating slice type");
+      FATALR(e->range, "Error creating slice type");
 
     if (type_to_access->kind == DynArrayT) {
       fprintf(f, "__slice_from_dyn_array(");
@@ -3500,14 +3557,14 @@ void c_expression(FILE *f, Expression *e) {
     } else if (type_to_access->kind == SliceT) {
       fprintf(f, "__slice_from_slice(");
     } else
-      FATAL(&e->location, "Problem with slice creation for '%s'", Type_name(type_to_access).s);
+      FATALR(e->range, "Problem with slice creation for '%s'", Type_name(type_to_access).s);
 
     c_expression(f, e->slice->o);
     fprintf(f, ", sizeof(");
     if (type_to_access == &String)
       fprintf(f, "char");
     else
-      c_type_declare(f, type_to_access->child, &e->location, ".:.");
+      c_type_declare(f, type_to_access->child, RangeStart(e->range), ".:.");
     fprintf(f, "), ");
     if ((TypeKind)type_to_access->kind == ArrayT || type_to_access == &String) {
       fprintf(f, "sizeof(");
@@ -3523,27 +3580,27 @@ void c_expression(FILE *f, Expression *e) {
 
   case MemberAccessE: {
     if (!e->member->o_type)
-      FATAL(&e->location, "missing type for access");
+      FATALR(e->range, "missing type for access");
     if (e->member->o_type->kind == EnumT || e->member->o_type->kind == CEnumT) {
       if (e->member->member->type->kind == EnumT)
         fprintf(f, "%s%s", Type_defined_module(e->member->member->type)->c_name, e->member->member->name);
       else if (e->member->member->type->kind == CEnumT)
         fprintf(f, "%s", e->member->member->name);
       else
-        FATAL(&e->location, "Missing implementation!");
+        FATALR(e->range, "Missing implementation!");
       break;
     }
     if (!e->member->member->type)
-      FATAL(&e->location, "unknown type for member '%s'", e->member->member->name);
+      FATALR(e->range, "unknown type for member '%s'", e->member->member->name);
     TypeKind kk = (TypeKind)e->member->member->type->kind;
     if (kk == ConstantWrapperT)
       kk = (TypeKind)e->member->member->type->child->kind;
     switch (kk) {
     case ConstantWrapperT:
-      FATAL(&e->location, "Internal error for constant type '%s'", Type_name(e->member->member->type).s);
+      FATALR(e->range, "Internal error for constant type '%s'", Type_name(e->member->member->type).s);
       break;
     case PlaceHolder:
-      FATAL(&e->location, "Use of unknow type '%s'", Type_name(e->member->member->type).s);
+      FATALR(e->range, "Use of unknow type '%s'", Type_name(e->member->member->type).s);
       break;
     case EnumT:
     case CEnumT:
@@ -3564,7 +3621,7 @@ void c_expression(FILE *f, Expression *e) {
       break;
     case MacroT:
     case FnT:
-      FATAL(&e->location, "internal error creating member function call!");
+      FATALR(e->range, "internal error creating member function call!");
       break;
     }
     break;
@@ -3572,8 +3629,8 @@ void c_expression(FILE *f, Expression *e) {
 
   case AsCast:
     fprintf(f, "((");
-    if (c_type_declare(f, e->cast->type, &e->location, ""))
-      FATAL(&e->location, "I don't know right now how to handle array cast  stuff!");
+    if (c_type_declare(f, e->cast->type, RangeStart(e->range), ""))
+      FATALR(e->range, "I don't know right now how to handle array cast  stuff!");
     fprintf(f, ")(");
     c_expression(f, e->cast->o);
     fprintf(f, "))");
@@ -3647,21 +3704,21 @@ void c_if_statement(FILE *f, Statement *s, int indent) {
     Expression *backup = s->ifS->condition;
     s->ifS->condition = &(Expression){
         .type = BraceE,
-        .location = backup->location,
+        .range = backup->range,
         .brace = &(Brace){
             .o = &(Expression){
-                .binop = &(BinaryOperation){.o1 = &(Expression){.location = backup->location,
+                .binop = &(BinaryOperation){.o1 = &(Expression){.range = backup->range,
                                                                 .type = IdentifierA,
                                                                 .id = &(Identifier){.name = backup->autotype->name,
                                                                                     .type = backup->autotype->type}},
                                             .o2 = backup->autotype->e,
                                             .op = getop("=")},
                 .type = BinaryOperationE,
-                .location = backup->location,
+                .range = backup->range,
             }}};
 
     fprintf(f, "%.*s", indent + 2, SPACE);
-    if (!c_type_declare(f, backup->autotype->type, &backup->location, backup->autotype->name))
+    if (!c_type_declare(f, backup->autotype->type, RangeStart(backup->range), backup->autotype->name))
       fprintf(f, " %s;", backup->autotype->name);
     c_if_statement_base(f, s, indent + 2);
     fprintf(f, "%.*s}", indent, SPACE);
@@ -3684,21 +3741,21 @@ void c_switch_statement(FILE *f, Statement *s, int indent) {
     Expression *backup = s->switchS->condition;
     s->switchS->condition = &(Expression){
         .type = BraceE,
-        .location = backup->location,
+        .range = backup->range,
         .brace = &(Brace){
             .o = &(Expression){
-                .binop = &(BinaryOperation){.o1 = &(Expression){.location = backup->location,
+                .binop = &(BinaryOperation){.o1 = &(Expression){.range = backup->range,
                                                                 .type = IdentifierA,
                                                                 .id = &(Identifier){.name = backup->autotype->name,
                                                                                     .type = backup->autotype->type}},
                                             .o2 = backup->autotype->e,
                                             .op = getop("=")},
                 .type = BinaryOperationE,
-                .location = backup->location,
+                .range = backup->range,
             }}};
 
     fprintf(f, "%.*s", indent + 2, SPACE);
-    if (!c_type_declare(f, backup->autotype->type, &backup->location, backup->autotype->name))
+    if (!c_type_declare(f, backup->autotype->type, RangeStart(backup->range), backup->autotype->name))
       fprintf(f, " %s;", backup->autotype->name);
     c_switch_statement_base(f, s, indent + 2);
     fprintf(f, "%.*s}", indent, SPACE);
@@ -3751,7 +3808,7 @@ void c_statements(FILE *f, Statement *s, int indent) {
     case ConstantWrapperT:
     case SliceT:
     case PlaceHolder:
-      FATAL(&s->deleteS->e->location, "Can't delete type '%s'!", Type_name(arg_type).s);
+      FATALR(s->deleteS->e->range, "Can't delete type '%s'!", Type_name(arg_type).s);
       break;
     }
 
@@ -3826,7 +3883,7 @@ void c_statements(FILE *f, Statement *s, int indent) {
 
 void c_fn_decl(FILE *f, const char *module_name, Function *fn, const char *fn_name) {
   if (fn->d.returnType && fn->d.returnType != &Void) {
-    if (c_type_declare(f, fn->d.returnType, &fn->d.return_type_location, ""))
+    if (c_type_declare(f, fn->d.returnType, fn->d.return_type_location, ""))
       FATALX("array return type not supported -> c backend!");
   } else
     fprintf(f, "void");
@@ -3917,7 +3974,7 @@ void c_Module_constants(FILE *f, Module *m) {
       char t_name[256];
       snprintf(t_name, sizeof(t_name), "%s%s", m->c_name, a->name);
 
-      if (!c_type_declare(f, a->type, &cl->autotype->location, t_name))
+      if (!c_type_declare(f, a->type, RangeStart(cl->autotype->range), t_name))
         fprintf(f, " %s", t_name);
       fprintf(f, " = ");
       c_expression(f, a->e);
@@ -3945,7 +4002,7 @@ void c_Module_fn(FILE *f, Module *m) {
 
 void c_fn_forward_fn(FILE *f, const char *module_name, const char *fn_name, Function *fn) {
   if (fn->d.returnType && fn->d.returnType != &Void) {
-    if (c_type_declare(f, fn->d.returnType, &fn->d.return_type_location, ""))
+    if (c_type_declare(f, fn->d.returnType, fn->d.return_type_location, ""))
       FATALX("array return type not supported -> c backend!");
   } else
     fprintf(f, "void");
@@ -4138,54 +4195,59 @@ Type *Module_find_member(Type *t, const char *name) {
   return NULL;
 }
 
-void CheckInterface_for(Type *got, Type *expect, Location *l) {
+void CheckInterface_for(Type *got, Type *expect, LocationRange l) {
   for (int i = 0; i < expect->interfaceT->methods.len; ++i) {
     const char *allName = expect->interfaceT->methods.fns[i].name;
     const char *name = allName + strlen(expect->name);
     Type *fnt = Module_find_member(got, name);
     if (!fnt || fnt->kind != FnT) {
-      FATAL(l, "Type '%s' does not fit interface '%s'\n  missing method '%s'", Type_name(got).s, Type_name(expect).s,
-            name);
+      FATALR(l, "Type '%s' does not fit interface '%s'\n  missing method '%s'", Type_name(got).s, Type_name(expect).s,
+             name);
     }
   }
 }
 
 Expression *Interface_construct(Program *p, Type *got, Type *expect, Expression *pr) {
   if (got == &Null) {
-    Expression *cE = Program_new_Expression(p, ConstructE, pr->location);
+    Expression *cE = Program_new_Expression(p, ConstructE);
     cE->construct->type = expect;
     cE->construct->p = (ParameterList){NULL, 0};
+    cE->range = pr->range;
 
-    Expression *br = Program_new_Expression(p, BraceE, pr->location);
+    Expression *br = Program_new_Expression(p, BraceE);
     br->brace->o = cE;
+    br->range = pr->range;
     return br;
   }
 
   bool is_pointer = got->kind == PointerT;
   if (!is_pointer) {
     fprintf(stderr, " %s <=> %s %p %p\n", Type_name(got).s, Type_name(expect).s, got, expect);
-    FATAL(&pr->location, "construct interface from none pointer type '%s'", Type_name(got).s);
+    FATALR(pr->range, "construct interface from none pointer type '%s'", Type_name(got).s);
   }
 
   if (is_pointer)
     got = got->child;
-  CheckInterface_for(got, expect, &pr->location);
-  Expression *cE = Program_new_Expression(p, ConstructE, pr->location);
+  CheckInterface_for(got, expect, pr->range);
+  Expression *cE = Program_new_Expression(p, ConstructE);
+  cE->range = pr->range;
   cE->construct->type = expect;
   cE->construct->p = (ParameterList){Program_alloc(p, sizeof(Parameter) * 2), 2};
   cE->construct->p.p[0].name = NULL;
   if (!is_pointer) {
-    Expression *deref = Program_new_Expression(p, UnaryPrefixE, pr->location);
+    Expression *deref = Program_new_Expression(p, UnaryPrefixE);
+    deref->range = pr->range;
     deref->unpre->o = pr;
     deref->unpre->op = "&";
     pr = deref;
   }
   cE->construct->p.p[0].p = pr;
   cE->construct->p.p[1].name = NULL;
-  cE->construct->p.p[1].p = Program_new_Expression(p, IdentifierA, pr->location);
+  cE->construct->p.p[1].p = Program_new_Expression(p, IdentifierA);
+  cE->construct->p.p[1].p->range = pr->range;
   Module *gotM = Type_defined_module(got);
   if (!gotM)
-    FATAL(&pr->location, "could not find module for type '%s'", Type_name(got).s);
+    FATALR(pr->range, "could not find module for type '%s'", Type_name(got).s);
   cE->construct->p.p[1].p->id->name =
       Program_copy_str(p, str("%s%s_%s%s", expect->interfaceT->module->c_name, expect->name, gotM->c_name, got->name));
   cE->construct->p.p[1].p->id->type = NULL;
@@ -4201,7 +4263,8 @@ Expression *Interface_construct(Program *p, Type *got, Type *expect, Expression 
     expect->interfaceT->used_types = tl;
   }
 
-  Expression *br = Program_new_Expression(p, BraceE, pr->location);
+  Expression *br = Program_new_Expression(p, BraceE);
+  br->range = pr->range;
   br->brace->o = pr;
   return br;
 }
@@ -4213,9 +4276,9 @@ Type *AdaptParameter_for(Program *p, Type *got, Type *expect, Parameter *param) 
   } else if (expect->kind == PointerT && expect->child->kind == InterfaceT && got != expect->child) {
     Type *x = AdaptParameter_for(p, got, expect->child, param);
     if (x != expect->child)
-      FATAL(&param->p->location, "internal error constructing interface '%s'", Type_name(expect).s);
+      FATALR(param->p->range, "internal error constructing interface '%s'", Type_name(expect).s);
     if (param->p->type != BraceE || param->p->brace->o->type != ConstructE)
-      FATAL(&param->p->location, "internal error constructing interface '%s'", Type_name(expect).s);
+      FATALR(param->p->range, "internal error constructing interface '%s'", Type_name(expect).s);
     param->p->brace->o->construct->pointer = true;
     Type *xP = Module_find_pointer_type(expect->child->interfaceT->module, expect->child);
     if (!xP) {
@@ -4229,7 +4292,8 @@ Type *AdaptParameter_for(Program *p, Type *got, Type *expect, Parameter *param) 
       xP = Program_add_type(p, PointerT, "", Type_defined_module(expect->child));
       xP->child = expect->child;
     }
-    Expression *prefix = Program_new_Expression(p, UnaryPrefixE, param->p->location);
+    Expression *prefix = Program_new_Expression(p, UnaryPrefixE);
+    prefix->range = param->p->range;
     prefix->unpre->op = "&";
     prefix->unpre->o = param->p;
     param->p = prefix;
@@ -4240,33 +4304,40 @@ Type *AdaptParameter_for(Program *p, Type *got, Type *expect, Parameter *param) 
       xP = Program_add_type(p, PointerT, "", Type_defined_module(expect->child));
       xP->child = expect->child;
     }
-    Expression *mem = Program_new_Expression(p, MemberAccessE, param->p->location);
+    Expression *mem = Program_new_Expression(p, MemberAccessE);
+    mem->range = param->p->range;
     mem->member->o = param->p;
     mem->member->o_type = &Any;
     mem->member->member = (Identifier *)Program_alloc(p, sizeof(Identifier));
     mem->member->member->name = "d";
     mem->member->member->type = &Any;
-    Expression *cast = Program_new_Expression(p, AsCast, param->p->location);
+    Expression *cast = Program_new_Expression(p, AsCast);
+    cast->range = param->p->range;
     cast->cast->o = mem;
     cast->cast->type = xP;
     param->p = cast;
     return xP;
 
   } else if (got->kind == PointerT && expect == got->child && expect != &Bool) {
-    Expression *prefix = Program_new_Expression(p, UnaryPrefixE, param->p->location);
+    Expression *prefix = Program_new_Expression(p, UnaryPrefixE);
+    prefix->range = param->p->range;
     prefix->unpre->op = "*";
     prefix->unpre->o = param->p;
     param->p = prefix;
     return expect;
 
   } else if (expect->kind == SliceT && (got->kind == ArrayT || got->kind == DynArrayT) && expect->child == got->child) {
-    Expression *sa = Program_new_Expression(p, SliceE, param->p->location);
+    Expression *sa = Program_new_Expression(p, SliceE);
+    sa->range = param->p->range;
     sa->slice->o = param->p;
-    sa->slice->begin = Program_new_Expression(p, BaseA, param->p->location);
+    sa->slice->begin = Program_new_Expression(p, BaseA);
+    sa->slice->begin->range = param->p->range;
     sa->slice->begin->baseconst->text = "0";
     sa->slice->begin->baseconst->type = &i32;
-    sa->slice->end = Program_new_Expression(p, CallE, param->p->location);
-    sa->slice->end->call->o = Program_new_Expression(p, IdentifierA, param->p->location);
+    sa->slice->end = Program_new_Expression(p, CallE);
+    sa->slice->end->range = param->p->range;
+    sa->slice->end->call->o = Program_new_Expression(p, IdentifierA);
+    sa->slice->end->call->o->range = param->p->range;
     sa->slice->end->call->o->id->name = "len";
     sa->slice->end->call->o->id->type = NULL;
     sa->slice->end->call->p.len = 1;
@@ -4277,7 +4348,8 @@ Type *AdaptParameter_for(Program *p, Type *got, Type *expect, Parameter *param) 
     return expect;
 
   } else if (got->kind == SliceT && expect == &Any) {
-    Expression *mem = Program_new_Expression(p, MemberAccessE, param->p->location);
+    Expression *mem = Program_new_Expression(p, MemberAccessE);
+    mem->range = param->p->range;
     mem->member->o = param->p;
     mem->member->o_type = &Any;
     mem->member->member = (Identifier *)Program_alloc(p, sizeof(Identifier));
@@ -4287,7 +4359,8 @@ Type *AdaptParameter_for(Program *p, Type *got, Type *expect, Parameter *param) 
     return &Any;
 
   } else if (got->kind == InterfaceT && expect == &Bool) {
-    Expression *mem = Program_new_Expression(p, MemberAccessE, param->p->location);
+    Expression *mem = Program_new_Expression(p, MemberAccessE);
+    mem->range = param->p->range;
     mem->member->o = param->p;
     mem->member->o_type = &Any;
     mem->member->member = (Identifier *)Program_alloc(p, sizeof(Identifier));
@@ -4308,80 +4381,79 @@ Type *c_Macro_make_variables_typed(VariableStack *s, Program *p, Module *m, cons
   ParameterList pl = e->call->p;
   for (; nb_param < pl.len; ++nb_param) {
     if (nb_param >= 32)
-      FATAL(&e->location, "internal error: too much parameter for makro call");
+      FATALR(e->range, "internal error: too much parameter for makro call");
     param[nb_param] = c_Expression_make_variables_typed(s, p, m, pl.p[nb_param].p);
   }
 
   if (strcmp("resize", macro_name) == 0 || strcmp("reserve", macro_name) == 0) {
     if (nb_param < 2)
-      FATAL(&e->location, "missing parameter for macro '%s'!", macro_name);
+      FATALR(e->range, "missing parameter for macro '%s'!", macro_name);
     if (nb_param > 2)
-      FATAL(&e->location, "too much parameter for macro '%s'!", macro_name);
+      FATALR(e->range, "too much parameter for macro '%s'!", macro_name);
     if (param[0]->kind != DynArrayT)
-      FATAL(&pl.p[0].p->location, "expect dynamic array for macro '%s' got '%s'!", macro_name, Type_name(param[0]).s);
+      FATALR(pl.p[0].p->range, "expect dynamic array for macro '%s' got '%s'!", macro_name, Type_name(param[0]).s);
     if (!Type_convertable(&u64, param[1]) && !Type_convertable(&i64, param[1]))
-      FATAL(&pl.p[1].p->location, "expect length unit for macro '%s'!", macro_name);
+      FATALR(pl.p[1].p->range, "expect length unit for macro '%s'!", macro_name);
     return param[0];
   } else if (strcmp("push", macro_name) == 0) {
     if (nb_param < 2)
-      FATAL(&e->location, "missing parameter for macro '%s'!", macro_name);
+      FATALR(e->range, "missing parameter for macro '%s'!", macro_name);
     if (nb_param > 2)
-      FATAL(&e->location, "too much parameter for macro '%s'!", macro_name);
+      FATALR(e->range, "too much parameter for macro '%s'!", macro_name);
     if (param[0]->kind != DynArrayT)
-      FATAL(&pl.p[0].p->location, "expect dynamic array for macro '%s' got '%s'!", macro_name, Type_name(param[0]).s);
+      FATALR(pl.p[0].p->range, "expect dynamic array for macro '%s' got '%s'!", macro_name, Type_name(param[0]).s);
     param[1] = AdaptParameter_for(p, param[1], param[0]->child, &pl.p[1]);
     if (!Type_convertable(param[0]->child, param[1]))
-      FATAL(&pl.p[1].p->location, "can not '%s' type '%s'!", macro_name, Type_name(param[1]).s);
+      FATALR(pl.p[1].p->range, "can not '%s' type '%s'!", macro_name, Type_name(param[1]).s);
     if ((ExpressionType)pl.p[0].p->type == CallE)
-      FATAL(&pl.p[0].p->location, "'%s' does not work for r-values!", macro_name);
+      FATALR(pl.p[0].p->range, "'%s' does not work for r-values!", macro_name);
     return param[0];
   } else if (strcmp("pop", macro_name) == 0 || strcmp("back", macro_name) == 0) {
     if (nb_param < 1)
-      FATAL(&e->location, "missing parameter for macro '%s'!", macro_name);
+      FATALR(e->range, "missing parameter for macro '%s'!", macro_name);
     if (nb_param > 1)
-      FATAL(&e->location, "too much parameter for macro '%s'!", macro_name);
+      FATALR(e->range, "too much parameter for macro '%s'!", macro_name);
     if (param[0]->kind != DynArrayT)
-      FATAL(&pl.p[0].p->location, "expect dynamic array for macro '%s' got '%s'!", macro_name, Type_name(param[0]).s);
+      FATALR(pl.p[0].p->range, "expect dynamic array for macro '%s' got '%s'!", macro_name, Type_name(param[0]).s);
     return param[0]->child;
   } else if (strcmp("clear", macro_name) == 0) {
     if (nb_param < 1)
-      FATAL(&e->location, "missing parameter for macro '%s'!", macro_name);
+      FATALR(e->range, "missing parameter for macro '%s'!", macro_name);
     if (nb_param > 1)
-      FATAL(&e->location, "too much parameter for macro '%s'!", macro_name);
+      FATALR(e->range, "too much parameter for macro '%s'!", macro_name);
     if (param[0]->kind != DynArrayT)
-      FATAL(&pl.p[0].p->location, "expect dynamic array for macro '%s' got '%s'!", macro_name, Type_name(param[0]).s);
+      FATALR(pl.p[0].p->range, "expect dynamic array for macro '%s' got '%s'!", macro_name, Type_name(param[0]).s);
     return param[0];
   } else if (strcmp("sizeof", macro_name) == 0 || strcmp("offsetof", macro_name) == 0 ||
              strcmp("len_s", macro_name) == 0 || strcmp("cap_s", macro_name) == 0) {
     if (nb_param < 1)
-      FATAL(&e->location, "missing parameter for macro '%s'!", macro_name);
+      FATALR(e->range, "missing parameter for macro '%s'!", macro_name);
     if (nb_param > 1)
-      FATAL(&e->location, "too much parameter for macro '%s'!", macro_name);
+      FATALR(e->range, "too much parameter for macro '%s'!", macro_name);
     return &u64;
   } else if (strcmp("len", macro_name) == 0 || strcmp("cap", macro_name) == 0) {
     if (nb_param < 1)
-      FATAL(&e->location, "missing parameter for macro '%s'!", macro_name);
+      FATALR(e->range, "missing parameter for macro '%s'!", macro_name);
     if (nb_param > 1)
-      FATAL(&e->location, "too much parameter for macro '%s'!", macro_name);
+      FATALR(e->range, "too much parameter for macro '%s'!", macro_name);
     return &i32;
   } else if (strcmp("print", macro_name) == 0) {
     return &i32;
   } else if (strcmp("ASSERT", macro_name) == 0) {
     if (nb_param < 1)
-      FATAL(&e->location, "missing parameter for macro '%s'!", macro_name);
+      FATALR(e->range, "missing parameter for macro '%s'!", macro_name);
     if (nb_param > 1)
-      FATAL(&e->location, "too much parameter for macro '%s'!", macro_name);
+      FATALR(e->range, "too much parameter for macro '%s'!", macro_name);
     if (!param[0])
-      FATAL(&pl.p[0].p->location, "void type in macro '%s'!", macro_name);
+      FATALR(pl.p[0].p->range, "void type in macro '%s'!", macro_name);
     if (!Type_convertable(&Bool, param[0]))
-      FATAL(&pl.p[0].p->location, "expect boolean condition for macro '%s' got '%s'!", macro_name,
-            Type_name(param[0]).s);
+      FATALR(pl.p[0].p->range, "expect boolean condition for macro '%s' got '%s'!", macro_name, Type_name(param[0]).s);
     param[0] = AdaptParameter_for(p, param[0], &Bool, &pl.p[0]);
 
     return &Bool;
   }
 
-  FATAL(&e->location, "macro '%s' not implemented!", macro_name);
+  FATALR(e->range, "macro '%s' not implemented!", macro_name);
   return NULL;
 }
 
@@ -4392,7 +4464,7 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
   switch ((ExpressionType)e->type) {
   case BaseA:
     // if (e->baseconst->type == &String)
-    //   FATAL(&e->location, "need convert to Slice");
+    //   FATALR(e->range, "need convert to Slice");
     return e->baseconst->type;
 
   case IdentifierA: {
@@ -4405,7 +4477,7 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
       return e->id->type->child;
     if ((e->id->type = Module_find_type(m, c_sv(e->id->name))))
       return e->id->type;
-    FATAL(&e->location, "unknown type for '%s'", e->id->name);
+    FATALR(e->range, "unknown type for '%s'", e->id->name);
     return NULL;
   }
   case AutoTypeE: {
@@ -4419,7 +4491,7 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
   case MemberAccessE: {
     Type *t = c_Expression_make_variables_typed(s, p, m, e->member->o);
     if (!t)
-      FATAL(&e->location, "member '%s' access to 'void' type", e->member->member->name);
+      FATALR(e->range, "member '%s' access to 'void' type", e->member->member->name);
     if ((TypeKind)t->kind == ConstantWrapperT)
       t = t->child;
     e->member->o_type = t;
@@ -4427,9 +4499,9 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
       t = t->child;
     if (t->kind != StructT && t->kind != CStructT && t->kind != UnionT && t->kind != InterfaceT && t->kind != EnumT &&
         t->kind != CEnumT)
-      FATAL(&e->location, "Expect non pointer type for member access got '%s'", Type_name(t).s);
+      FATALR(e->range, "Expect non pointer type for member access got '%s'", Type_name(t).s);
     if (!(e->member->member->type = Module_find_member(t, e->member->member->name)))
-      FATAL(&e->location, "unknown member '%s' for '%s'", e->member->member->name, Type_name(t).s);
+      FATALR(e->range, "unknown member '%s' for '%s'", e->member->member->name, Type_name(t).s);
     if (e->member->member->type->kind == FnT)
       e->member->member->name = e->member->member->type->name;
     return e->member->member->type;
@@ -4437,7 +4509,7 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
   case CallE: {
     Type *t = c_Expression_make_variables_typed(s, p, m, e->call->o);
     if (!t || (t->kind != FnT && t->kind != MacroT))
-      FATAL(&e->location, "Need a function to be called!");
+      FATALR(e->range, "Need a function to be called!");
 
     if (t->kind == MacroT)
       return c_Macro_make_variables_typed(s, p, m, t->macro_name, e);
@@ -4456,9 +4528,9 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
 
     int p_len = e->call->p.len;
     if (p_len > t->fnT->d.parameter.len && t->fnT->d.parameter.v[t->fnT->d.parameter.len - 1].type != &Ellipsis)
-      FATAL(&e->location, "To much parameter for function call");
+      FATALR(e->range, "To much parameter for function call");
     if (p_len < t->fnT->d.parameter.len && t->fnT->d.parameter.v[t->fnT->d.parameter.len - 1].type != &Ellipsis)
-      FATAL(&e->location, "Missing parameter for function call");
+      FATALR(e->range, "Missing parameter for function call");
 
     int i = 0;
     for (int j = 0; i < e->call->p.len && j < t->fnT->d.parameter.len; ++i, ++j) {
@@ -4466,12 +4538,12 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
       if (!pt)
         pt = c_Expression_make_variables_typed(s, p, m, e->call->p.p[i].p);
       if (!pt)
-        FATAL(&e->call->p.p[i].p->location, "Type missmatch got 'void', expect '%s'",
-              Type_name(t->fnT->d.parameter.v[j].type).s);
+        FATALR(e->call->p.p[i].p->range, "Type missmatch got 'void', expect '%s'",
+               Type_name(t->fnT->d.parameter.v[j].type).s);
       pt = AdaptParameter_for(p, pt, t->fnT->d.parameter.v[j].type, &e->call->p.p[i]);
       if (!Type_convertable(t->fnT->d.parameter.v[j].type, pt))
-        FATAL(&e->call->p.p[i].p->location, "Type missmatch got '%s', expect '%s'", Type_name(pt).s,
-              Type_name(t->fnT->d.parameter.v[j].type).s);
+        FATALR(e->call->p.p[i].p->range, "Type missmatch got '%s', expect '%s'", Type_name(pt).s,
+               Type_name(t->fnT->d.parameter.v[j].type).s);
     }
     for (; i < e->call->p.len; ++i)
       c_Expression_make_variables_typed(s, p, m, e->call->p.p[i].p);
@@ -4484,16 +4556,16 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
       for (Parameter *pa = e->construct->p.p; pa < e->construct->p.p + e->construct->p.len; ++pa) {
         Type *pt = c_Expression_make_variables_typed(s, p, m, pa->p);
         if (first && !Type_equal(pt, first))
-          FATAL(&e->location, "Type missmatch for array element of '%s'!", Type_name(first).s);
+          FATALR(e->range, "Type missmatch for array element of '%s'!", Type_name(first).s);
         if (!first)
           first = pt;
       }
       if (e->construct->p.len == 0 || !first)
-        FATAL(&e->location, "empty array construction");
+        FATALR(e->range, "empty array construction");
 
       Module *first_m = Type_defined_module(first);
       if (!first_m)
-        FATAL(&e->location, "unknown module for type '%s'", Type_name(first).s);
+        FATALR(e->range, "unknown module for type '%s'", Type_name(first).s);
       e->construct->type = Module_find_array_type(first_m, e->construct->p.len, first);
       if (!e->construct->type) {
         e->construct->type = Program_add_type(p, ArrayT, "", first_m);
@@ -4506,17 +4578,17 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
       for (int i = 0; i < e->construct->p.len; ++i) {
         Parameter *pa = &e->construct->p.p[i];
         if (pa->name)
-          FATAL(&pa->p->location, "Named construction '%s' for none struct type '%s'!", pa->name,
-                Type_name(e->construct->type).s);
+          FATALR(pa->p->range, "Named construction '%s' for none struct type '%s'!", pa->name,
+                 Type_name(e->construct->type).s);
       }
     if (e->construct->type->kind == ArrayT) {
       if (e->construct->type->array_count > 0 && e->construct->p.len > e->construct->type->array_count)
-        FATAL(&e->location, "Too many initializer for array of '%s'!", Type_name(e->construct->type).s);
+        FATALR(e->range, "Too many initializer for array of '%s'!", Type_name(e->construct->type).s);
       for (Parameter *pa = e->construct->p.p; pa < e->construct->p.p + e->construct->p.len; ++pa) {
         Type *pt = c_Expression_make_variables_typed(s, p, m, pa->p);
         Type *et = e->construct->type->child;
         if (!Type_equal(pt, et))
-          FATAL(&e->location, "Type missmatch for array element of '%s'!", Type_name(e->construct->type->child).s);
+          FATALR(e->range, "Type missmatch for array element of '%s'!", Type_name(e->construct->type->child).s);
       }
     } else if (e->construct->type->kind == StructT || e->construct->type->kind == CStructT) {
       for (int i = 0; i < e->construct->p.len; ++i) {
@@ -4525,39 +4597,39 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
         if (pa->name) {
           Type *vt = Module_find_member(e->construct->type, pa->name);
           if (!vt)
-            FATAL(&pa->p->location, "Type '%s' has no member '%s'!", Type_name(e->construct->type).s, pa->name);
+            FATALR(pa->p->range, "Type '%s' has no member '%s'!", Type_name(e->construct->type).s, pa->name);
           pt = AdaptParameter_for(p, pt, vt, &e->construct->p.p[i]);
           if (!Type_convertable(vt, pt))
-            FATAL(&pa->p->location, "Type missmatch for member '%s' of '%s'!\n  expect '%s', got '%s' ", pa->name,
-                  Type_name(e->construct->type).s, Type_name(vt).s, Type_name(pt).s);
+            FATALR(pa->p->range, "Type missmatch for member '%s' of '%s'!\n  expect '%s', got '%s' ", pa->name,
+                   Type_name(e->construct->type).s, Type_name(vt).s, Type_name(pt).s);
         } else {
           if (i >= e->construct->type->structT->member.len)
-            FATAL(&e->location, "Too many initializer for struct '%s'", Type_name(e->construct->type).s);
+            FATALR(e->range, "Too many initializer for struct '%s'", Type_name(e->construct->type).s);
           Variable *ma = &e->construct->type->structT->member.v[i];
           pt = AdaptParameter_for(p, pt, ma->type, &e->construct->p.p[i]);
           if (!Type_convertable(ma->type, pt))
-            FATAL(&pa->p->location, "Type missmatch for member '%s' of '%s'!\n  expect '%s', got '%s' ", ma->name,
-                  Type_name(e->construct->type).s, Type_name(ma->type).s, Type_name(pt).s);
+            FATALR(pa->p->range, "Type missmatch for member '%s' of '%s'!\n  expect '%s', got '%s' ", ma->name,
+                   Type_name(e->construct->type).s, Type_name(ma->type).s, Type_name(pt).s);
         }
       }
     } else if (e->construct->type->kind == InterfaceT) {
       if (e->construct->p.len == 0)
         ; // null construct
       else if (e->construct->p.len != 2)
-        FATAL(&e->location, "interfaces could only be constructed with corresponding struct");
+        FATALR(e->range, "interfaces could only be constructed with corresponding struct");
     } else if (e->construct->type->kind == UnionT) {
       if (e->construct->p.len > 1)
-        FATAL(&e->location, "Too many initializer for union '%s'!", Type_name(e->construct->type).s);
+        FATALR(e->range, "Too many initializer for union '%s'!", Type_name(e->construct->type).s);
       if (e->construct->p.len > 0) {
         Parameter *pa = &e->construct->p.p[0];
         Type *pt = c_Expression_make_variables_typed(s, p, m, pa->p);
         if (pa->name) {
           Type *vt = Module_find_member(e->construct->type, pa->name);
           if (!vt)
-            FATAL(&pa->p->location, "Type '%s' has no member '%s'!", Type_name(e->construct->type).s, pa->name);
+            FATALR(pa->p->range, "Type '%s' has no member '%s'!", Type_name(e->construct->type).s, pa->name);
           if (!Type_equal(pt, vt))
-            FATAL(&pa->p->location, "Type missmatch for member '%s' of '%s'!\n  expect '%s', got '%s' ", pa->name,
-                  Type_name(e->construct->type).s, Type_name(vt).s, Type_name(pt).s);
+            FATALR(pa->p->range, "Type missmatch for member '%s' of '%s'!\n  expect '%s', got '%s' ", pa->name,
+                   Type_name(e->construct->type).s, Type_name(vt).s, Type_name(pt).s);
         } else {
           bool any_type_fit = false;
           for (int i = 0; !any_type_fit && i < e->construct->type->structT->member.len; ++i) {
@@ -4567,36 +4639,36 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
               pa->name = v->name;
           }
           if (!any_type_fit)
-            FATAL(&pa->p->location, "Type missmatch for union '%s'!\n  '%s' is not a valid member type",
-                  Type_name(e->construct->type).s, Type_name(pt).s);
+            FATALR(pa->p->range, "Type missmatch for union '%s'!\n  '%s' is not a valid member type",
+                   Type_name(e->construct->type).s, Type_name(pt).s);
         }
       }
     } else {
-      FATAL(&e->location, "construction not possible (or not implemented) for '%s'", Type_name(e->construct->type).s);
+      FATALR(e->range, "construction not possible (or not implemented) for '%s'", Type_name(e->construct->type).s);
     }
     return e->construct->type;
   }
   case AccessE: {
     Type *subt = c_Expression_make_variables_typed(s, p, m, e->access->p);
     if (!Type_convertable(&u64, subt) && !Type_convertable(&i64, subt))
-      FATAL(&e->access->p->location, "Expect integral type for array subscription, got '%s'", Type_name(subt).s);
+      FATALR(e->access->p->range, "Expect integral type for array subscription, got '%s'", Type_name(subt).s);
     Type *t = c_Expression_make_variables_typed(s, p, m, e->access->o);
     if (t == &String)
       return &Char;
     if ((TypeKind)t->kind != ArrayT && t->kind != DynArrayT && t->kind != PointerT && t->kind != SliceT)
-      FATAL(&e->location, "Expect array/pointer type for access got '%s'", Type_name(t).s);
+      FATALR(e->range, "Expect array/pointer type for access got '%s'", Type_name(t).s);
     return t->child;
   }
   case SliceE: {
     Type *begT = c_Expression_make_variables_typed(s, p, m, e->slice->begin);
     if (!Type_convertable(&u64, begT) && !Type_convertable(&i64, begT))
-      FATAL(&e->slice->begin->location, "Expect integral type for slice subscription, got '%s'", Type_name(begT).s);
+      FATALR(e->slice->begin->range, "Expect integral type for slice subscription, got '%s'", Type_name(begT).s);
     Type *endT = c_Expression_make_variables_typed(s, p, m, e->slice->end);
     if (!Type_convertable(&u64, endT) && !Type_convertable(&i64, endT))
-      FATAL(&e->slice->end->location, "Expect integral type for slice subscription, got '%s'", Type_name(endT).s);
+      FATALR(e->slice->end->range, "Expect integral type for slice subscription, got '%s'", Type_name(endT).s);
     Type *t = c_Expression_make_variables_typed(s, p, m, e->slice->o);
     if ((TypeKind)t->kind != ArrayT && t->kind != DynArrayT && t->kind != PointerT && t->kind != SliceT && t != &String)
-      FATAL(&e->location, "Expect array/pointer type for slice creation got '%s'", Type_name(t).s);
+      FATALR(e->range, "Expect array/pointer type for slice creation got '%s'", Type_name(t).s);
     Type *child = t == &String ? &Char : t->child;
     Module *cm = Type_defined_module(child);
     Type *st = Module_find_slice_type(cm, child);
@@ -4644,14 +4716,16 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
       return td;
     } else if (strcmp(e->unpre->op, "*") == 0) {
       if (st->kind != PointerT)
-        FATAL(&e->location, "dereferenceing none pointer type '%s'!", Type_name(st).s);
+        FATALR(e->range, "dereferenceing none pointer type '%s'!", Type_name(st).s);
       return st->child;
     } else if (strcmp(e->unpre->op, "!") == 0) {
       if (!Type_convertable(&Bool, st))
-        FATAL(&e->location, "wrong type for '!' operator '%s'", Type_name(st).s);
+        FATALR(e->range, "wrong type for '!' operator '%s'", Type_name(st).s);
       if (st->kind == InterfaceT) {
-        Expression *cd = Program_new_Expression(p, CDelegateE, e->unpre->o->location);
-        Expression *br = Program_new_Expression(p, BraceE, e->unpre->o->location);
+        Expression *cd = Program_new_Expression(p, CDelegateE);
+        cd->range = e->unpre->o->range;
+        Expression *br = Program_new_Expression(p, BraceE);
+        br->range = e->unpre->o->range;
         br->brace->o = e->unpre->o;
         cd->cdelegate->o = br;
         cd->cdelegate->delegate = ".self";
@@ -4666,13 +4740,15 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
   case BinaryOperationE: {
     Type *t1 = c_Expression_make_variables_typed(s, p, m, e->binop->o1);
     if (!t1)
-      FATAL(&e->location, "void left side in binary expression '%s'", e->binop->op->op);
+      FATALR(e->range, "void left side in binary expression '%s'", e->binop->op->op);
     Type *t2 = c_Expression_make_variables_typed(s, p, m, e->binop->o2);
     if (!t2)
-      FATAL(&e->location, "void right side in binary expression '%s'", e->binop->op->op);
+      FATALR(e->range, "void right side in binary expression '%s'", e->binop->op->op);
     if (t1->kind == InterfaceT && (strcmp(e->binop->op->op, "==") == 0 || strcmp(e->binop->op->op, "!=") == 0)) {
-      Expression *cd = Program_new_Expression(p, CDelegateE, e->binop->o1->location);
-      Expression *br = Program_new_Expression(p, BraceE, e->binop->o2->location);
+      Expression *cd = Program_new_Expression(p, CDelegateE);
+      cd->range = e->binop->o1->range;
+      Expression *br = Program_new_Expression(p, BraceE);
+      br->range = e->binop->o1->range;
       br->brace->o = e->binop->o1;
       cd->cdelegate->o = br;
       cd->cdelegate->delegate = ".self";
@@ -4680,8 +4756,10 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
       // return &Bool;
     }
     if (t2->kind == InterfaceT && (strcmp(e->binop->op->op, "==") == 0 || strcmp(e->binop->op->op, "!=") == 0)) {
-      Expression *cd = Program_new_Expression(p, CDelegateE, e->binop->o2->location);
-      Expression *br = Program_new_Expression(p, BraceE, e->binop->o2->location);
+      Expression *cd = Program_new_Expression(p, CDelegateE);
+      cd->range = e->binop->o2->range;
+      Expression *br = Program_new_Expression(p, BraceE);
+      br->range = e->binop->o2->range;
       br->brace->o = e->binop->o2;
       cd->cdelegate->o = br;
       cd->cdelegate->delegate = ".self";
@@ -4693,8 +4771,10 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
       return t1;
     }
     if (t1 != t2 && t2->kind == InterfaceT && t1 == &Bool && strcmp(e->binop->op->op, "=") == 0) {
-      Expression *cd = Program_new_Expression(p, CDelegateE, e->binop->o2->location);
-      Expression *br = Program_new_Expression(p, BraceE, e->binop->o2->location);
+      Expression *cd = Program_new_Expression(p, CDelegateE);
+      cd->range = e->binop->o2->range;
+      Expression *br = Program_new_Expression(p, BraceE);
+      br->range = e->binop->o2->range;
       br->brace->o = e->binop->o2;
       cd->cdelegate->o = br;
       cd->cdelegate->delegate = ".self";
@@ -4702,8 +4782,8 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
       return t1;
     }
     if (!Type_convertable(t1, t2) && !Type_convertable(t2, t1)) {
-      FATAL(&e->location, "Expect equal types for binary operation '%s' (%s, %s) (%p, %p)", e->binop->op->op,
-            Type_name(t1).s, Type_name(t2).s, t1, t2);
+      FATALR(e->range, "Expect equal types for binary operation '%s' (%s, %s) (%p, %p)", e->binop->op->op,
+             Type_name(t1).s, Type_name(t2).s, t1, t2);
     }
     if (e->binop->op->returns_bool)
       return &Bool;
@@ -4712,9 +4792,10 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
   case TernaryOperationE: {
     Type *tc = c_Expression_make_variables_typed(s, p, m, e->ternop->condition);
     if (tc != &Bool && tc != &Null && tc->kind != PointerT && tc->kind != InterfaceT)
-      FATAL(&e->location, "Expect 'bool' or pointer as contition got '%s'", Type_name(tc).s);
+      FATALR(e->range, "Expect 'bool' or pointer as contition got '%s'", Type_name(tc).s);
     if (tc->kind == InterfaceT) {
-      Expression *cd = Program_new_Expression(p, CDelegateE, e->location);
+      Expression *cd = Program_new_Expression(p, CDelegateE);
+      cd->range = e->range;
       cd->cdelegate->o = e->ternop->condition;
       cd->cdelegate->delegate = ".self";
       e->ternop->condition = cd;
@@ -4722,7 +4803,7 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
     Type *t1 = c_Expression_make_variables_typed(s, p, m, e->ternop->if_e);
     Type *t2 = c_Expression_make_variables_typed(s, p, m, e->ternop->else_e);
     if (!Type_equal(t1, t2))
-      FATAL(&e->location, "Expect equal types for ternary operation (%s, %s)", Type_name(t1).s, Type_name(t2).s);
+      FATALR(e->range, "Expect equal types for ternary operation (%s, %s)", Type_name(t1).s, Type_name(t2).s);
     return t1;
   }
   case CDelegateE: {
@@ -4730,7 +4811,7 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
     return c_Expression_make_variables_typed(s, p, m, e->cdelegate->o);
   }
   }
-  FATAL(&e->location, "unknown type for expression!");
+  FATALR(e->range, "unknown type for expression!");
   return NULL;
 }
 
@@ -5190,8 +5271,7 @@ void write_symbols(Module *m) {
     fprintf(f, "{");
     fprintf(f, "\"name\":\"%s\",", cl->autotype->autotype->name);
     fprintf(f, "\"kind\":\"constant\",");
-    Location *l = &cl->autotype->location;
-    write_symbol_range(f, (LocationRange){l->file, l->line, l->column, l->line, l->column + 100});
+    write_symbol_range(f, cl->autotype->range);
     fprintf(f, "}");
   }
   for (TypeList *l = m->types; l; l = l->next) {
@@ -5248,14 +5328,300 @@ char *read_stdin() {
 int symbols(Program *p, const char *file) {
   char *code = file ? readFile(file) : read_stdin();
   if (!code)
-    return 1;
+    return EXIT_FAILURE;
   State st = State_new(code, "dummy");
   Module *m = Program_add_module(p, "dummy");
   Program_parse_module(p, m, &st);
   write_symbols(m);
   free(code);
 
-  return 0;
+  return EXIT_SUCCESS;
+}
+
+typedef struct DeclarationVar {
+  const char *name;
+  LocationRange range;
+} DeclarationVar;
+
+typedef struct DeclarationStack {
+  DeclarationVar stack[256];
+  int stackSize;
+} DeclarationStack;
+
+void DeclarationStack_push(DeclarationStack *s, const char *n, LocationRange r) {
+  if (s->stackSize >= 256)
+    FATALX("Variable stack limit reached");
+  s->stack[s->stackSize] = (DeclarationVar){n, r};
+  s->stackSize++;
+}
+
+LocationRange DeclarationStack_find(DeclarationStack *s, const char *n) {
+  for (int i = s->stackSize - 1; i >= 0; i--)
+    if (strcmp(s->stack[i].name, n) == 0)
+      return s->stack[i].range;
+  return (LocationRange){};
+}
+
+LocationRange declaration_at_expression(Expression *e, DeclarationStack *ds, int line, int column) {
+  switch ((ExpressionType)e->type) {
+  case BaseA:
+  case IdentifierA:
+    if (inRange(e->range, line, column))
+      return DeclarationStack_find(ds, e->id->name);
+
+    break;
+
+  case AutoTypeE: {
+    DeclarationStack_push(ds, e->autotype->name, e->range);
+    return declaration_at_expression(e->autotype->e, ds, line, column);
+  }
+
+  case BraceE:
+    return declaration_at_expression(e->brace->o, ds, line, column);
+
+  case CallE: {
+    LocationRange re = declaration_at_expression(e->call->o, ds, line, column);
+    if (RangeOk(re))
+      return re;
+    for (int i = 0; i < e->call->p.len; ++i) {
+      if (RangeOk(re = declaration_at_expression(e->call->p.p[i].p, ds, line, column)))
+        return re;
+    }
+    break;
+  }
+
+  case ConstructE: {
+    if (e->construct->type && inRange(NewRangeLength((Location){NULL, e->range.start_line, e->range.start_column},
+                                                     (int)strlen(e->construct->type->name)),
+                                      line, column))
+      return DeclarationStack_find(ds, e->construct->type->name);
+
+    LocationRange re = (LocationRange){};
+    for (int i = 0; i < e->construct->p.len; ++i) {
+      if (RangeOk(re = declaration_at_expression(e->construct->p.p[i].p, ds, line, column)))
+        return re;
+    }
+    break;
+  }
+
+  case NewE:
+    return declaration_at_expression(e->newE->o, ds, line, column);
+
+  case AccessE: {
+    LocationRange re = declaration_at_expression(e->access->o, ds, line, column);
+    if (RangeOk(re))
+      return re;
+    return declaration_at_expression(e->access->p, ds, line, column);
+  }
+
+  case SliceE: {
+    LocationRange re = declaration_at_expression(e->slice->o, ds, line, column);
+    if (RangeOk(re))
+      return re;
+    re = declaration_at_expression(e->slice->begin, ds, line, column);
+    if (RangeOk(re))
+      return re;
+    return declaration_at_expression(e->slice->end, ds, line, column);
+  }
+
+  case MemberAccessE:
+    if (inRange(e->range, line, column)) {
+      // c_expression_get_type(Module *m, e->member->o)
+      // printf("%p\n", e->member->o_type);
+      LocationRange *lr = Type_location(e->member->o_type);
+      if (lr)
+        return *lr;
+    }
+    return declaration_at_expression(e->member->o, ds, line, column);
+
+  case AsCast:
+    return declaration_at_expression(e->cast->o, ds, line, column);
+
+  case UnaryPrefixE:
+    return declaration_at_expression(e->unpre->o, ds, line, column);
+
+  case UnaryPostfixE:
+    return declaration_at_expression(e->unpost->o, ds, line, column);
+
+  case BinaryOperationE: {
+    LocationRange re = declaration_at_expression(e->binop->o1, ds, line, column);
+    if (RangeOk(re))
+      return re;
+    return declaration_at_expression(e->binop->o2, ds, line, column);
+  }
+
+  case TernaryOperationE: {
+    LocationRange re = declaration_at_expression(e->ternop->condition, ds, line, column);
+    if (RangeOk(re))
+      return re;
+    re = declaration_at_expression(e->ternop->if_e, ds, line, column);
+    if (RangeOk(re))
+      return re;
+    return declaration_at_expression(e->ternop->else_e, ds, line, column);
+  }
+
+  case CDelegateE:
+    return declaration_at_expression(e->cdelegate->o, ds, line, column);
+  }
+
+  return (LocationRange){};
+}
+
+LocationRange declaration_at_statement(Statement *s, DeclarationStack *ds, int line, int column) {
+  switch ((StatementType)s->type) {
+
+  case ExpressionS:
+    return declaration_at_expression(s->express->e, ds, line, column);
+  case Return:
+    return declaration_at_expression(s->ret->e, ds, line, column);
+
+  case Default:
+  case Break:
+  case Continue:
+    break;
+
+  case Case: {
+    LocationRange re = declaration_at_expression(s->caseS->caseE, ds, line, column);
+    if (RangeOk(re))
+      return re;
+    return declaration_at_statement(s->caseS->body, ds, line, column);
+  }
+
+  case Delete:
+    return declaration_at_expression(s->deleteS->e, ds, line, column);
+
+  case Scope: {
+    int ds_state = ds->stackSize;
+    LocationRange re = declaration_at_statement(s->scope->body, ds, line, column);
+    ds->stackSize = ds_state;
+    return re;
+  }
+  case If: {
+    int ds_state = ds->stackSize;
+    LocationRange re = declaration_at_expression(s->ifS->condition, ds, line, column);
+    if (!RangeOk(re)) {
+      re = declaration_at_statement(s->ifS->ifBody, ds, line, column);
+      if (!RangeOk(re) && s->ifS->elseBody)
+        re = declaration_at_statement(s->ifS->elseBody, ds, line, column);
+    }
+    ds->stackSize = ds_state;
+    return re;
+  }
+
+  case For: {
+    int ds_state = ds->stackSize;
+    LocationRange re = declaration_at_expression(s->forS->init, ds, line, column);
+    if (!RangeOk(re)) {
+      re = declaration_at_expression(s->forS->condition, ds, line, column);
+      if (!RangeOk(re)) {
+        re = declaration_at_expression(s->forS->incr, ds, line, column);
+        if (!RangeOk(re))
+          re = declaration_at_statement(s->forS->body, ds, line, column);
+      }
+    }
+    ds->stackSize = ds_state;
+    return re;
+  }
+
+  case While: {
+    int ds_state = ds->stackSize;
+    LocationRange re = declaration_at_expression(s->whileS->condition, ds, line, column);
+    if (!RangeOk(re))
+      re = declaration_at_statement(s->whileS->body, ds, line, column);
+    ds->stackSize = ds_state;
+    return re;
+  }
+
+  case DoWhile: {
+    int ds_state = ds->stackSize;
+    LocationRange re = declaration_at_expression(s->doWhileS->condition, ds, line, column);
+    if (!RangeOk(re))
+      re = declaration_at_statement(s->doWhileS->body, ds, line, column);
+    ds->stackSize = ds_state;
+    return re;
+  }
+
+  case Switch: {
+    int ds_state = ds->stackSize;
+    LocationRange re = declaration_at_expression(s->switchS->condition, ds, line, column);
+    if (!RangeOk(re))
+      re = declaration_at_statement(s->switchS->body, ds, line, column);
+    ds->stackSize = ds_state;
+    return re;
+  }
+  }
+
+  return (LocationRange){};
+}
+
+int declaration(Program *p, const char *file, int line, int column) {
+  char *code = file ? readFile(file) : read_stdin();
+  if (!code)
+    return EXIT_FAILURE;
+  State st = State_new(code, "dummy");
+  Module *m = Program_add_module(p, "dummy");
+  Program_parse_module(p, m, &st);
+
+  FILE *f = stdout;
+
+  DeclarationStack ds = (DeclarationStack){};
+  for (TypeList *l = m->types; l; l = l->next) {
+    LocationRange *range = Type_location(l->type);
+    if (range)
+      DeclarationStack_push(&ds, l->type->name, *range);
+  }
+  for (ConstantList *l = m->constants; l; l = l->next)
+    DeclarationStack_push(&ds, m->constants->autotype->autotype->name, m->constants->autotype->range);
+
+  Location l = (Location){NULL, -1, -1};
+  for (TypeList *l = m->types; l; l = l->next) {
+    LocationRange *ll = Type_location(l->type);
+    if (!ll)
+      continue;
+
+    if (ll->start_line > line || ll->end_line < line)
+      continue;
+    if (ll->start_line == line && ll->start_column > column)
+      continue;
+    if (ll->end_line == line && ll->end_column < column)
+      continue;
+
+    if ((TypeKind)l->type->kind != FnT)
+      continue;
+
+    // l->type->fnT->d.return_type_location;
+    // l->type->fnT->d.parameter;
+    int ds_state = ds.stackSize;
+    for (int i = 0; i < l->type->fnT->d.parameter.len; ++i) {
+      Variable *p = &l->type->fnT->d.parameter.v[i];
+      DeclarationStack_push(&ds, p->name, NewRangeWord(p->location, p->name));
+    }
+
+    Statement *tmps[256];
+    int tmps_len = 0;
+    for (Statement *s = l->type->fnT->body; s; s = s->next) {
+      tmps[tmps_len] = s;
+      tmps_len++;
+      if (tmps_len > (int)(sizeof(tmps) / sizeof(Statement *)))
+        FATALX("internal array size to small");
+    }
+
+    for (int i = tmps_len - 1; i >= 0; --i) {
+      LocationRange re = declaration_at_statement(tmps[i], &ds, line, column);
+      if (!RangeOk(re))
+        continue;
+
+      fprintf(f, "{uri:%s,", p->main_file);
+      write_symbol_range(f, re);
+      fprintf(f, "}\n");
+
+      break;
+    }
+    ds.stackSize = ds_state;
+  }
+
+  free(code);
+  return l.line < 0 ? EXIT_FAILURE : EXIT_SUCCESS;
 }
 
 typedef struct CommandLineArgs {
@@ -5290,6 +5656,12 @@ CommandLineArgs parse_command_line(int argc, char *argv[]) {
       break;
     if (strcmp(argv[i], "-o") == 0 && i + 1 < argc) {
       args.output = argv[i + 1];
+      i++;
+    } else if (strcmp(argv[i], "--line") == 0 && i + 1 < argc) {
+      args.line = atoi(argv[i + 1]);
+      i++;
+    } else if (strcmp(argv[i], "--column") == 0 && i + 1 < argc) {
+      args.column = atoi(argv[i + 1]);
       i++;
     } else {
       int len = strlen(argv[i]);
@@ -5437,6 +5809,8 @@ int main(int argc, char *argv[]) {
 
   if (p.mode == Symbols)
     return symbols(&p, p.main_file);
+  else if (p.mode == Declaration)
+    return declaration(&p, p.main_file, args.line, args.column);
 
   Module *m = parse_main(&p);
   if (!m)

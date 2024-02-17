@@ -40,7 +40,7 @@ type SomeAble interface {
 
 A_CONST := 123545
 
-fn main()int {
+fn main(argc i32, argv **char)int {
   more_text := [
     "A", "B", "C"
   ]
@@ -53,6 +53,7 @@ fn main()int {
   print(text[-4: -2])
 
   print("...ok", 1, 2, 3)
+
   return 0
 }
 
