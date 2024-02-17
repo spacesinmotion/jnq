@@ -2554,8 +2554,10 @@ Statement *Program_parse_scope(Program *p, Module *m, State *st) {
   Statement *body = NULL;
   while (*st->c) {
     skip_whitespace(st);
-    if (check_op(st, "}"))
+    if (check_op(st, "}")) {
+      reverse_list(Statement, body);
       return body;
+    }
     body = Program_parse_statement(p, m, st, body);
     if (!body)
       break;
@@ -3769,7 +3771,6 @@ void c_statements(FILE *f, Statement *s, int indent) {
   if (!s)
     return;
 
-  c_statements(f, s->next, indent);
   fprintf(f, "%.*s", indent, SPACE);
   switch ((StatementType)s->type) {
   case ExpressionS:
@@ -3879,6 +3880,8 @@ void c_statements(FILE *f, Statement *s, int indent) {
     c_switch_statement(f, s, indent);
     break;
   }
+
+  c_statements(f, s->next, indent);
 }
 
 void c_fn_decl(FILE *f, const char *module_name, Function *fn, const char *fn_name) {
@@ -4819,8 +4822,6 @@ void c_Statement_make_variables_typed(VariableStack *s, Program *p, Module *m, S
   if (!st)
     return;
 
-  c_Statement_make_variables_typed(s, p, m, st->next);
-
   switch ((StatementType)st->type) {
   case ExpressionS:
     c_Expression_make_variables_typed(s, p, m, st->express->e);
@@ -4896,6 +4897,7 @@ void c_Statement_make_variables_typed(VariableStack *s, Program *p, Module *m, S
     break;
   }
   }
+  c_Statement_make_variables_typed(s, p, m, st->next);
 }
 
 void c_Function_make_variables_typed(VariableStack *s, Program *p, Module *m, Function *f) {
@@ -5492,7 +5494,11 @@ LocationRange declaration_at_statement(Statement *s, DeclarationStack *ds, int l
 
   case Scope: {
     int ds_state = ds->stackSize;
-    LocationRange re = declaration_at_statement(s->scope->body, ds, line, column);
+    LocationRange re = (LocationRange){};
+    for (Statement *sub = s->scope->body; sub; sub = sub->next) {
+      if (RangeOk(re = declaration_at_statement(sub, ds, line, column)))
+        break;
+    }
     ds->stackSize = ds_state;
     return re;
   }
@@ -5597,17 +5603,8 @@ int declaration(Program *p, const char *file, int line, int column) {
       DeclarationStack_push(&ds, p->name, NewRangeWord(p->location, p->name));
     }
 
-    Statement *tmps[256];
-    int tmps_len = 0;
     for (Statement *s = l->type->fnT->body; s; s = s->next) {
-      tmps[tmps_len] = s;
-      tmps_len++;
-      if (tmps_len > (int)(sizeof(tmps) / sizeof(Statement *)))
-        FATALX("internal array size to small");
-    }
-
-    for (int i = tmps_len - 1; i >= 0; --i) {
-      LocationRange re = declaration_at_statement(tmps[i], &ds, line, column);
+      LocationRange re = declaration_at_statement(s, &ds, line, column);
       if (!RangeOk(re))
         continue;
 

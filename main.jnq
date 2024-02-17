@@ -52,7 +52,7 @@ fn main(argc i32, argv **char)int {
 
   {
     text := 123
-    print(text)
+    print(text, sub, more_text[2])
   }
 
   print(text[-4: -2])
