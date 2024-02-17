@@ -50,6 +50,11 @@ fn main(argc i32, argv **char)int {
   sub := text[6: 8]
   print(len(sub), sub)
 
+  {
+    text := 123
+    print(text)
+  }
+
   print(text[-4: -2])
 
   print("...ok", 1, 2, 3)

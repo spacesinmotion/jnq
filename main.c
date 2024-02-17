@@ -5611,7 +5611,7 @@ int declaration(Program *p, const char *file, int line, int column) {
       if (!RangeOk(re))
         continue;
 
-      fprintf(f, "{uri:%s,", p->main_file);
+      fprintf(f, "{");
       write_symbol_range(f, re);
       fprintf(f, "}\n");
 
