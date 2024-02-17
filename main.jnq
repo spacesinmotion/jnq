@@ -55,6 +55,15 @@ fn main(argc i32, argv **char)int {
     print(text, sub, more_text[2])
   }
 
+  switch (StatementType.Break) {
+    case StatementType.Break:
+    x := 1
+    print(1)
+  case StatementType.Case:
+    o := "hello"
+    print(o)
+  }
+
   print(text[-4: -2])
 
   print("...ok", 1, 2, 3)

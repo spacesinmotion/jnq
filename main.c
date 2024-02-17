@@ -2434,6 +2434,7 @@ Statement *Program_parse_case_body(Program *p, Module *m, State *st) {
     State old = *st;
     if (check_op(st, "}") || check_word(st, "case") || check_word(st, "default")) {
       *st = old;
+      reverse_list(Statement, body);
       return body;
     }
     body = Program_parse_statement(p, m, st, body);

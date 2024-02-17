@@ -4,12 +4,17 @@ fn dummy(a int) int {
   return a
 }
 
+type SwitchType enum {
+  Left,
+  Right
+}
+
 fn main() int {
   printf("switches\n")
   a := 0
 
   switch (3) {
-  case 1:
+    case 1:
     ASSERT(false)
   case 3:
     a = 42
@@ -22,7 +27,7 @@ fn main() int {
   ASSERT(a == 42)
 
   switch (9898) {
-  case 1:
+    case 1:
     ASSERT(false)
   case 3:
     ASSERT(false)
@@ -35,12 +40,21 @@ fn main() int {
 
   val := 42
   switch (val := dummy(3)) {
-  case 3:
+    case 3:
     ASSERT(val == 3)
   default:
     ASSERT(false)
   }
   ASSERT(val == 42)
+
+  switch (SwitchType.Left) {
+    case SwitchType.Left:
+    x := 1
+    ASSERT(x == 1)
+  case SwitchType.Right:
+    o := 2
+    ASSERT(o != 2) // should not happen
+  }
 
   printf(" ...ok\n")
   return 0
