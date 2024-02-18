@@ -5366,6 +5366,9 @@ LocationRange DeclarationStack_find(DeclarationStack *s, const char *n) {
 }
 
 LocationRange declaration_at_expression(Expression *e, DeclarationStack *ds, int line, int column) {
+  if (!e)
+    return (LocationRange){};
+
   switch ((ExpressionType)e->type) {
   case BaseA:
   case IdentifierA:
