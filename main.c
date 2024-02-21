@@ -700,6 +700,7 @@ typedef enum ProgramMode {
   Run = 0,
   Symbols,
   Declaration,
+  References,
   Build,
   Transpile,
 } ProgramMode;
@@ -1448,7 +1449,7 @@ bool read_float(State *st, double *f) {
 Module *Program_parse_file(Program *p, const char *path);
 
 Module *Program_parse_sub_file(Program *p, const char *path, Module *parent) {
-  if (p->mode == Symbols || p->mode == Declaration)
+  if (p->mode == Symbols || p->mode == Declaration || p->mode == References)
     return Program_add_module(p, path);
 
   char tempPath[256];
@@ -5184,66 +5185,71 @@ void init_lib_path() {
   strcat(lib_path, "lib.");
 }
 
-void write_symbol_range(FILE *f, LocationRange ll) {
-  fprintf(f, "\"uri\":\"file://%s\",", ll.file);
-  fprintf(f, "\"line\":%d,", ll.start_line);
-  fprintf(f, "\"column\":%d,", ll.start_column);
-  fprintf(f, "\"end_line\":%d,", ll.end_line);
-  fprintf(f, "\"end_column\":%d", ll.end_column);
-}
-
-void write_symbol_enum(FILE *f, const char *enumtype, EnumEntry *ee) {
+void write_lsp_Location(FILE *f, LocationRange re, const char *uri) {
   fprintf(f, "{");
-  fprintf(f, "\"name\":\"%s\",", ee->name);
-  fprintf(f, "\"kind\":\"enummember\",");
-  fprintf(f, "\"containerName\":\"%s\",", enumtype);
-  write_symbol_range(f, (LocationRange){ee->location.file, ee->location.line, ee->location.column, ee->location.line,
-                                        ee->location.column + strlen(ee->name)});
+  fprintf(f, "\"uri\":{\"$mid\":1,\"scheme\":\"file\",\"fsPath\":\"%s\",\"path\":\"%s\",\"external\":\"file://%s\"},",
+          uri, uri, uri);
+  fprintf(f, "\"range\":{");
+  fprintf(f, "\"start\":{");
+  fprintf(f, "\"line\":%d,", re.start_line - 1);
+  fprintf(f, "\"character\":%d},", re.start_column - 1);
+  fprintf(f, "\"end\":{");
+  fprintf(f, "\"line\":%d,", re.end_line - 1);
+  fprintf(f, "\"character\":%d}}", re.end_column - 1);
   fprintf(f, "}");
 }
 
-void write_symbol_member(FILE *f, const char *struct_type, Variable *v) {
-  fprintf(f, "{");
-  fprintf(f, "\"name\":\"%s\",", v->name);
-  fprintf(f, "\"kind\":\"property\",");
-  fprintf(f, "\"containerName\":\"%s\",", struct_type);
-  write_symbol_range(f, (LocationRange){v->location.file, v->location.line, v->location.column, v->location.line,
-                                        v->location.column + strlen(v->name)});
-  fprintf(f, "}");
-}
+// taken from vscode extension code
+typedef enum Lsp_SymbolKind {
+  Lsp_File = 0,
+  Lsp_Module = 1,
+  Lsp_Namespace = 2,
+  Lsp_Package = 3,
+  Lsp_Class = 4,
+  Lsp_Method = 5,
+  Lsp_Property = 6,
+  Lsp_Field = 7,
+  Lsp_Constructor = 8,
+  Lsp_Enum = 9,
+  Lsp_Interface = 10,
+  Lsp_Function = 11,
+  Lsp_Variable = 12,
+  Lsp_Constant = 13,
+  Lsp_String = 14,
+  Lsp_Number = 15,
+  Lsp_Boolean = 16,
+  Lsp_Array = 17,
+  Lsp_Object = 18,
+  Lsp_Key = 19,
+  Lsp_Null = 20,
+  Lsp_EnumMember = 21,
+  Lsp_Struct = 22,
+  Lsp_Event = 23,
+  Lsp_Operator = 24,
+  Lsp_TypeParameter = 25
+} Lsp_SymbolKind;
 
-void write_symbol_method(FILE *f, const char *interface_type, const char *method_name, LocationRange *lr) {
-  fprintf(f, "{");
-  fprintf(f, "\"name\":\"%s\",", method_name);
-  fprintf(f, "\"kind\":\"method\",");
-  fprintf(f, "\"containerName\":\"%s\",", interface_type);
-  write_symbol_range(f, *lr);
-  fprintf(f, "}");
-}
-
-void write_symbol_for(FILE *f, Type *t, LocationRange *ll) {
-  fprintf(f, "{");
-  fprintf(f, "\"name\":\"%s\",", t->name);
-  switch ((TypeKind)t->kind) {
+Lsp_SymbolKind Lsp_SymbolKind_for(TypeKind kind) {
+  switch (kind) {
   case StructT:
   case CStructT:
   case UnionT:
-    fprintf(f, "\"kind\":\"struct\",");
-    break;
+    return Lsp_Struct;
+
   case MacroT:
   case FnT:
-    fprintf(f, "\"kind\":\"fn\",");
-    break;
+    return Lsp_Function;
+
   case EnumT:
   case CEnumT:
-    fprintf(f, "\"kind\":\"enum\",");
-    break;
+    return Lsp_Enum;
+
   case InterfaceT:
-    fprintf(f, "\"kind\":\"interface\",");
-    break;
+    return Lsp_Interface;
+
   case UseT:
-    fprintf(f, "\"kind\":\"import\",");
-    break;
+    return Lsp_Package;
+
   case BaseT:
   case ArrayT:
   case DynArrayT:
@@ -5254,12 +5260,22 @@ void write_symbol_for(FILE *f, Type *t, LocationRange *ll) {
     break;
   }
 
-  write_symbol_range(f, *ll);
+  return Lsp_Variable;
+}
 
+void write_lsp_SymbolInformation(FILE *f, const char *name, Lsp_SymbolKind k, const char *container, LocationRange ll,
+                                 const char *uri) {
+  fprintf(f, "{");
+  fprintf(f, "\"name\":\"%s\",", name);
+  if (container)
+    fprintf(f, "\"containerName\":\"%s\",", container);
+  fprintf(f, "\"kind\":%d,", k);
+  fprintf(f, "\"location\":");
+  write_lsp_Location(f, ll, uri);
   fprintf(f, "}");
 }
 
-void write_symbols(Module *m) {
+void write_symbols(Module *m, const char *uri) {
   FILE *f = stdout;
 
   fprintf(f, "[\n");
@@ -5270,12 +5286,7 @@ void write_symbols(Module *m) {
     if (!first)
       fprintf(f, ",\n");
     first = false;
-
-    fprintf(f, "{");
-    fprintf(f, "\"name\":\"%s\",", cl->autotype->autotype->name);
-    fprintf(f, "\"kind\":\"constant\",");
-    write_symbol_range(f, cl->autotype->range);
-    fprintf(f, "}");
+    write_lsp_SymbolInformation(f, cl->autotype->autotype->name, Lsp_Constant, NULL, cl->autotype->range, uri);
   }
   for (TypeList *l = m->types; l; l = l->next) {
     LocationRange *ll = Type_location(l->type);
@@ -5285,12 +5296,13 @@ void write_symbols(Module *m) {
       fprintf(f, ",\n");
     first = false;
 
-    write_symbol_for(f, l->type, ll);
+    write_lsp_SymbolInformation(f, l->type->name, Lsp_SymbolKind_for((TypeKind)l->type->kind), NULL, *ll, uri);
     if ((TypeKind)l->type->kind == EnumT || (TypeKind)l->type->kind == CEnumT) {
       EnumEntry *ee = l->type->enumT->entries;
       while (ee) {
         fprintf(f, ",\n");
-        write_symbol_enum(f, l->type->name, ee);
+        write_lsp_SymbolInformation(f, ee->name, Lsp_EnumMember, l->type->name, NewRangeWord(ee->location, ee->name),
+                                    uri);
         ee = ee->next;
       }
     } else if ((TypeKind)l->type->kind == StructT || (TypeKind)l->type->kind == UnionT ||
@@ -5298,13 +5310,14 @@ void write_symbols(Module *m) {
       VariableList vl = l->type->structT->member;
       for (int i = 0; i < vl.len; ++i) {
         fprintf(f, ",\n");
-        write_symbol_member(f, l->type->name, &vl.v[i]);
+        write_lsp_SymbolInformation(f, vl.v[i].name, Lsp_Property, l->type->name,
+                                    NewRangeWord(vl.v[i].location, vl.v[i].name), uri);
       }
     } else if ((TypeKind)l->type->kind == InterfaceT) {
       FnVec fl = l->type->interfaceT->methods;
       for (int i = 0; i < fl.len; ++i) {
         fprintf(f, ",\n");
-        write_symbol_method(f, l->type->name, fl.fns[i].name, ll);
+        write_lsp_SymbolInformation(f, fl.fns[i].name, Lsp_Method, l->type->name, *ll, uri);
       }
     }
   }
@@ -5328,14 +5341,14 @@ char *read_stdin() {
   return code;
 }
 
-int symbols(Program *p, const char *file) {
+int symbols(Program *p, const char *file, const char *uri) {
   char *code = file ? readFile(file) : read_stdin();
   if (!code)
     return EXIT_FAILURE;
   State st = State_new(code, "dummy");
   Module *m = Program_add_module(p, "dummy");
   Program_parse_module(p, m, &st);
-  write_symbols(m);
+  write_symbols(m, !uri ? file : uri);
   free(code);
 
   return EXIT_SUCCESS;
@@ -5378,6 +5391,8 @@ LocationRange declaration_at_expression(Expression *e, DeclarationStack *ds, int
     break;
 
   case AutoTypeE: {
+    if (inRange(NewRangeWord(RangeStart(e->range), e->autotype->name), line, column))
+      return e->range;
     DeclarationStack_push(ds, e->autotype->name, e->range);
     return declaration_at_expression(e->autotype->e, ds, line, column);
   }
@@ -5564,10 +5579,13 @@ LocationRange declaration_at_statement(Statement *s, DeclarationStack *ds, int l
   return (LocationRange){};
 }
 
-int declaration(Program *p, const char *file, int line, int column) {
+int declaration(Program *p, const char *file, int line, int column, const char *uri) {
   char *code = file ? readFile(file) : read_stdin();
   if (!code)
     return EXIT_FAILURE;
+
+  uri = !uri ? file : uri;
+
   State st = State_new(code, "dummy");
   Module *m = Program_add_module(p, "dummy");
   Program_parse_module(p, m, &st);
@@ -5612,10 +5630,8 @@ int declaration(Program *p, const char *file, int line, int column) {
       if (!RangeOk(re))
         continue;
 
-      fprintf(f, "{");
-      write_symbol_range(f, re);
-      fprintf(f, "}\n");
-
+      write_lsp_Location(f, re, uri);
+      fprintf(f, "\n");
       break;
     }
     ds.stackSize = ds_state;
@@ -5625,10 +5641,34 @@ int declaration(Program *p, const char *file, int line, int column) {
   return l.line < 0 ? EXIT_FAILURE : EXIT_SUCCESS;
 }
 
+int references(Program *p, const char *file, int line, int column, const char *uri) {
+  char *code = file ? readFile(file) : read_stdin();
+  if (!code)
+    return EXIT_FAILURE;
+
+  uri = !uri ? file : uri;
+
+  State st = State_new(code, "dummy");
+  Module *m = Program_add_module(p, "dummy");
+  Program_parse_module(p, m, &st);
+
+  FILE *f = stdout;
+
+  fprintf(f, "[");
+  write_lsp_Location(f, (LocationRange){uri, line, column, line, column + 10}, uri);
+  fprintf(f, ",");
+  write_lsp_Location(f, (LocationRange){uri, line + 1, column, line + 1, column + 10}, uri);
+  fprintf(f, "]\n");
+
+  free(code);
+  return EXIT_SUCCESS;
+}
+
 typedef struct CommandLineArgs {
   ProgramMode mode;
   const char *output;
   const char *main_file;
+  const char *uri;
   int line, column;
 } CommandLineArgs;
 
@@ -5636,12 +5676,14 @@ CommandLineArgs parse_command_line(int argc, char *argv[]) {
   if (argc <= 1)
     FATALX("missing command line arguments\n");
 
-  CommandLineArgs args = (CommandLineArgs){Run, JNQ_BIN, NULL, 0, 0};
+  CommandLineArgs args = (CommandLineArgs){Run, JNQ_BIN, NULL, NULL, 0, 0};
   int start = 2;
   if (strcmp(argv[1], "symbols") == 0)
     args.mode = Symbols;
   else if (strcmp(argv[1], "declaration") == 0)
     args.mode = Declaration;
+  else if (strcmp(argv[1], "references") == 0)
+    args.mode = References;
   else if (strcmp(argv[1], "build") == 0)
     args.mode = Build;
   else if (strcmp(argv[1], "transpile") == 0)
@@ -5664,6 +5706,9 @@ CommandLineArgs parse_command_line(int argc, char *argv[]) {
     } else if (strcmp(argv[i], "--column") == 0 && i + 1 < argc) {
       args.column = atoi(argv[i + 1]);
       i++;
+    } else if (strcmp(argv[i], "--uri") == 0 && i + 1 < argc) {
+      args.uri = argv[i + 1];
+      i++;
     } else {
       int len = strlen(argv[i]);
       if (len > 4 && strcmp(argv[i] + (len - 4), ".jnq") == 0)
@@ -5671,7 +5716,7 @@ CommandLineArgs parse_command_line(int argc, char *argv[]) {
     }
   }
 
-  if (main_file < 0 && args.mode != Symbols && args.mode != Declaration)
+  if (main_file < 0 && args.mode != Symbols && args.mode != Declaration && args.mode != References)
     FATALX("missing input file\n");
   if (main_file >= 0)
     args.main_file = argv[main_file];
@@ -5809,9 +5854,11 @@ int main(int argc, char *argv[]) {
   p.output = args.output;
 
   if (p.mode == Symbols)
-    return symbols(&p, p.main_file);
+    return symbols(&p, p.main_file, args.uri);
   else if (p.mode == Declaration)
-    return declaration(&p, p.main_file, args.line, args.column);
+    return declaration(&p, p.main_file, args.line, args.column, args.uri);
+  else if (p.mode == References)
+    return references(&p, p.main_file, args.line, args.column, args.uri);
 
   Module *m = parse_main(&p);
   if (!m)
