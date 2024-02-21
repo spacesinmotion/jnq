@@ -135,6 +135,24 @@ Location back(State *s, size_t c) {
   return b;
 }
 
+Location back_to_none_whitespace(State s, State old) {
+  while (s.c > old.c) {
+    s.c--;
+    if (!isspace(*s.c))
+      break;
+  }
+  s.c++;
+  while (s.c > old.c) {
+    if (*old.c == '\n') {
+      old.location.line++;
+      old.location.column = 1;
+    } else
+      ++old.location.column;
+    old.c++;
+  }
+  return old.location;
+}
+
 typedef struct BufString {
   char s[256];
 } BuffString;
@@ -2227,7 +2245,7 @@ Expression *Program_parse_auto_declaration_(Program *p, Module *m, State *st) {
       if (!at->autotype->e)
         FATAL(&st->location, "missing expression for auto assignment ");
       at->autotype->name = Program_copy_string(p, be_sv(old.c, ne));
-      at->range = NewRange(old.location, st->location);
+      at->range = NewRange(old.location, back_to_none_whitespace(*st, old));
       return at;
     }
   }
@@ -2248,7 +2266,7 @@ Expression *Program_parse_cconst_declaration(Program *p, State *st) {
         Expression *at = Program_new_Expression(p, AutoTypeE);
         at->autotype->name = Program_copy_string(p, be_sv(old.c, ne));
         at->autotype->e = NULL;
-        at->range = NewRange(old.location, st->location);
+        at->range = NewRange(old.location, back_to_none_whitespace(*st, old));
         return at;
       }
     }
@@ -2271,7 +2289,7 @@ Expression *Program_parse_unary_operand(Program *p, Module *m, State *st) {
   }
 
   Expression *e = NULL;
-  Location startB = st->location;
+  State startB = *st;
   if (check_op(st, "(")) {
     e = Program_new_Expression(p, BraceE);
     e->brace->o = Program_parse_expression(p, m, st);
@@ -2293,7 +2311,7 @@ Expression *Program_parse_unary_operand(Program *p, Module *m, State *st) {
   if (!e)
     return NULL;
 
-  e->range = NewRange(startB, st->location);
+  e->range = NewRange(startB.location, back_to_none_whitespace(*st, startB));
 
   e = Program_parse_suffix_expression(p, m, st, e);
   if (prefix) {
