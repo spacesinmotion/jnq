@@ -61,10 +61,10 @@ fn main(argc i32, argv **char) int {
     print(1)
   case StatementType.Case:
     o := "hello"
-    print(o)
+    print(o, text)
   }
 
-  print(text[-4: -2])
+  print(argc, text[-4: -2])
 
   print("...ok", 1, 2, 3)
 

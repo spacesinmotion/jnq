@@ -5506,6 +5506,18 @@ LocationRange declaration_at_expression(Expression *e, DeclarationStack *ds, int
   return (LocationRange){};
 }
 
+LocationRange declaration_at_statement(Statement *s, DeclarationStack *ds, int line, int column);
+LocationRange declaration_at_scope_like(Statement *s, DeclarationStack *ds, int line, int column) {
+  int ds_state = ds->stackSize;
+  LocationRange re = (LocationRange){};
+  for (Statement *sub = s; sub; sub = sub->next) {
+    if (RangeOk(re = declaration_at_statement(sub, ds, line, column)))
+      break;
+  }
+  ds->stackSize = ds_state;
+  return re;
+}
+
 LocationRange declaration_at_statement(Statement *s, DeclarationStack *ds, int line, int column) {
   switch ((StatementType)s->type) {
 
@@ -5520,25 +5532,20 @@ LocationRange declaration_at_statement(Statement *s, DeclarationStack *ds, int l
     break;
 
   case Case: {
+    int ds_state = ds->stackSize;
     LocationRange re = declaration_at_expression(s->caseS->caseE, ds, line, column);
-    if (RangeOk(re))
-      return re;
-    return declaration_at_statement(s->caseS->body, ds, line, column);
+    if (!RangeOk(re))
+      re = declaration_at_scope_like(s->caseS->body, ds, line, column);
+    ds->stackSize = ds_state;
+    return re;
   }
 
   case Delete:
     return declaration_at_expression(s->deleteS->e, ds, line, column);
 
-  case Scope: {
-    int ds_state = ds->stackSize;
-    LocationRange re = (LocationRange){};
-    for (Statement *sub = s->scope->body; sub; sub = sub->next) {
-      if (RangeOk(re = declaration_at_statement(sub, ds, line, column)))
-        break;
-    }
-    ds->stackSize = ds_state;
-    return re;
-  }
+  case Scope:
+    return declaration_at_scope_like(s->scope->body, ds, line, column);
+
   case If: {
     int ds_state = ds->stackSize;
     LocationRange re = declaration_at_expression(s->ifS->condition, ds, line, column);
@@ -5643,14 +5650,10 @@ int declaration(Program *p, const char *file, int line, int column, const char *
       DeclarationStack_push(&ds, p->name, NewRangeWord(p->location, p->name));
     }
 
-    for (Statement *s = l->type->fnT->body; s; s = s->next) {
-      LocationRange re = declaration_at_statement(s, &ds, line, column);
-      if (!RangeOk(re))
-        continue;
-
+    LocationRange re = declaration_at_scope_like(l->type->fnT->body, &ds, line, column);
+    if (RangeOk(re)) {
       write_lsp_Location(f, re, uri);
       fprintf(f, "\n");
-      break;
     }
     ds.stackSize = ds_state;
   }
@@ -5746,8 +5749,6 @@ Module *parse_main(Program *p) {
   int jnq_len = strlen(p->main_file);
   if (jnq_len < 4 || strcmp(p->main_file + (jnq_len - 4), ".jnq") != 0)
     FATALX("invalid input file '%s'\n", p->main_file);
-
-  init_lib_path();
 
   BuffString main_mod = (BuffString){};
   if (jnq_len > 255)
@@ -5861,6 +5862,8 @@ int run(Program *p, const char *exec, int argc, char *argv[]) {
 
 int main(int argc, char *argv[]) {
   char buffer[1024 * 1024 * 4];
+
+  init_lib_path();
 
   CommandLineArgs args = parse_command_line(argc, argv);
 
