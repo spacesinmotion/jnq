@@ -21,7 +21,19 @@ type State struct {
   c *char
   line int
 
-  column int
+  column i32
+}
+
+fn at(st *State, i i32) *State {
+  return &st[i]
+}
+
+fn sum(st[*]State) i32 {
+  return st[st[8].column].line
+}
+
+fn sub(st State) i32 {
+  return st.line / st.column
 }
 
 fn StartState(c *char, file *char) State {
@@ -57,6 +69,9 @@ fn main(argc i32, argv **char) int {
     print(text, sub, more_text[2])
   }
 
+  stuff := MemoryArena{}
+  print(stuff.check())
+
   switch (StatementType.Break) {
     case StatementType.Break:
     x := 1
@@ -66,7 +81,7 @@ fn main(argc i32, argv **char) int {
     print(o, text)
   }
 
-  print(argc, text[-4: -2], A_CONST)
+  print(argc, text[-4: -2], A_CONST, B_CONST)
 
   ASSERT(len(C_CONST) == 3)
 

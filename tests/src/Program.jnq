@@ -12,6 +12,10 @@ type MemoryArena struct {
   cap int
 }
 
+fn check(ma *MemoryArena) bool {
+  return false
+}
+
 type Program struct {
   arena MemoryArena
   modules *Module
@@ -90,7 +94,7 @@ fn add_type(p *Program, k TypeKind, name *char, m *Module) *Type {
   tt.name = name;
   tt.kind = k;
   switch (k) {
-  case TypeKind.ModuleT:
+    case TypeKind.ModuleT:
     tt.select.moduleT = null;
 
   case TypeKind.StructT:
@@ -157,7 +161,7 @@ fn new_Statement(p *Program, t StatementType, n *Statement)*Statement {
   s := p.alloc(sizeof(Statement)) as *Statement;
   s._type = t;
   switch (t) {
-  case StatementType.ExpressionS:
+    case StatementType.ExpressionS:
     s.select.express = p.alloc(sizeof(ExpressionStatement)) as *ExpressionStatement
     break;
   case StatementType.Return:

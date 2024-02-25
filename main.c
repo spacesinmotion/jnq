@@ -303,7 +303,7 @@ typedef struct Identifier {
 typedef PACK(struct Variable {
   const char *name;
   Type *type;
-  Location location;
+  LocationRange location;
   bool is_const;
 }) Variable;
 
@@ -654,6 +654,12 @@ Module *Type_defined_module(Type *t) {
     break;
   }
   return NULL;
+}
+
+Type *Type_remove_referening(Type *t) {
+  while (t->kind == PointerT || t->kind == SliceT || t->kind == DynArrayT || t->kind == ArrayT)
+    t = t->child;
+  return t;
 }
 
 LocationRange *Type_location(Type *t) {
@@ -1467,8 +1473,6 @@ bool read_float(State *st, double *f) {
 Module *Program_parse_file(Program *p, const char *path);
 
 Module *Program_parse_sub_file(Program *p, const char *path, Module *parent) {
-  if (p->mode == Symbols || p->mode == Declaration || p->mode == References)
-    return Program_add_module(p, path);
 
   char tempPath[256];
   strcpy(tempPath, parent->path);
@@ -1755,12 +1759,13 @@ Variable Program_parse_variable_declaration(Program *p, Module *m, State *st) {
     skip_whitespace(st);
     if (!check_whitespace_for_nl(st)) {
       if ((type = Program_parse_declared_type(p, m, st, true))) {
-        return (Variable){Program_copy_string(p, be_sv(name_beg, name_end)), type, old.location, is_const};
+        return (Variable){Program_copy_string(p, be_sv(name_beg, name_end)), type, NewRange(old.location, st->location),
+                          is_const};
       }
     }
     *st = old;
   }
-  return (Variable){NULL, NULL, old.location, false};
+  return (Variable){NULL, NULL, {}, false};
 }
 
 VariableList Program_parse_variable_declaration_list(Program *p, Module *m, State *st, const char *end) {
@@ -1782,7 +1787,7 @@ VariableList Program_parse_variable_declaration_list(Program *p, Module *m, Stat
     v[v_len] = Program_parse_variable_declaration(p, m, st);
     if (!v[v_len].name && check_op(st, "...")) {
       v[v_len].name = "...";
-      v[v_len].location = back(st, 3);
+      v[v_len].location = NewRange(back(st, 3), st->location);
       v[v_len].type = &Ellipsis;
     }
     if (!v[v_len].name)
@@ -2856,7 +2861,7 @@ void c_var_list(FILE *f, VariableList *v, const char *br) {
       fprintf(f, "%s", br);
     if (v->v[i].is_const)
       fprintf(f, "const ");
-    if (!c_type_declare(f, v->v[i].type, v->v[i].location, v->v[i].name))
+    if (!c_type_declare(f, v->v[i].type, RangeStart(v->v[i].location), v->v[i].name))
       fprintf(f, " %s", v->v[i].name);
   }
 }
@@ -2888,7 +2893,7 @@ void c_fn_pointer_decl(FILE *f, Type *tfn, bool named) {
     Variable *v = &fn->d.parameter.v[i];
     if (i > 0) {
       fprintf(f, ", ");
-      c_type_declare(f, v->type, v->location, "");
+      c_type_declare(f, v->type, RangeStart(v->location), "");
     } else
       fprintf(f, "void*");
   }
@@ -5206,9 +5211,17 @@ void init_lib_path() {
 }
 
 void write_lsp_Location(FILE *f, LocationRange re, const char *uri) {
+
+  char p[1024] = {0};
+  if (uri[0] != '/') {
+    getcwd(p, sizeof(p));
+    strcat(p, "/");
+  }
+  strcat(p, uri);
+
   fprintf(f, "{");
   fprintf(f, "\"uri\":{\"$mid\":1,\"scheme\":\"file\",\"fsPath\":\"%s\",\"path\":\"%s\",\"external\":\"file://%s\"},",
-          uri, uri, uri);
+          p, p, p);
   fprintf(f, "\"range\":{");
   fprintf(f, "\"start\":{");
   fprintf(f, "\"line\":%d,", re.start_line - 1);
@@ -5283,19 +5296,18 @@ Lsp_SymbolKind Lsp_SymbolKind_for(TypeKind kind) {
   return Lsp_Variable;
 }
 
-void write_lsp_SymbolInformation(FILE *f, const char *name, Lsp_SymbolKind k, const char *container, LocationRange ll,
-                                 const char *uri) {
+void write_lsp_SymbolInformation(FILE *f, const char *name, Lsp_SymbolKind k, const char *container, LocationRange ll) {
   fprintf(f, "{");
   fprintf(f, "\"name\":\"%s\",", name);
   if (container)
     fprintf(f, "\"containerName\":\"%s\",", container);
   fprintf(f, "\"kind\":%d,", k);
   fprintf(f, "\"location\":");
-  write_lsp_Location(f, ll, uri);
+  write_lsp_Location(f, ll, ll.file);
   fprintf(f, "}");
 }
 
-void write_symbols(Module *m, const char *uri) {
+void write_symbols(Module *m) {
   FILE *f = stdout;
 
   fprintf(f, "[\n");
@@ -5306,7 +5318,7 @@ void write_symbols(Module *m, const char *uri) {
     if (!first)
       fprintf(f, ",\n");
     first = false;
-    write_lsp_SymbolInformation(f, cl->autotype->autotype->name, Lsp_Constant, NULL, cl->autotype->range, uri);
+    write_lsp_SymbolInformation(f, cl->autotype->autotype->name, Lsp_Constant, NULL, cl->autotype->range);
   }
   for (TypeList *l = m->types; l; l = l->next) {
     LocationRange *ll = Type_location(l->type);
@@ -5316,13 +5328,12 @@ void write_symbols(Module *m, const char *uri) {
       fprintf(f, ",\n");
     first = false;
 
-    write_lsp_SymbolInformation(f, l->type->name, Lsp_SymbolKind_for((TypeKind)l->type->kind), NULL, *ll, uri);
+    write_lsp_SymbolInformation(f, l->type->name, Lsp_SymbolKind_for((TypeKind)l->type->kind), NULL, *ll);
     if ((TypeKind)l->type->kind == EnumT || (TypeKind)l->type->kind == CEnumT) {
       EnumEntry *ee = l->type->enumT->entries;
       while (ee) {
         fprintf(f, ",\n");
-        write_lsp_SymbolInformation(f, ee->name, Lsp_EnumMember, l->type->name, NewRangeWord(ee->location, ee->name),
-                                    uri);
+        write_lsp_SymbolInformation(f, ee->name, Lsp_EnumMember, l->type->name, NewRangeWord(ee->location, ee->name));
         ee = ee->next;
       }
     } else if ((TypeKind)l->type->kind == StructT || (TypeKind)l->type->kind == UnionT ||
@@ -5330,14 +5341,13 @@ void write_symbols(Module *m, const char *uri) {
       VariableList vl = l->type->structT->member;
       for (int i = 0; i < vl.len; ++i) {
         fprintf(f, ",\n");
-        write_lsp_SymbolInformation(f, vl.v[i].name, Lsp_Property, l->type->name,
-                                    NewRangeWord(vl.v[i].location, vl.v[i].name), uri);
+        write_lsp_SymbolInformation(f, vl.v[i].name, Lsp_Property, l->type->name, vl.v[i].location);
       }
     } else if ((TypeKind)l->type->kind == InterfaceT) {
       FnVec fl = l->type->interfaceT->methods;
       for (int i = 0; i < fl.len; ++i) {
         fprintf(f, ",\n");
-        write_lsp_SymbolInformation(f, fl.fns[i].name, Lsp_Method, l->type->name, *ll, uri);
+        write_lsp_SymbolInformation(f, fl.fns[i].name, Lsp_Method, l->type->name, *ll);
       }
     }
   }
@@ -5361,14 +5371,14 @@ char *read_stdin() {
   return code;
 }
 
-int symbols(Program *p, const char *file, const char *uri) {
+int symbols(Program *p, const char *file) {
   char *code = file ? readFile(file) : read_stdin();
   if (!code)
     return EXIT_FAILURE;
   State st = State_new(code, "dummy");
   Module *m = Program_add_module(p, "dummy");
   Program_parse_module(p, m, &st);
-  write_symbols(m, !uri ? file : uri);
+  write_symbols(m);
   free(code);
 
   return EXIT_SUCCESS;
@@ -5376,6 +5386,7 @@ int symbols(Program *p, const char *file, const char *uri) {
 
 typedef struct DeclarationVar {
   const char *name;
+  Type *type;
   LocationRange range;
 } DeclarationVar;
 
@@ -5384,10 +5395,11 @@ typedef struct DeclarationStack {
   int stackSize;
 } DeclarationStack;
 
-void DeclarationStack_push(DeclarationStack *s, const char *n, LocationRange r) {
+void DeclarationStack_push(DeclarationStack *s, const char *n, Type *t, LocationRange r) {
+  // printf("push %s\n", n);
   if (s->stackSize >= 256)
     FATALX("Variable stack limit reached");
-  s->stack[s->stackSize] = (DeclarationVar){n, r};
+  s->stack[s->stackSize] = (DeclarationVar){n, t, r};
   s->stackSize++;
 }
 
@@ -5396,6 +5408,121 @@ LocationRange DeclarationStack_find(DeclarationStack *s, const char *n) {
     if (strcmp(s->stack[i].name, n) == 0)
       return s->stack[i].range;
   return (LocationRange){};
+}
+
+Type *DeclarationStack_find_type(DeclarationStack *s, const char *n) {
+  for (int i = s->stackSize - 1; i >= 0; i--)
+    if (strcmp(s->stack[i].name, n) == 0)
+      return s->stack[i].type;
+  return NULL;
+}
+
+Type *Struct_member_fn_for(Type *t, const char *name) {
+  if (!t || (t->kind != StructT && t->kind != UnionT && t->kind != CStructT))
+    return NULL;
+
+  Module *m = Type_defined_module(t);
+  if (m) {
+    for (TypeList *tl = m->types; tl; tl = tl->next) {
+      if ((TypeKind)tl->type->kind != FnT)
+        continue;
+      if (tl->type->fnT->d.parameter.len < 1 || strcmp(tl->type->name, name) != 0)
+        continue;
+      if (tl->type->fnT->d.parameter.v[0].type == t ||
+          (tl->type->fnT->d.parameter.v[0].type->kind == PointerT && tl->type->fnT->d.parameter.v[0].type->child == t))
+        return tl->type;
+    }
+  }
+  return NULL;
+}
+
+LocationRange declaration_member_location_of_type(Type *t, const char *name) {
+  switch ((TypeKind)t->kind) {
+  case StructT:
+  case CStructT:
+  case UnionT:
+    for (int i = 0; i < t->structT->member.len; ++i) {
+      if (strcmp(t->structT->member.v[i].name, name) == 0)
+        return t->structT->member.v[i].location;
+    }
+    Type *method = Struct_member_fn_for(t, name);
+    LocationRange *lr = Type_location(method);
+    return lr ? *lr : (LocationRange){};
+
+  case PointerT:
+    return declaration_member_location_of_type(t->child, name);
+
+  case UseT:
+  case BaseT:
+  case EnumT:
+  case CEnumT:
+  case InterfaceT:
+  case ArrayT:
+  case DynArrayT:
+  case SliceT:
+  case FnT:
+  case MacroT:
+  case ConstantWrapperT:
+  case PlaceHolder:
+    break;
+  }
+  return (LocationRange){};
+}
+
+Type *declaration_type_of(Expression *e, DeclarationStack *ds) {
+  switch ((ExpressionType)e->type) {
+  case BaseA:
+    return e->baseconst->type;
+
+  case IdentifierA:
+    return DeclarationStack_find_type(ds, e->id->name);
+
+  case BraceE:
+    return declaration_type_of(e->brace->o, ds);
+
+  case AccessE: {
+    Type *at = declaration_type_of(e->access->o, ds);
+    return at ? at->child : NULL;
+  }
+
+  case SliceE:
+    return declaration_type_of(e->access->o, ds);
+
+  case CallE: {
+    Type *ct = declaration_type_of(e->call->o, ds);
+    return (ct && ct->kind == FnT) ? ct->fnT->d.returnType : NULL;
+  }
+
+  case AutoTypeE:
+  case NewE:
+  case AsCast:
+  case UnaryPrefixE:
+  case UnaryPostfixE:
+  case BinaryOperationE:
+  case TernaryOperationE:
+  case CDelegateE:
+    break;
+
+  case ConstructE: {
+    return e->construct->type;
+    break;
+  }
+
+  case MemberAccessE: {
+    Type *t_of = declaration_type_of(e->member->o, ds);
+    if (t_of->kind == PointerT)
+      t_of = t_of->child;
+    if (t_of && (t_of->kind == StructT || t_of->kind == UnionT || t_of->kind == CStructT)) {
+      for (int i = 0; i < t_of->structT->member.len; ++i)
+        if (strcmp(t_of->structT->member.v[i].name, e->member->member->name) == 0)
+          return t_of->structT->member.v[i].type;
+      Type *method = Struct_member_fn_for(t_of, e->member->member->name);
+      return method ? method : t_of;
+    }
+    break;
+  }
+  }
+  return NULL;
 }
 
 LocationRange declaration_at_expression(Expression *e, DeclarationStack *ds, int line, int column) {
@@ -5407,14 +5534,15 @@ LocationRange declaration_at_expression(Expression *e, DeclarationStack *ds, int
   case IdentifierA:
     if (inRange(e->range, line, column))
       return DeclarationStack_find(ds, e->id->name);
-
     break;
 
   case AutoTypeE: {
     if (inRange(NewRangeWord(RangeStart(e->range), e->autotype->name), line, column))
       return e->range;
-    DeclarationStack_push(ds, e->autotype->name, e->range);
-    return declaration_at_expression(e->autotype->e, ds, line, column);
+    LocationRange re = declaration_at_expression(e->autotype->e, ds, line, column);
+    Type *t_of = declaration_type_of(e->autotype->e, ds);
+    DeclarationStack_push(ds, e->autotype->name, t_of, e->range);
+    return re;
   }
 
   case BraceE:
@@ -5467,11 +5595,15 @@ LocationRange declaration_at_expression(Expression *e, DeclarationStack *ds, int
 
   case MemberAccessE:
     if (inRange(e->range, line, column)) {
-      // c_expression_get_type(Module *m, e->member->o)
-      // printf("%p\n", e->member->o_type);
-      LocationRange *lr = Type_location(e->member->o_type);
-      if (lr)
-        return *lr;
+      Type *t_of = declaration_type_of(e->member->o, ds);
+      if (t_of) {
+        LocationRange lrm = declaration_member_location_of_type(t_of, e->member->member->name);
+        if (RangeOk(lrm))
+          return lrm;
+        LocationRange *lr = Type_location(t_of);
+        if (lr)
+          return *lr;
+      }
     }
     return declaration_at_expression(e->member->o, ds, line, column);
 
@@ -5613,7 +5745,7 @@ int declaration(Program *p, const char *file, int line, int column, const char *
 
   uri = !uri ? file : uri;
 
-  State st = State_new(code, "dummy");
+  State st = State_new(code, uri);
   Module *m = Program_add_module(p, "dummy");
   Program_parse_module(p, m, &st);
 
@@ -5621,14 +5753,22 @@ int declaration(Program *p, const char *file, int line, int column, const char *
 
   DeclarationStack ds = (DeclarationStack){};
   for (TypeList *l = m->types; l; l = l->next) {
-    LocationRange *range = Type_location(l->type);
-    if (range)
-      DeclarationStack_push(&ds, l->type->name, *range);
+    if ((TypeKind)l->type->kind == UseT) {
+      for (int i = 0; i < l->type->useT->type_len; ++i) {
+        LocationRange *range = Type_location(l->type->useT->type[i]);
+        if (range)
+          DeclarationStack_push(&ds, l->type->useT->type[i]->name, l->type->useT->type[i], *range);
+      }
+    } else {
+      LocationRange *range = Type_location(l->type);
+      if (range)
+        DeclarationStack_push(&ds, l->type->name, l->type, *range);
+    }
   }
   for (ConstantList *l = m->constants; l; l = l->next)
-    DeclarationStack_push(&ds, m->constants->autotype->autotype->name, m->constants->autotype->range);
+    DeclarationStack_push(&ds, l->autotype->autotype->name, l->autotype->autotype->type, l->autotype->range);
 
-  Location l = (Location){NULL, -1, -1};
+  LocationRange re = (LocationRange){0};
   for (TypeList *l = m->types; l; l = l->next) {
     LocationRange *ll = Type_location(l->type);
     if (!ll)
@@ -5644,24 +5784,44 @@ int declaration(Program *p, const char *file, int line, int column, const char *
     if ((TypeKind)l->type->kind != FnT)
       continue;
 
-    // l->type->fnT->d.return_type_location;
-    // l->type->fnT->d.parameter;
+    for (int i = 0; i < l->type->fnT->d.parameter.len; ++i) {
+      Variable *p = &l->type->fnT->d.parameter.v[i];
+      LocationRange p_re = NewRangeWord(RangeStart(p->location), p->name);
+      if (inRange(p_re, line, column)) {
+        re = p_re;
+        goto done;
+      }
+      p_re = p->location;
+      p_re.start_column += strlen(p->name) + 1;
+      if (inRange(p_re, line, column)) {
+        LocationRange *tre = Type_location(Type_remove_referening(p->type));
+        if (tre)
+          re = *tre;
+        goto done;
+      }
+    }
+
     int ds_state = ds.stackSize;
     for (int i = 0; i < l->type->fnT->d.parameter.len; ++i) {
       Variable *p = &l->type->fnT->d.parameter.v[i];
-      DeclarationStack_push(&ds, p->name, NewRangeWord(p->location, p->name));
+      DeclarationStack_push(&ds, p->name, p->type, p->location);
     }
 
-    LocationRange re = declaration_at_scope_like(l->type->fnT->body, &ds, line, column);
-    if (RangeOk(re)) {
-      write_lsp_Location(f, re, uri);
-      fprintf(f, "\n");
-    }
+    re = declaration_at_scope_like(l->type->fnT->body, &ds, line, column);
+    if (RangeOk(re))
+      goto done;
+
     ds.stackSize = ds_state;
   }
 
+done:
+  if (RangeOk(re)) {
+    write_lsp_Location(f, re, re.file);
+    fprintf(f, "\n");
+  }
+
   free(code);
-  return l.line < 0 ? EXIT_FAILURE : EXIT_SUCCESS;
+  return RangeOk(re) ? EXIT_SUCCESS : EXIT_FAILURE;
 }
 
 int references(Program *p, const char *file, int line, int column, const char *uri) {
@@ -5877,7 +6037,7 @@ int main(int argc, char *argv[]) {
   p.output = args.output;
 
   if (p.mode == Symbols)
-    return symbols(&p, p.main_file, args.uri);
+    return symbols(&p, p.main_file);
   else if (p.mode == Declaration)
     return declaration(&p, p.main_file, args.line, args.column, args.uri);
   else if (p.mode == References)
