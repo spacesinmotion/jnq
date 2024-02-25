@@ -2762,7 +2762,7 @@ BuffString Type_special_cname(Type *t) {
   return s;
 }
 
-bool c_type_declare_rec(FILE *f, Type *t, Location *l, const char *var, bool start) {
+bool c_type_declare_rec(FILE *f, Type *t, LocationRange l, const char *var, bool start) {
   if (!t || t == &Void)
     return false;
 
@@ -2801,7 +2801,7 @@ bool c_type_declare_rec(FILE *f, Type *t, Location *l, const char *var, bool sta
     return c_type_declare_rec(f, t->child, l, var, true);
     break;
   case UseT:
-    FATAL(l, "Can't use module '%s' as type!", Type_name(t).s);
+    FATALR(l, "Can't use module '%s' as type!", Type_name(t).s);
     break;
   case CStructT:
   case CEnumT:
@@ -2817,21 +2817,23 @@ bool c_type_declare_rec(FILE *f, Type *t, Location *l, const char *var, bool sta
     fprintf(f, "%s", t->c_name);
     break;
   case MacroT:
-    FATAL(l, "Cant handle macro '%s' as type!", t->macro_name);
+    FATALR(l, "Cant handle macro '%s' as type!", t->macro_name);
     break;
   case FnT:
     if (c_type_declare_rec(f, t->fnT->d.returnType, l, "", true))
-      FATAL(l, "I don't know right now how to handle array function pointer stuff!");
+      FATALR(l, "I don't know right now how to handle array function pointer stuff!");
     fprintf(f, "(*())");
     break;
   case PlaceHolder:
-    FATAL(l, "Unkown type '%s'!", t->name);
+    FATALR(l, "Unkown type '%s'!", t->name);
     break;
   }
   return hasVarWritten;
 }
 
-bool c_type_declare(FILE *f, Type *t, Location l, const char *var) { return c_type_declare_rec(f, t, &l, var, true); }
+bool c_type_declare(FILE *f, Type *t, LocationRange l, const char *var) {
+  return c_type_declare_rec(f, t, l, var, true);
+}
 
 void c_enum_entry_list(FILE *f, const char *module_name, EnumEntry *head) {
   for (EnumEntry *e = head; e; e = e->next) {
@@ -2862,7 +2864,7 @@ void c_var_list(FILE *f, VariableList *v, const char *br) {
       fprintf(f, "%s", br);
     if (v->v[i].is_const)
       fprintf(f, "const ");
-    if (!c_type_declare(f, v->v[i].type, RangeStart(v->v[i].location), v->v[i].name))
+    if (!c_type_declare(f, v->v[i].type, v->v[i].location, v->v[i].name))
       fprintf(f, " %s", v->v[i].name);
   }
 }
@@ -2885,7 +2887,7 @@ void c_fn_decl(FILE *f, const char *module_name, Function *fn, const char *fn_na
 void c_fn_pointer_decl(FILE *f, Type *tfn, bool named) {
   Function *fn = tfn->fnT;
   if (fn->d.returnType && fn->d.returnType != &Void) {
-    if (c_type_declare(f, fn->d.returnType, RangeStart(fn->d.return_type_location), ""))
+    if (c_type_declare(f, fn->d.returnType, fn->d.return_type_location, ""))
       FATALX("array return type not supported -> c backend!");
   } else
     fprintf(f, "void");
@@ -2894,7 +2896,7 @@ void c_fn_pointer_decl(FILE *f, Type *tfn, bool named) {
     Variable *v = &fn->d.parameter.v[i];
     if (i > 0) {
       fprintf(f, ", ");
-      c_type_declare(f, v->type, RangeStart(v->location), "");
+      c_type_declare(f, v->type, v->location, "");
     } else
       fprintf(f, "void*");
   }
@@ -3268,14 +3270,14 @@ Type *c_expression_get_type(Module *m, Expression *e) {
   return NULL;
 }
 
-bool c_check_macro(FILE *f, Call *ca, Location *l) {
+bool c_check_macro(FILE *f, Call *ca, LocationRange l) {
   if (ca->o->type != IdentifierA)
     return false;
 
   if (strcmp(ca->o->id->name, "ASSERT") == 0) {
     if (ca->p.len != 1)
-      FATAL(l, "'ASSERT' expects exact 1 parameter!");
-    fprintf(f, "assert_imp_(\"%s\", %d, %d, ", l->file ? l->file : "", l->line, l->column);
+      FATALR(l, "'ASSERT' expects exact 1 parameter!");
+    fprintf(f, "assert_imp_(\"%s\", %d, %d, ", l.file ? l.file : "", l.start_line, l.start_column);
     c_parameter(f, &ca->p, false);
     fprintf(f, ", \"'");
     jnq_expression(f, ca->p.p[0].p);
@@ -3345,7 +3347,7 @@ bool c_check_macro(FILE *f, Call *ca, Location *l) {
     return true;
   } else if (strcmp(ca->o->id->name, "offsetof") == 0) {
     if (ca->p.len != 1)
-      FATAL(l, "'offsetof' expects exact 1 parameter!");
+      FATALR(l, "'offsetof' expects exact 1 parameter!");
     if (ca->p.p[0].p->type != MemberAccessE)
       FATALR(ca->p.p[0].p->range, "'offsetof' expects a member description!");
     MemberAccess *ma = ca->p.p[0].p->member;
@@ -3362,10 +3364,10 @@ bool c_check_macro(FILE *f, Call *ca, Location *l) {
              strcmp(ca->o->id->name, "push") == 0) {
     Type *arg_type = c_expression_get_type(NULL, ca->p.p[0].p);
     if (!arg_type || arg_type->kind != DynArrayT)
-      FATAL(l, "Type '%s' not working as dynamic array!", Type_name(arg_type).s);
+      FATALR(l, "Type '%s' not working as dynamic array!", Type_name(arg_type).s);
     fprintf(f, "__%s_ARRAY(", ca->o->id->name);
-    if (c_type_declare(f, arg_type->child, *l, "<<>>"))
-      FATAL(l, "Type '%s' not working as dynamic array!", Type_name(arg_type).s);
+    if (c_type_declare(f, arg_type->child, l, "<<>>"))
+      FATALR(l, "Type '%s' not working as dynamic array!", Type_name(arg_type).s);
     fprintf(f, ", ");
     c_parameter(f, &ca->p, true);
     fprintf(f, ")");
@@ -3374,10 +3376,10 @@ bool c_check_macro(FILE *f, Call *ca, Location *l) {
              strcmp(ca->o->id->name, "clear") == 0) {
     Type *arg_type = c_expression_get_type(NULL, ca->p.p[0].p);
     if (!arg_type || arg_type->kind != DynArrayT)
-      FATAL(l, "Type '%s' not working as dynamic array!", Type_name(arg_type).s);
+      FATALR(l, "Type '%s' not working as dynamic array!", Type_name(arg_type).s);
     fprintf(f, "__%s_ARRAY(", ca->o->id->name);
-    if (c_type_declare(f, arg_type->child, *l, "<<>>"))
-      FATAL(l, "Type '%s' not working as dynamic array!", Type_name(arg_type).s);
+    if (c_type_declare(f, arg_type->child, l, "<<>>"))
+      FATALR(l, "Type '%s' not working as dynamic array!", Type_name(arg_type).s);
     fprintf(f, ", ");
     c_parameter(f, &ca->p, true);
     fprintf(f, ")");
@@ -3385,7 +3387,7 @@ bool c_check_macro(FILE *f, Call *ca, Location *l) {
   } else if (strcmp(ca->o->id->name, "len_s") == 0 || strcmp(ca->o->id->name, "cap_s") == 0 ||
              strcmp(ca->o->id->name, "len") == 0 || strcmp(ca->o->id->name, "cap") == 0) {
     if (ca->p.len != 1)
-      FATAL(l, "'%s' expects exact 1 parameter!", ca->o->id->name);
+      FATALR(l, "'%s' expects exact 1 parameter!", ca->o->id->name);
     Type *arg_type = c_expression_get_type(NULL, ca->p.p[0].p);
 
     if ((TypeKind)arg_type->kind == ConstantWrapperT)
@@ -3476,7 +3478,7 @@ void c_expression(FILE *f, Expression *e) {
     break;
 
   case AutoTypeE: {
-    if (!c_type_declare(f, e->autotype->type, RangeStart(e->range), e->autotype->name))
+    if (!c_type_declare(f, e->autotype->type, e->range, e->autotype->name))
       fprintf(f, " %s", e->autotype->name);
     fprintf(f, " = ");
     c_expression(f, e->autotype->e);
@@ -3491,8 +3493,7 @@ void c_expression(FILE *f, Expression *e) {
   }
 
   case CallE: {
-    Location l = RangeStart(e->range);
-    if (c_check_macro(f, e->call, &l))
+    if (c_check_macro(f, e->call, e->range))
       return;
 
     c_expression(f, e->call->o);
@@ -3510,7 +3511,7 @@ void c_expression(FILE *f, Expression *e) {
       int count = t->array_count;
       t = t->child;
       fprintf(f, "__NEW_ARRAY(");
-      if (c_type_declare(f, t, RangeStart(e->range), "<<>>"))
+      if (c_type_declare(f, t, e->range, "<<>>"))
         FATALR(e->range, "Type '%s' not working as dynamic array!", Type_name(t).s);
       fprintf(f, ", %d)", count);
       Module_find_pointer_type(Type_defined_module(t), t);
@@ -3557,11 +3558,11 @@ void c_expression(FILE *f, Expression *e) {
     Type *type_to_access = c_expression_get_type(NULL, e->access->o);
     if (type_to_access && (TypeKind)type_to_access->kind == SliceT) {
       fprintf(f, "(*(");
-      c_type_declare(f, type_to_access->child, RangeStart(e->range), ".:.");
+      c_type_declare(f, type_to_access->child, e->range, ".:.");
       fprintf(f, "*)__slice_member(");
       c_expression(f, e->access->o);
       fprintf(f, ", sizeof(");
-      c_type_declare(f, type_to_access->child, RangeStart(e->range), ".:.");
+      c_type_declare(f, type_to_access->child, e->range, ".:.");
       fprintf(f, "), ");
       c_expression(f, e->access->p);
       fprintf(f, "))");
@@ -3594,7 +3595,7 @@ void c_expression(FILE *f, Expression *e) {
     if (type_to_access == &String)
       fprintf(f, "char");
     else
-      c_type_declare(f, type_to_access->child, RangeStart(e->range), ".:.");
+      c_type_declare(f, type_to_access->child, e->range, ".:.");
     fprintf(f, "), ");
     if ((TypeKind)type_to_access->kind == ArrayT || type_to_access == &String) {
       fprintf(f, "sizeof(");
@@ -3659,7 +3660,7 @@ void c_expression(FILE *f, Expression *e) {
 
   case AsCast:
     fprintf(f, "((");
-    if (c_type_declare(f, e->cast->type, RangeStart(e->range), ""))
+    if (c_type_declare(f, e->cast->type, e->range, ""))
       FATALR(e->range, "I don't know right now how to handle array cast  stuff!");
     fprintf(f, ")(");
     c_expression(f, e->cast->o);
@@ -3748,7 +3749,7 @@ void c_if_statement(FILE *f, Statement *s, int indent) {
             }}};
 
     fprintf(f, "%.*s", indent + 2, SPACE);
-    if (!c_type_declare(f, backup->autotype->type, RangeStart(backup->range), backup->autotype->name))
+    if (!c_type_declare(f, backup->autotype->type, backup->range, backup->autotype->name))
       fprintf(f, " %s;", backup->autotype->name);
     c_if_statement_base(f, s, indent + 2);
     fprintf(f, "%.*s}", indent, SPACE);
@@ -3785,7 +3786,7 @@ void c_switch_statement(FILE *f, Statement *s, int indent) {
             }}};
 
     fprintf(f, "%.*s", indent + 2, SPACE);
-    if (!c_type_declare(f, backup->autotype->type, RangeStart(backup->range), backup->autotype->name))
+    if (!c_type_declare(f, backup->autotype->type, backup->range, backup->autotype->name))
       fprintf(f, " %s;", backup->autotype->name);
     c_switch_statement_base(f, s, indent + 2);
     fprintf(f, "%.*s}", indent, SPACE);
@@ -3914,7 +3915,7 @@ void c_statements(FILE *f, Statement *s, int indent) {
 
 void c_fn_decl(FILE *f, const char *module_name, Function *fn, const char *fn_name) {
   if (fn->d.returnType && fn->d.returnType != &Void) {
-    if (c_type_declare(f, fn->d.returnType, RangeStart(fn->d.return_type_location), ""))
+    if (c_type_declare(f, fn->d.returnType, fn->d.return_type_location, ""))
       FATALX("array return type not supported -> c backend!");
   } else
     fprintf(f, "void");
@@ -4005,7 +4006,7 @@ void c_Module_constants(FILE *f, Module *m) {
       char t_name[256];
       snprintf(t_name, sizeof(t_name), "%s%s", m->c_name, a->name);
 
-      if (!c_type_declare(f, a->type, RangeStart(cl->autotype->range), t_name))
+      if (!c_type_declare(f, a->type, cl->autotype->range, t_name))
         fprintf(f, " %s", t_name);
       fprintf(f, " = ");
       c_expression(f, a->e);
@@ -4033,7 +4034,7 @@ void c_Module_fn(FILE *f, Module *m) {
 
 void c_fn_forward_fn(FILE *f, const char *module_name, const char *fn_name, Function *fn) {
   if (fn->d.returnType && fn->d.returnType != &Void) {
-    if (c_type_declare(f, fn->d.returnType, RangeStart(fn->d.return_type_location), ""))
+    if (c_type_declare(f, fn->d.returnType, fn->d.return_type_location, ""))
       FATALX("array return type not supported -> c backend!");
   } else
     fprintf(f, "void");
