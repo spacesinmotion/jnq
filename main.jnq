@@ -1,5 +1,5 @@
 
-use MemoryArena from tests.src.Program
+use * from tests.src.Program
 
 type StatementType enum {
   ExpressionS,

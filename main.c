@@ -5568,10 +5568,10 @@ LocationRange declaration_at_expression(Expression *e, DeclarationStack *ds, int
   }
 
   case ConstructE: {
-    if (e->construct->type && inRange(NewRangeLength((Location){NULL, e->range.start_line, e->range.start_column},
-                                                     (int)strlen(e->construct->type->name)),
-                                      line, column))
-      return DeclarationStack_find(ds, e->construct->type->name);
+    if (e->construct->type && inRange(NewRangeWord(RangeStart(e->range), e->construct->type->name), line, column)) {
+      LocationRange *lr = Type_location(e->construct->type);
+      return lr ? *lr : (LocationRange){};
+    }
 
     LocationRange re = (LocationRange){};
     for (int i = 0; i < e->construct->p.len; ++i) {
