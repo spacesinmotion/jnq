@@ -1,6 +1,8 @@
 
 use printf from C.stdio
 
+use early_out_apply from bugs
+
 fn for_loops()
 {
   printf(" .for loops test\n")

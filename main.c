@@ -5754,7 +5754,18 @@ int declaration(Program *p, const char *file, int line, int column, const char *
   uri = !uri ? file : uri;
 
   State st = State_new(code, uri);
-  Module *m = Program_add_module(p, "dummy");
+
+  char mod_path[512];
+  strncpy(mod_path, uri, sizeof(mod_path));
+  char *last = mod_path;
+  for (char *c = mod_path; *c; ++c) {
+    if (*c == '.')
+      last = c;
+    if (*c == '/' || *c == '\\')
+      *c = '.';
+  }
+  *last = '\0';
+  Module *m = Program_add_module(p, mod_path);
   Program_parse_module(p, m, &st);
 
   FILE *f = stdout;
