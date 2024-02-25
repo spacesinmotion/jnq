@@ -517,7 +517,7 @@ typedef struct Struct {
 typedef PACK(struct FunctionDecl {
   VariableList parameter;
   Type *returnType;
-  Location return_type_location;
+  LocationRange return_type_location;
 }) FunctionDecl;
 
 typedef PACK(struct FnVec {
@@ -1841,9 +1841,10 @@ bool Program_parse_fn_decl(Program *p, Module *m, FunctionDecl *fnd, State *st) 
   if (check_op(st, "(")) {
     fnd->parameter = Program_parse_variable_declaration_list(p, m, st, ")");
     skip_whitespace(st);
-    fnd->return_type_location = st->location;
+    Location rt_start = st->location;
     if (!check_type_key_word_at(st->c))
       fnd->returnType = Program_parse_declared_type(p, m, st, true);
+    fnd->return_type_location = NewRange(rt_start, st->location);
     if (!fnd->returnType)
       fnd->returnType = &Void;
     return true;
@@ -2884,7 +2885,7 @@ void c_fn_decl(FILE *f, const char *module_name, Function *fn, const char *fn_na
 void c_fn_pointer_decl(FILE *f, Type *tfn, bool named) {
   Function *fn = tfn->fnT;
   if (fn->d.returnType && fn->d.returnType != &Void) {
-    if (c_type_declare(f, fn->d.returnType, fn->d.return_type_location, ""))
+    if (c_type_declare(f, fn->d.returnType, RangeStart(fn->d.return_type_location), ""))
       FATALX("array return type not supported -> c backend!");
   } else
     fprintf(f, "void");
@@ -3913,7 +3914,7 @@ void c_statements(FILE *f, Statement *s, int indent) {
 
 void c_fn_decl(FILE *f, const char *module_name, Function *fn, const char *fn_name) {
   if (fn->d.returnType && fn->d.returnType != &Void) {
-    if (c_type_declare(f, fn->d.returnType, fn->d.return_type_location, ""))
+    if (c_type_declare(f, fn->d.returnType, RangeStart(fn->d.return_type_location), ""))
       FATALX("array return type not supported -> c backend!");
   } else
     fprintf(f, "void");
@@ -4032,7 +4033,7 @@ void c_Module_fn(FILE *f, Module *m) {
 
 void c_fn_forward_fn(FILE *f, const char *module_name, const char *fn_name, Function *fn) {
   if (fn->d.returnType && fn->d.returnType != &Void) {
-    if (c_type_declare(f, fn->d.returnType, fn->d.return_type_location, ""))
+    if (c_type_declare(f, fn->d.returnType, RangeStart(fn->d.return_type_location), ""))
       FATALX("array return type not supported -> c backend!");
   } else
     fprintf(f, "void");
@@ -5789,6 +5790,15 @@ int declaration(Program *p, const char *file, int line, int column, const char *
       p_re.start_column += strlen(p->name) + 1;
       if (inRange(p_re, line, column)) {
         LocationRange *tre = Type_location(Type_remove_referening(p->type));
+        if (tre)
+          re = *tre;
+        goto done;
+      }
+    }
+    // check return type location
+    if (l->type->fnT->d.returnType) {
+      if (inRange(l->type->fnT->d.return_type_location, line, column)) {
+        LocationRange *tre = Type_location(Type_remove_referening(l->type->fnT->d.returnType));
         if (tre)
           re = *tre;
         goto done;
