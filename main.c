@@ -5771,19 +5771,13 @@ int declaration(Program *p, const char *file, int line, int column, const char *
   LocationRange re = (LocationRange){0};
   for (TypeList *l = m->types; l; l = l->next) {
     LocationRange *ll = Type_location(l->type);
-    if (!ll)
-      continue;
-
-    if (ll->start_line > line || ll->end_line < line)
-      continue;
-    if (ll->start_line == line && ll->start_column > column)
-      continue;
-    if (ll->end_line == line && ll->end_column < column)
+    if (!ll || !inRange(*ll, line, column))
       continue;
 
     if ((TypeKind)l->type->kind != FnT)
       continue;
 
+    // check paramteter location
     for (int i = 0; i < l->type->fnT->d.parameter.len; ++i) {
       Variable *p = &l->type->fnT->d.parameter.v[i];
       LocationRange p_re = NewRangeWord(RangeStart(p->location), p->name);
@@ -5801,12 +5795,14 @@ int declaration(Program *p, const char *file, int line, int column, const char *
       }
     }
 
+    // push parameter location
     int ds_state = ds.stackSize;
     for (int i = 0; i < l->type->fnT->d.parameter.len; ++i) {
       Variable *p = &l->type->fnT->d.parameter.v[i];
       DeclarationStack_push(&ds, p->name, p->type, p->location);
     }
 
+    // check fn body
     re = declaration_at_scope_like(l->type->fnT->body, &ds, line, column);
     if (RangeOk(re))
       goto done;
