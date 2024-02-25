@@ -5454,10 +5454,16 @@ LocationRange declaration_member_location_of_type(Type *t, const char *name) {
   case PointerT:
     return declaration_member_location_of_type(t->child, name);
 
-  case UseT:
-  case BaseT:
   case EnumT:
   case CEnumT:
+    for (EnumEntry *ee = t->enumT->entries; ee; ee = ee->next) {
+      if (strcmp(ee->name, name) == 0)
+        return NewRangeWord(ee->location, ee->name);
+    }
+    break;
+
+  case UseT:
+  case BaseT:
   case InterfaceT:
   case ArrayT:
   case DynArrayT:
