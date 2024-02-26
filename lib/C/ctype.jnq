@@ -1,0 +1,15 @@
+
+cfn isalnum(c i32) bool
+cfn isalpha(c i32) bool
+cfn isblank(c i32) bool
+cfn iscntrl(c i32) bool
+cfn isdigit(c i32) bool
+cfn isgraph(c i32) bool
+cfn islower(c i32) bool
+cfn isprint(c i32) bool
+cfn ispunct(c i32) bool
+cfn isspace(c i32) bool
+cfn isupper(c i32) bool
+cfn isxdigit(c i32) bool
+cfn tolower(c i32) i32
+cfn toupper(c i32) i32 
