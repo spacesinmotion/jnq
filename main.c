@@ -4370,7 +4370,7 @@ Type *AdaptParameter_for(Program *p, Type *got, Type *expect, Parameter *param) 
     sa->slice->begin->baseconst->type = &i32;
     sa->slice->end = Program_new_Expression(p, BaseA);
     sa->slice->end->range = param->p->range;
-    sa->slice->end->baseconst->text = "-1";
+    sa->slice->end->baseconst->text = got == &String ? "-1" : "0";
     sa->slice->end->baseconst->type = &i32;
     param->p = sa;
     return expect;

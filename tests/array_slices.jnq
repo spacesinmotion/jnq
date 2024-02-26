@@ -18,6 +18,13 @@ fn check_all_doubled(a[]i32){
     ASSERT(a[i] == i * 2)
 }
 
+fn default_cast_check_size(a[]i32, expect i32){
+  ASSERT(len(a) == expect)
+}
+fn default_cast_check_size_char(a[]char, expect i32){
+  ASSERT(len(a) == expect)
+}
+
 fn simple_int()
 {
   print(" .simple_int")
@@ -199,6 +206,11 @@ fn array_default_cast_to_slices()
   for (i := 0; i < len(aa); ++i)
     aa[i] = 2 * i
   check_all_doubled(aa)
+  default_cast_check_size(aa, 12)
+
+  bb := [9]char{}
+  default_cast_check_size_char(bb, 9)
+  default_cast_check_size_char("some", 4)
 }
 
 fn dynamic_array_default_cast_to_slices()
