@@ -1,7 +1,9 @@
 
 use printf from C.stdio
 
-use early_out_apply from bugs
+use early_out_apply from tests.bugs
+
+use * from tests.sub.util
 
 fn for_loops()
 {
@@ -79,7 +81,7 @@ fn break_loops() {
 }
 
 fn main() int {
-  printf("loops\n")
+  print("loops")
 
   for_loops()
   while_loops()
@@ -87,6 +89,6 @@ fn main() int {
   continue_loops()
   break_loops()
 
-  printf(" ...ok\n")
+  print(" ...ok\n", identity(42))
   return 0
 }

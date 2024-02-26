@@ -47,3 +47,7 @@ fn val(s *Some2) int {
 
   return s.xx * 2
 }
+
+fn identity(v i32) i32 {
+  return v
+}

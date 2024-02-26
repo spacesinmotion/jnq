@@ -5773,10 +5773,20 @@ int declaration(Program *p, const char *file, int line, int column, const char *
   DeclarationStack ds = (DeclarationStack){};
   for (TypeList *l = m->types; l; l = l->next) {
     if ((TypeKind)l->type->kind == UseT) {
-      for (int i = 0; i < l->type->useT->type_len; ++i) {
-        LocationRange *range = Type_location(l->type->useT->type[i]);
-        if (range)
-          DeclarationStack_push(&ds, l->type->useT->type[i]->name, l->type->useT->type[i], *range);
+      if (l->type->useT->take_all) {
+        for (TypeList *ll = l->type->useT->module->types; ll; ll = ll->next) {
+          if (!Type_is_import_type(ll->type))
+            continue;
+          LocationRange *range = Type_location(ll->type);
+          if (range)
+            DeclarationStack_push(&ds, ll->type->name, ll->type, *range);
+        }
+      } else {
+        for (int i = 0; i < l->type->useT->type_len; ++i) {
+          LocationRange *range = Type_location(l->type->useT->type[i]);
+          if (range)
+            DeclarationStack_push(&ds, l->type->useT->type[i]->name, l->type->useT->type[i], *range);
+        }
       }
     } else {
       LocationRange *range = Type_location(l->type);
