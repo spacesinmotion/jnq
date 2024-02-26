@@ -45,6 +45,10 @@ fn StartState(c *char, file *char) State {
   }
 }
 
+fn count(t[]char) i32 {
+  return len(t)
+}
+
 type SomeAble interface {
   fn id(s *SomeAble, f int) int
   fn val(s *SomeAble) i32
@@ -85,7 +89,7 @@ fn main(argc i32, argv **char) int {
 
   ASSERT(len(C_CONST) == 3)
 
-  print("...ok", 1, 2, 3)
+  print("...ok", 1, 2, 3, count("okok"))
 
   return 0
 }

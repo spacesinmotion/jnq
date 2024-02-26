@@ -4358,7 +4358,9 @@ Type *AdaptParameter_for(Program *p, Type *got, Type *expect, Parameter *param) 
     param->p = prefix;
     return expect;
 
-  } else if (expect->kind == SliceT && (got->kind == ArrayT || got->kind == DynArrayT) && expect->child == got->child) {
+  } else if ((expect->kind == SliceT && (got->kind == ArrayT || got->kind == DynArrayT) &&
+              expect->child == got->child) ||
+             (expect->kind == SliceT && expect->child == &Char && got == &String)) {
     Expression *sa = Program_new_Expression(p, SliceE);
     sa->range = param->p->range;
     sa->slice->o = param->p;
@@ -4366,16 +4368,10 @@ Type *AdaptParameter_for(Program *p, Type *got, Type *expect, Parameter *param) 
     sa->slice->begin->range = param->p->range;
     sa->slice->begin->baseconst->text = "0";
     sa->slice->begin->baseconst->type = &i32;
-    sa->slice->end = Program_new_Expression(p, CallE);
+    sa->slice->end = Program_new_Expression(p, BaseA);
     sa->slice->end->range = param->p->range;
-    sa->slice->end->call->o = Program_new_Expression(p, IdentifierA);
-    sa->slice->end->call->o->range = param->p->range;
-    sa->slice->end->call->o->id->name = "len";
-    sa->slice->end->call->o->id->type = NULL;
-    sa->slice->end->call->p.len = 1;
-    sa->slice->end->call->p.p = (Parameter *)Program_alloc(p, 2 * sizeof(Parameter));
-    sa->slice->end->call->p.p[0].name = NULL;
-    sa->slice->end->call->p.p[0].p = param->p;
+    sa->slice->end->baseconst->text = "-1";
+    sa->slice->end->baseconst->type = &i32;
     param->p = sa;
     return expect;
 

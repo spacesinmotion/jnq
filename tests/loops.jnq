@@ -1,9 +1,7 @@
 
 use printf from C.stdio
 
-use early_out_apply from tests.bugs
-
-use * from tests.sub.util
+use * from sub.util
 
 fn for_loops()
 {
