@@ -3587,6 +3587,8 @@ void c_expression(FILE *f, Expression *e) {
       fprintf(f, "__slice_from_array(");
     } else if (type_to_access->kind == SliceT) {
       fprintf(f, "__slice_from_slice(");
+    } else if (type_to_access->kind == PointerT) {
+      fprintf(f, "__slice_from_pointer(");
     } else
       FATALR(e->range, "Problem with slice creation for '%s'", Type_name(type_to_access).s);
 
@@ -5062,6 +5064,11 @@ void c_Program(FILE *f, Program *p, Module *m) {
   fputs("}\n", f);
   fputs("Slice_ __slice_from_array(void *d, size_t st, int64_t max, int64_t b, int64_t e) {\n", f);
   fputs("  __slice_check_bounds(&b, &e, (max/st));\n", f);
+  fputs("  return (Slice_){d+st*b, e-b};\n", f);
+  fputs("}\n", f);
+  fputs("Slice_ __slice_from_pointer(void *d, size_t st, int64_t b, int64_t e) {\n", f);
+  fputs("  e = e<0 ? 0 : e;\n", f);
+  fputs("  __slice_check_bounds(&b, &e, e);\n", f);
   fputs("  return (Slice_){d+st*b, e-b};\n", f);
   fputs("}\n", f);
   fputs("Slice_ __slice_from_slice(Slice_ s, size_t st, int64_t b, int64_t e) {\n", f);

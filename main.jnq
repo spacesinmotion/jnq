@@ -58,6 +58,22 @@ A_CONST := 123545
 B_CONST := true
 C_CONST := [1, 2, 3]
 
+fn slice_from_c_array()
+{
+  print(" .slice_from_c_array")
+
+  aax := [12]int{}
+  for (i := 0; i < len(aax); ++i)
+    aax[i] = 2 * i
+  aa := &aax[0]
+
+  bb := aa[0 : 8]
+  cc := aa[4 : 8]
+  dd := aa[3 : -1]
+
+  print(len(bb), len(cc), len(dd))
+}
+
 fn main(argc i32, argv **char) int {
   more_text := [
     "A", "B", "C"
@@ -91,6 +107,7 @@ fn main(argc i32, argv **char) int {
 
   print("...ok", 1, 2, 3, count("okok"))
 
+  slice_from_c_array()
   return 0
 }
 

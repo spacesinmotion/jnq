@@ -239,6 +239,22 @@ fn slice_from_slices()
   check_all_doubled(cc)
 }
 
+fn slice_from_c_array()
+{
+  print(" .slice_from_c_array")
+
+  aax := [12]int{}
+  for (i := 0; i < len(aax); ++i)
+    aax[i] = 2 * i
+  aa := &aax[0]
+
+  check_all_doubled(aa[0 : 8])
+  default_cast_check_size(aa[4 : 8], 4)
+
+  xx := aa[3 : -1]
+  ASSERT(len(xx) == 0)
+}
+
 fn negative_indices()
 {
   print(" .negative_indices")
@@ -294,6 +310,7 @@ fn main() i32 {
   dynamic_array_default_cast_to_slices()
   slice_from_slices()
   negative_indices()
+  slice_from_c_array()
 
   print(" ...ok")
   return 0
