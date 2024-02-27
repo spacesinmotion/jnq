@@ -343,7 +343,7 @@ bool expect_string(Formatter *f, State *st) {
   while (st->c[0] != t || (st->c[-1] == '\\' && !slash_escaped)) {
     if (!st->c[0])
       return true;
-    slash_escaped = st->c[0] == '\\';
+    slash_escaped = st->c[-1] == '\\';
     State_skip(st);
   }
   State_skip(st);
