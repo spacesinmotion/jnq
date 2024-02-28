@@ -2607,7 +2607,7 @@ void Program_parse_fn(Program *p, Module *m, State *st, bool extc) {
   const char *b = st->c;
   if (check_identifier(st)) {
     const char *name = Program_copy_string(p, be_sv(b, st->c));
-    FunctionDecl fnd;
+    FunctionDecl fnd = (FunctionDecl){};
     if (!Program_parse_fn_decl(p, m, &fnd, st))
       FATAL(&st->location, "Missing parameterlist");
     Function *fn = Program_add_type(p, FnT, name, m)->fnT;
