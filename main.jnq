@@ -107,22 +107,9 @@ fn main(argc i32, argv **char) int {
 
   print("...ok", 1, 2, 3, count("okok"))
 
-  more := [1, 2, 3]
-  vvv := more[0: 0]
-  print(len(vvv))
-  ASSERT(len(vvv) == 0)
-  xxx := more[0: 3]
-  print(len(xxx))
-  ASSERT(len(xxx) == 3)
-  yyy := more[0: -1]
-  print(len(yyy))
-  // ASSERT(len(yyy) == 3)
-
-  aa := resize(new[]int{}, 3)
-  zzz := aa[0:]
-  print(len(zzz))
-  ASSERT(len(zzz) == 3)
-  delete aa
+  vvv := more_text[0: 2]
+  print(len(vvv), vvv[0])
+  ASSERT(len(vvv) == 2)
   return 0
 }
 

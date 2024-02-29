@@ -3534,11 +3534,17 @@ void c_expression(FILE *f, Expression *e) {
     Type *type_to_access = c_expression_get_type(NULL, e->access->o);
     if (type_to_access && (TypeKind)type_to_access->kind == SliceT) {
       fprintf(f, "(*(");
-      c_type_declare(f, type_to_access->child, e->range, ".:.");
+      if (type_to_access->child == &String)
+        fprintf(f, "char*");
+      else
+        c_type_declare(f, type_to_access->child, e->range, ".:.");
       fprintf(f, "*)__slice_member(");
       c_expression(f, e->access->o);
       fprintf(f, ", sizeof(");
-      c_type_declare(f, type_to_access->child, e->range, ".:.");
+      if (type_to_access->child == &String)
+        fprintf(f, "char*");
+      else
+        c_type_declare(f, type_to_access->child, e->range, ".:.");
       fprintf(f, "), ");
       c_expression(f, e->access->p);
       fprintf(f, "))");
@@ -3572,8 +3578,10 @@ void c_expression(FILE *f, Expression *e) {
     fprintf(f, ", sizeof(");
     if (type_to_access == &String)
       fprintf(f, "char");
+    else if (type_to_access->child == &String)
+      fprintf(f, "char*");
     else
-      c_type_declare(f, type_to_access->child, e->range, ".:.");
+      c_type_declare(f, type_to_access->child, e->range, "");
     fprintf(f, "), ");
     if ((TypeKind)type_to_access->kind == ArrayT || type_to_access == &String) {
       fprintf(f, "sizeof(");
