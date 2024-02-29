@@ -1607,16 +1607,8 @@ bool Program_check_declared_type(Program *p, State *st) {
     *st = old;
   }
 
-  if (check_identifier(st)) {
-    old = *st;
-    if (check_op(st, ".")) {
-      skip_whitespace(st);
-      if (check_identifier(st))
-        return true;
-      *st = old;
-    }
+  if (check_identifier(st))
     return true;
-  }
 
   *st = old;
   return false;
@@ -1726,19 +1718,8 @@ Type *Program_parse_declared_type(Program *p, Module *m, State *st, bool as_argu
 
   if (check_identifier(st)) {
     Type *t = Module_type_or_placeholder(p, m, be_sv(old.c, st->c));
-    if (t) {
-      old = *st;
-      if (t->kind == UseT && check_op(st, ".")) {
-        skip_whitespace(st);
-        const char *s = st->c;
-        if (check_identifier(st)) {
-          if ((t = Module_type_or_placeholder(p, t->useT->module, be_sv(s, st->c))))
-            return t;
-        }
-      }
-      *st = old;
+    if (t)
       return t;
-    }
   }
 
   *st = old;
