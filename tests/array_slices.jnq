@@ -283,7 +283,7 @@ fn negative_indices()
   cc = da[-20: 1]
   ASSERT(len(cc) == 1)
   cc = da[-20: 0]
-  ASSERT(len(cc) == 12)
+  ASSERT(len(cc) == 0)
   cc = da[-20: ]
   ASSERT(len(cc) == 12)
   cc = da[-6 : -4]

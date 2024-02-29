@@ -2181,12 +2181,6 @@ Expression *Program_parse_suffix_expression(Program *p, Module *m, State *st, Ex
       acc->slice->o = e;
       acc->slice->begin = a;
       acc->slice->end = Program_parse_expression(p, m, st);
-      if (!acc->slice->end) {
-        acc->slice->end = Program_new_Expression(p, BaseA);
-        acc->slice->end->baseconst->text = "0";
-        acc->slice->end->baseconst->type = &i32;
-        acc->slice->end->range = NewRangeLength(st->location, 0);
-      }
     } else {
       acc = Program_new_Expression(p, AccessE);
       acc->access->o = e;
@@ -3054,7 +3048,8 @@ void jnq_expression(FILE *f, Expression *e) {
     fprintf(f, "[");
     jnq_expression(f, e->slice->begin);
     fprintf(f, ":");
-    jnq_expression(f, e->slice->end);
+    if (e->slice->end)
+      jnq_expression(f, e->slice->end);
     fprintf(f, "]");
     break;
   case MemberAccessE:
@@ -3587,7 +3582,10 @@ void c_expression(FILE *f, Expression *e) {
     }
     c_expression(f, e->slice->begin);
     fprintf(f, ", ");
-    c_expression(f, e->slice->end);
+    if (e->slice->end)
+      c_expression(f, e->slice->end);
+    else
+      fprintf(f, "INT64_MAX");
     fprintf(f, ")");
     break;
   }
@@ -4351,10 +4349,13 @@ Type *AdaptParameter_for(Program *p, Type *got, Type *expect, Parameter *param) 
     sa->slice->begin->range = param->p->range;
     sa->slice->begin->baseconst->text = "0";
     sa->slice->begin->baseconst->type = &i32;
-    sa->slice->end = Program_new_Expression(p, BaseA);
-    sa->slice->end->range = param->p->range;
-    sa->slice->end->baseconst->text = got == &String ? "-1" : "0";
-    sa->slice->end->baseconst->type = &i32;
+    if (got == &String) {
+      sa->slice->end = Program_new_Expression(p, BaseA);
+      sa->slice->end->range = param->p->range;
+      sa->slice->end->baseconst->text = "-1";
+      sa->slice->end->baseconst->type = &i32;
+    } else
+      sa->slice->end = NULL;
     param->p = sa;
     return expect;
 
@@ -4674,9 +4675,11 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
     Type *begT = c_Expression_make_variables_typed(s, p, m, e->slice->begin);
     if (!Type_convertable(&u64, begT) && !Type_convertable(&i64, begT))
       FATALR(e->slice->begin->range, "Expect integral type for slice subscription, got '%s'", Type_name(begT).s);
-    Type *endT = c_Expression_make_variables_typed(s, p, m, e->slice->end);
-    if (!Type_convertable(&u64, endT) && !Type_convertable(&i64, endT))
-      FATALR(e->slice->end->range, "Expect integral type for slice subscription, got '%s'", Type_name(endT).s);
+    if (e->slice->end) {
+      Type *endT = c_Expression_make_variables_typed(s, p, m, e->slice->end);
+      if (!Type_convertable(&u64, endT) && !Type_convertable(&i64, endT))
+        FATALR(e->slice->end->range, "Expect integral type for slice subscription, got '%s'", Type_name(endT).s);
+    }
     Type *t = c_Expression_make_variables_typed(s, p, m, e->slice->o);
     if ((TypeKind)t->kind != ArrayT && t->kind != DynArrayT && t->kind != PointerT && t->kind != SliceT && t != &String)
       FATALR(e->range, "Expect array/pointer type for slice creation got '%s'", Type_name(t).s);
@@ -5034,7 +5037,7 @@ void c_Program(FILE *f, Program *p, Module *m) {
   fputs("typedef struct Slice_ {void *d; int64_t l;} Slice_; \n", f);
   fputs("void __slice_check_bounds(int64_t *b, int64_t *e, int64_t l) {\n", f);
   fputs("  *b = *b >= 0 ? *b : l + *b;\n", f);
-  fputs("  *e = *e > 0 ? *e : l + *e;\n", f);
+  fputs("  *e = *e >= 0 ? *e : l + *e;\n", f);
   fputs("  *e = *e >= l ? l : *e;\n", f);
   fputs("  *b = *b >= *e ? *e : *b;\n", f);
   fputs("  *b = *b < 0 ? 0 : *b;\n", f);
