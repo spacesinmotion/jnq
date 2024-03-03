@@ -5368,12 +5368,25 @@ char *read_stdin() {
   return code;
 }
 
-int symbols(Program *p, const char *file) {
+int symbols(Program *p, const char *file, const char *uri) {
   char *code = file ? readFile(file) : read_stdin();
   if (!code)
     return EXIT_FAILURE;
   State st = State_new(code, "dummy");
-  Module *m = Program_add_module(p, "dummy");
+
+  uri = !uri ? file : uri;
+
+  char mod_path[512] = {};
+  strncpy(mod_path, uri, sizeof(mod_path));
+  char *last = mod_path;
+  for (char *c = mod_path; *c; ++c) {
+    if (*c == '.')
+      last = c;
+    if (*c == '/' || *c == '\\')
+      *c = '.';
+  }
+  *last = '\0';
+  Module *m = Program_add_module(p, mod_path);
   Program_parse_module(p, m, &st);
   write_symbols(m);
   free(code);
@@ -6066,7 +6079,7 @@ int main(int argc, char *argv[]) {
   p.output = args.output;
 
   if (p.mode == Symbols)
-    return symbols(&p, p.main_file);
+    return symbols(&p, p.main_file, args.uri);
   else if (p.mode == Declaration)
     return declaration(&p, p.main_file, args.line, args.column, args.uri);
   else if (p.mode == References)
