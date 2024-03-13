@@ -13,7 +13,9 @@ jobs:
 
     steps:
     - uses: actions/checkout@v3
-    - name: build
+    - name: build jnq compiler 
       run: clang -o jnq -Wall -Wextra -Werror -g main.c
+    - name: build jnq format
+      run: clang -o jnq_format -Wall -Wextra -Werror -g jnq_format.c
     - name: test
       run: ./run_tests.sh
