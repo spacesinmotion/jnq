@@ -1,0 +1,19 @@
+name: jnq build and test
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+    - name: build
+      run: clang -o jnq -Wall -Wextra -Werror -g main.c
+    - name: test
+      run: ./run_tests.sh
