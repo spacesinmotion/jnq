@@ -17,7 +17,7 @@ cfn srand(seed u32)
 cfn calloc(num size_t, size size_t) any
 cfn free(ptr any)
 cfn malloc(size size_t) any
-cfn realloc(ptr *any, size size_t) any
+cfn realloc(ptr any, size size_t) any
 
 cfn abort()
 cfn atexit(func fn_ptr) i32
