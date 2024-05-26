@@ -1,4 +1,5 @@
 
+#include <asm-generic/errno-base.h>
 #include <ctype.h>
 #include <stdarg.h>
 #include <stdbool.h>
@@ -11,8 +12,10 @@
 #include <setjmp.h>
 
 #ifndef _WIN32
+#include <errno.h>
+#include <sys/stat.h>
 #include <unistd.h>
-#define JNQ_BIN "./jnq_bin"
+#define JNQ_BIN "./.jnq/jnq_bin"
 #else
 #include <io.h>
 #include <windows.h>
@@ -5963,74 +5966,62 @@ Module *parse_main(Program *p) {
 }
 
 BuffString write_c_file(Program *p, Module *m) {
+  int make_tmp_dir = mkdir(".jnq", 0755);
+  if (make_tmp_dir == -1 && errno != EEXIST)
+    FATALX("failed to create temp directory '.jnq/' %d", errno);
+
   int jnq_len = strlen(p->main_file);
-  BuffString main_c = p->mode == Transpile ? str("%s.c", p->output) : str("%.*s_.c", jnq_len - 4, p->main_file);
+  BuffString main_c = p->mode == Transpile ? str("%s.c", p->output) : str(".jnq/%.*s.c", jnq_len - 4, p->main_file);
 
-  int error = 0;
-  error = setjmp(long_jump_end);
-  if (error == 0 && access(main_c.s, F_OK) == 0)
-    FATALX("temp file already exisits '%s'", main_c.s);
+  FILE *c_tmp_file = fopen(main_c.s, "w");
+  if (!c_tmp_file)
+    FATALX("could not create temp file '%s'", main_c);
 
-  if (error == 0) {
-    FILE *c_tmp_file = fopen(main_c.s, "w");
-    if (!c_tmp_file)
-      FATALX("could not create temp file '%s'", main_c);
-    error = setjmp(long_jump_end);
-    if (error == 0)
-      c_Program(c_tmp_file, p, m);
-    fclose(c_tmp_file);
-    if (error != 0)
-      remove(main_c.s);
-  }
+  int error = setjmp(long_jump_end);
+  if (error == 0)
+    c_Program(c_tmp_file, p, m);
+  fclose(c_tmp_file);
+
   if (error != 0)
     main_c.s[0] = '\0';
-
   return main_c;
 }
 
 int compile(Program *p, const char *main_c, int argc, char *argv[]) {
-  int error = 0;
-  error = setjmp(long_jump_end);
-  if (error == 0 && access(p->output, F_OK) == 0)
-    FATALX("temp bin already exisits '%s'", p->output);
-
-  if (error == 0)
-    error = setjmp(long_jump_end);
-  if (error == 0) {
-    char clang_call[1024] = {0};
-    strcat(clang_call, "clang  -Werror -g "
+  char clang_call[1024] = {0};
+  strcat(clang_call, "clang  -Werror -g "
 #ifndef _WIN32
-                       "-lm "
+                     "-lm "
 #else
-                       "-D_CRT_SECURE_NO_WARNINGS "
+                     "-D_CRT_SECURE_NO_WARNINGS "
 #endif
-    );
-    const int start = 2; // p->main_file == argv[1] ? 2 : 3;
-    bool output_defined = false;
-    for (int i = start; i < argc; ++i) {
-      if (strcmp(argv[i], "--") == 0)
-        break;
-      if (strcmp(argv[i], "-o") == 0)
-        output_defined = true;
+  );
+  const int start = 2; // p->main_file == argv[1] ? 2 : 3;
+  bool output_defined = false;
+  for (int i = start; i < argc; ++i) {
+    if (strcmp(argv[i], "--") == 0)
+      break;
+    if (strcmp(argv[i], "-o") == 0)
+      output_defined = true;
 
-      int len = strlen(argv[i]);
-      if (len > 4 && strcmp(argv[i] + len - 4, ".jnq") == 0)
-        continue;
+    int len = strlen(argv[i]);
+    if (len > 4 && strcmp(argv[i] + len - 4, ".jnq") == 0)
+      continue;
 
-      strcat(clang_call, argv[i]);
-      strcat(clang_call, " ");
-    }
-    if (!output_defined) {
-      strcat(clang_call, "-o ");
-      strcat(clang_call, p->output);
-      strcat(clang_call, " ");
-    }
-    strcat(clang_call, main_c);
-    error = system(clang_call);
-    if (error != 0)
-      FATALX("failed to compile c '%s'", main_c);
+    strcat(clang_call, argv[i]);
+    strcat(clang_call, " ");
   }
-  remove(main_c);
+  if (!output_defined) {
+    strcat(clang_call, "-o ");
+    strcat(clang_call, p->output);
+    strcat(clang_call, " ");
+  }
+  strcat(clang_call, main_c);
+  int error = setjmp(long_jump_end);
+  if (error == 0)
+    error = system(clang_call);
+  if (error != 0)
+    FATALX("failed to compile c '%s'", main_c);
   return error;
 }
 
@@ -6050,12 +6041,6 @@ int run(Program *p, const char *exec, int argc, char *argv[]) {
   }
 
   int error = system(exec_call);
-  remove(exec);
-#ifdef _WIN32
-  remove("jnq_bin.ilk");
-  remove("jnq_bin.pdb");
-#endif
-
   int percent = (int)(100.0 * (double)p->arena.len / (double)p->arena.cap);
   if (percent > 90) {
     printf("-------------------------------------\n");

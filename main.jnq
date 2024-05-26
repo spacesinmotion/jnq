@@ -105,11 +105,13 @@ fn main(argc i32, argv **char) int {
 
   ASSERT(len(C_CONST) == 3)
 
-  print("...ok", 1, 2, 3, count("okok"))
+  print("...", 1, 2, 3, count("okok"))
 
   vvv := more_text[0: 2]
   print(len(vvv), vvv[0])
   ASSERT(len(vvv) == 2)
+
+  print("ok")
   return 0
 }
 

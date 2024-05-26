@@ -13,7 +13,7 @@ for t in `ls *.jnq`; do
   fi
 done
 
-for t in `find . -iname "*.jnq"`; do
+for t in `find . -type f -iname "*.jnq"`; do
   echo "format $t"
   if ! ../jnq_format $t > /dev/null; then
     errors+=("format $t")

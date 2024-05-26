@@ -3,4 +3,6 @@ jnq_format
 jnq.exe
 jnq_format.exe
 jnq_bin*
+.jnq/
 .vscode/
+jnq_jnq
