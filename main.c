@@ -5898,13 +5898,14 @@ typedef struct CommandLineArgs {
   const char *main_file;
   const char *uri;
   int line, column;
+  bool debug;
 } CommandLineArgs;
 
 CommandLineArgs parse_command_line(int argc, char *argv[]) {
   if (argc <= 1)
     FATALX("missing command line arguments\n");
 
-  CommandLineArgs args = (CommandLineArgs){Run, JNQ_BIN, NULL, NULL, 0, 0};
+  CommandLineArgs args = (CommandLineArgs){Run, JNQ_BIN, NULL, NULL, 0, 0, false};
   int start = 2;
   if (strcmp(argv[1], "symbols") == 0)
     args.mode = Symbols;
@@ -5937,6 +5938,8 @@ CommandLineArgs parse_command_line(int argc, char *argv[]) {
     } else if (strcmp(argv[i], "--uri") == 0 && i + 1 < argc) {
       args.uri = argv[i + 1];
       i++;
+    } else if (strcmp(argv[i], "-d") == 0 || strcmp(argv[i], "--debug") == 0) {
+      args.debug = true;
     } else {
       int len = strlen(argv[i]);
       if (len > 4 && strcmp(argv[i] + (len - 4), ".jnq") == 0)
@@ -5987,16 +5990,20 @@ BuffString write_c_file(Program *p, Module *m) {
   return main_c;
 }
 
-int compile(Program *p, const char *main_c, int argc, char *argv[]) {
+int compile(CommandLineArgs *cmd, const char *main_c, int argc, char *argv[]) {
   char clang_call[1024] = {0};
-  strcat(clang_call, "clang  -Werror -g "
+  strcat(clang_call, "clang -Werror "
 #ifndef _WIN32
                      "-lm "
 #else
                      "-D_CRT_SECURE_NO_WARNINGS "
 #endif
   );
-  const int start = 2; // p->main_file == argv[1] ? 2 : 3;
+  if (cmd->debug)
+    strcat(clang_call, "-g -O0 ");
+  else
+    strcat(clang_call, "-O2 ");
+  const int start = 2;
   bool output_defined = false;
   for (int i = start; i < argc; ++i) {
     if (strcmp(argv[i], "--") == 0)
@@ -6013,16 +6020,16 @@ int compile(Program *p, const char *main_c, int argc, char *argv[]) {
   }
   if (!output_defined) {
     strcat(clang_call, "-o ");
-    strcat(clang_call, p->output);
+    strcat(clang_call, cmd->output);
     strcat(clang_call, " ");
   }
   strcat(clang_call, main_c);
   int error = setjmp(long_jump_end);
-  if (error == 0)
-    error = system(clang_call);
   if (error != 0)
+    return error;
+  if (system(clang_call) != 0)
     FATALX("failed to compile c '%s'", main_c);
-  return error;
+  return 0;
 }
 
 int run(Program *p, const char *exec, int argc, char *argv[]) {
@@ -6079,7 +6086,7 @@ int main(int argc, char *argv[]) {
   int error = *main_c.s == '\0' ? 1 : 0;
 
   if (error == 0 && p.mode != Transpile)
-    error = compile(&p, main_c.s, argc, argv);
+    error = compile(&args, main_c.s, argc, argv);
 
   if (error == 0 && p.mode == Run)
     error = run(&p, p.output, argc, argv);
