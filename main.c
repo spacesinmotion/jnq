@@ -6008,6 +6008,8 @@ int compile(CommandLineArgs *cmd, const char *main_c, int argc, char *argv[]) {
   for (int i = start; i < argc; ++i) {
     if (strcmp(argv[i], "--") == 0)
       break;
+    if (strcmp(argv[i], "-d") == 0)
+      continue;
     if (strcmp(argv[i], "-o") == 0)
       output_defined = true;
 
