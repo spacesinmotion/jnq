@@ -3060,9 +3060,7 @@ Type *c_expression_get_type(Expression *e) {
         return &i32;
       else if (streq(t->macro_name, "ASSERT"))
         return &Bool;
-      else if (str_any_of(t->macro_name, "print", "eprint", NULL))
-        return &i32;
-      else if (str_any_of(t->macro_name, "resize", "reserve", "push", "pop", "clear", NULL))
+      else if (str_any_of(t->macro_name, "print", "eprint", "resize", "reserve", "push", "pop", "clear", NULL))
         return &Void;
       else if (streq(t->macro_name, "back")) {
         Type *arg_type = c_expression_get_type(e->call->p.p[0].p);
@@ -4473,7 +4471,7 @@ Type *c_Macro_make_variables_typed(VariableStack *s, Program *p, Module *m, cons
       FATAL(e->location, "too much parameter for macro '%s'!", macro_name);
     return &i32;
   } else if (str_any_of(macro_name, "print", "eprint", NULL)) {
-    return &i32;
+    return &Void;
   } else if (streq("ASSERT", macro_name)) {
     if (nb_param < 1)
       FATAL(e->location, "missing parameter for macro '%s'!", macro_name);
