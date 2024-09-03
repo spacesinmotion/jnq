@@ -952,29 +952,29 @@ bool Type_convertable(Type *expect, Type *got) {
   return false;
 }
 
-BuffString Type_name(Type *t) {
+const char *Type_name(Type *t) {
+  static char s[256];
+  s[0] = '\0';
   if (!t)
-    return (BuffString){{0}};
+    return s;
 
-  BuffString s;
-  char *ss = s.s;
   int i = 0;
   while (t->child) {
     switch ((TypeKind)t->kind) {
     case DynArrayT:
-      i += snprintf(ss + i, sizeof(s.s) - i, "new[%d]", t->array_count);
+      i += snprintf(s + i, sizeof(s) - i, "new[%d]", t->array_count);
       break;
     case SliceT:
-      i += snprintf(ss + i, sizeof(s.s) - i, "[:]");
+      i += snprintf(s + i, sizeof(s) - i, "[:]");
       break;
     case ArrayT:
       if (t->array_count > 0)
-        i += snprintf(ss + i, sizeof(s.s) - i, "[%d]", t->array_count);
+        i += snprintf(s + i, sizeof(s) - i, "[%d]", t->array_count);
       else
-        i += snprintf(ss + i, sizeof(s.s) - i, "[]");
+        i += snprintf(s + i, sizeof(s) - i, "[]");
       break;
     case PointerT:
-      i += snprintf(ss + i, sizeof(s.s) - i, "*");
+      i += snprintf(s + i, sizeof(s) - i, "*");
       break;
 
     case ConstantWrapperT:
@@ -991,12 +991,12 @@ BuffString Type_name(Type *t) {
     case FnT:
     case BaseT:
     case PlaceHolder:
-      i += snprintf(ss + i, sizeof(s.s) - i, "<>");
+      i += snprintf(s + i, sizeof(s) - i, "<>");
       break;
     }
     t = t->child;
   }
-  i += snprintf(ss + i, sizeof(s.s) - i, "%s", t->name);
+  i += snprintf(s + i, sizeof(s) - i, "%s", t->name);
   return s;
 }
 
@@ -1096,7 +1096,7 @@ Type *Program_add_type(Program *p, TypeKind k, const char *name, Module *m) {
         return tt;
       }
     }
-    FATALX("did not find place holder type '%s'", Type_name(tt).s);
+    FATALX("did not find place holder type '%s'", Type_name(tt));
     return tt;
   }
 
@@ -1142,7 +1142,7 @@ Type *Program_add_type_after(Program *p, TypeKind k, Module *m, Type *child) {
   }
 
   if (vecT != NULL)
-    FATALX("internal error did not find child type for '%s'!", Type_name(t).s);
+    FATALX("internal error did not find child type for '%s'!", Type_name(t));
 
   return t;
 }
@@ -1516,7 +1516,7 @@ bool Program_parse_use_path(Program *p, Module *m, State *st) {
     for (int i = 0; i < imp_len; ++i) {
       u->type[i] = Module_type_or_placeholder(p, use, imp[i]);
       if (!u->type[i])
-        FATALX("Did not found type '%*.s' in '%s'", imp[i].size, imp[i].text, name);
+        FATALX("Did not found type '%*' in '%s'", imp[i].size, imp[i].text, name);
     }
   }
 
@@ -2628,53 +2628,6 @@ Module *Program_parse_file(Program *p, const char *path) {
 
 void c_Module_types(FILE *f, Module *m);
 
-BuffString Type_special_cname(Type *t) {
-  if (!t)
-    return (BuffString){{0}};
-
-  BuffString s;
-  char *ss = s.s;
-  int i = 0;
-  while (t->child) {
-    switch ((TypeKind)t->kind) {
-    case DynArrayT:
-      i += snprintf(ss + i, sizeof(s.s) - i, "_n_%d_", t->array_count);
-      break;
-    case SliceT:
-      i += snprintf(ss + i, sizeof(s.s) - i, "_s_");
-      break;
-    case ArrayT:
-      if (t->array_count > 0)
-        i += snprintf(ss + i, sizeof(s.s) - i, "_%d_", t->array_count);
-      else
-        i += snprintf(ss + i, sizeof(s.s) - i, "__");
-      break;
-    case PointerT:
-      i += snprintf(ss + i, sizeof(s.s) - i, "p");
-      break;
-
-    case ConstantWrapperT:
-      return Type_special_cname(t->child);
-    case UseT:
-    case StructT:
-    case CStructT:
-    case InterfaceT:
-    case UnionT:
-    case EnumT:
-    case CEnumT:
-    case MacroT:
-    case FnT:
-    case PlaceHolder:
-    case BaseT:
-      i += snprintf(ss + i, sizeof(s.s) - i, "<>");
-      break;
-    }
-    t = t->child;
-  }
-  i += snprintf(ss + i, sizeof(s.s) - i, "%s", t->name);
-  return s;
-}
-
 bool c_type_declare_rec(FILE *f, Type *t, Location l, const char *var, bool start) {
   if (!t || t == &Void)
     return false;
@@ -2714,7 +2667,7 @@ bool c_type_declare_rec(FILE *f, Type *t, Location l, const char *var, bool star
     return c_type_declare_rec(f, t->child, l, var, true);
     break;
   case UseT:
-    FATAL(l, "Can't use module '%s' as type!", Type_name(t).s);
+    FATAL(l, "Can't use module '%s' as type!", Type_name(t));
     break;
   case CStructT:
   case CEnumT:
@@ -2840,7 +2793,7 @@ void c_interface(FILE *f, const char *module_name, const char *name, Interface *
   for (TypeList *tl = intf->used_types; tl; tl = tl->next) {
     Module *gotM = Type_defined_module(tl->type);
     if (!gotM)
-      FATALX("could not find module for type '%s'", Type_name(tl->type).s);
+      FATALX("could not find module for type '%s'", Type_name(tl->type));
     fprintf(f, "%s%sTable *%s%s_%s%s = &(%s%sTable){\n", module_name, name, module_name, name, gotM->c_name,
             tl->type->name, module_name, name);
     for (int i = 0; i < intf->methods.len; ++i) {
@@ -2848,7 +2801,7 @@ void c_interface(FILE *f, const char *module_name, const char *name, Interface *
       const char *fn_name = allName + strlen(name);
       Type *fnt = Module_find_member(tl->type, fn_name);
       if (!fnt || fnt->kind != FnT)
-        FATALX("Type '%s' does not fit interface '%s'\n  missing method '%s'", Type_name(tl->type).s, name, fn_name);
+        FATALX("Type '%s' does not fit interface '%s'\n  missing method '%s'", Type_name(tl->type), name, fn_name);
       fprintf(f, "  (");
       c_fn_pointer_decl(f, fnt, false);
       fprintf(f, ")");
@@ -2994,7 +2947,7 @@ void jnq_expression(FILE *f, Expression *e) {
     break;
   case AsCast:
     jnq_expression(f, e->cast->o);
-    fprintf(f, " as %s", Type_name(e->cast->type).s);
+    fprintf(f, " as %s", Type_name(e->cast->type));
     break;
 
   case UnaryPrefixE:
@@ -3090,7 +3043,7 @@ Type *c_expression_get_type(Module *m, Expression *e) {
     if (t == &String)
       return &Char;
     if (!t->child)
-      FATAL(e->location, "unknown access return type for '%s'", Type_name(t).s);
+      FATAL(e->location, "unknown access return type for '%s'", Type_name(t));
     return t->child;
   }
   case SliceE: {
@@ -3098,11 +3051,11 @@ Type *c_expression_get_type(Module *m, Expression *e) {
     if (t == &String) {
       Type *st = Module_find_slice_type(global_module(), &Char);
       if (!st)
-        FATAL(e->location, "internal problem finding slice type for '%s'", Type_name(&Char).s);
+        FATAL(e->location, "internal problem finding slice type for '%s'", Type_name(&Char));
       return st;
     }
     if (!t || !t->child)
-      FATAL(e->location, "unknown slice return type for '%s'", Type_name(t).s);
+      FATAL(e->location, "unknown slice return type for '%s'", Type_name(t));
     return t;
   }
 
@@ -3115,16 +3068,16 @@ Type *c_expression_get_type(Module *m, Expression *e) {
     Type *st = c_expression_get_type(m, e->newE->o);
     Module *cm = Type_defined_module(st);
     if (!cm)
-      FATAL(e->location, "internal problem finding module for type '%s'", Type_name(st).s);
+      FATAL(e->location, "internal problem finding module for type '%s'", Type_name(st));
     if ((TypeKind)st->kind == ArrayT) {
       Type *td = Module_find_dyn_array_type(cm, st->child);
       if (!td)
-        FATAL(e->location, "internal problem finding dynamic array type for '%s'", Type_name(st).s);
+        FATAL(e->location, "internal problem finding dynamic array type for '%s'", Type_name(st));
       return td;
     }
     Type *td = Module_find_pointer_type(cm, st);
     if (!td)
-      FATAL(e->location, "internal problem finding pointer type for '%s'", Type_name(st).s);
+      FATAL(e->location, "internal problem finding pointer type for '%s'", Type_name(st));
     return td;
   }
 
@@ -3136,11 +3089,11 @@ Type *c_expression_get_type(Module *m, Expression *e) {
         FATALX("internal problem finding module for type");
       Type *td = Module_find_pointer_type(cm, st);
       if (!td)
-        FATAL(e->location, "internal problem finding pointer type for '%s'", Type_name(st).s);
+        FATAL(e->location, "internal problem finding pointer type for '%s'", Type_name(st));
       return td;
     } else if (streq(e->unpre->op, "*")) {
       if (st->kind != PointerT)
-        FATAL(e->location, "dereferenceing none pointer type '%s'!", Type_name(st).s);
+        FATAL(e->location, "dereferenceing none pointer type '%s'!", Type_name(st));
       return st->child;
     } else if (streq(e->unpre->op, "!")) {
       return &Bool;
@@ -3156,7 +3109,7 @@ Type *c_expression_get_type(Module *m, Expression *e) {
     Type *t2 = c_expression_get_type(m, e->binop->o2);
     if (!Type_convertable(t1, t2) && !Type_convertable(t2, t1)) {
       FATAL(e->location, "Expect equal types for binary operation '%s' (%s, %s) (%p, %p)", e->binop->op->op,
-            Type_name(t1).s, Type_name(t2).s, t1, t2);
+            Type_name(t1), Type_name(t2), t1, t2);
     }
     if (e->binop->op->returns_bool)
       return &Bool;
@@ -3168,7 +3121,7 @@ Type *c_expression_get_type(Module *m, Expression *e) {
     Type *t1 = c_expression_get_type(m, e->ternop->if_e);
     Type *t2 = c_expression_get_type(m, e->ternop->else_e);
     if (!Type_equal(t1, t2))
-      FATAL(e->location, "Expect equal types for ternary operation (%s, %s)", Type_name(t1).s, Type_name(t2).s);
+      FATAL(e->location, "Expect equal types for ternary operation (%s, %s)", Type_name(t1), Type_name(t2));
     return t1;
   }
 
@@ -3233,7 +3186,7 @@ bool c_check_macro(FILE *f, Call *ca, Location l) {
       else if (param[i] == &Any || param[i]->kind == PointerT || param[i]->kind == DynArrayT)
         fprintf(f, "%%p");
       else
-        FATAL(ca->p.p[i].p->location, "Unhandled input type for 'print' macro '%s'", Type_name(param[i]).s);
+        FATAL(ca->p.p[i].p->location, "Unhandled input type for 'print' macro '%s'", Type_name(param[i]));
 
       if (i + 1 < ca->p.len)
         fprintf(f, "\\t");
@@ -3274,10 +3227,10 @@ bool c_check_macro(FILE *f, Call *ca, Location l) {
   } else if (str_any_of(ca->o->id->name, "resize", "reserve", "push", NULL)) {
     Type *arg_type = c_expression_get_type(NULL, ca->p.p[0].p);
     if (!arg_type || arg_type->kind != DynArrayT)
-      FATAL(l, "Type '%s' not working as dynamic array!", Type_name(arg_type).s);
+      FATAL(l, "Type '%s' not working as dynamic array!", Type_name(arg_type));
     fprintf(f, "__%s_ARRAY(", ca->o->id->name);
     if (c_type_declare(f, arg_type->child, l, "<<>>"))
-      FATAL(l, "Type '%s' not working as dynamic array!", Type_name(arg_type).s);
+      FATAL(l, "Type '%s' not working as dynamic array!", Type_name(arg_type));
     fprintf(f, ", ");
     c_parameter(f, &ca->p, true);
     fprintf(f, ")");
@@ -3285,10 +3238,10 @@ bool c_check_macro(FILE *f, Call *ca, Location l) {
   } else if (str_any_of(ca->o->id->name, "pop", "back", "clear", NULL)) {
     Type *arg_type = c_expression_get_type(NULL, ca->p.p[0].p);
     if (!arg_type || arg_type->kind != DynArrayT)
-      FATAL(l, "Type '%s' not working as dynamic array!", Type_name(arg_type).s);
+      FATAL(l, "Type '%s' not working as dynamic array!", Type_name(arg_type));
     fprintf(f, "__%s_ARRAY(", ca->o->id->name);
     if (c_type_declare(f, arg_type->child, l, "<<>>"))
-      FATAL(l, "Type '%s' not working as dynamic array!", Type_name(arg_type).s);
+      FATAL(l, "Type '%s' not working as dynamic array!", Type_name(arg_type));
     fprintf(f, ", ");
     c_parameter(f, &ca->p, true);
     fprintf(f, ")");
@@ -3348,7 +3301,7 @@ bool c_check_macro(FILE *f, Call *ca, Location l) {
     case FnT:
     case ConstantWrapperT:
     case PlaceHolder:
-      FATAL(ca->p.p[0].p->location, "Can't get 'len' for type '%s'!", Type_name(arg_type).s);
+      FATAL(ca->p.p[0].p->location, "Can't get 'len' for type '%s'!", Type_name(arg_type));
       break;
     }
   }
@@ -3424,7 +3377,7 @@ void c_expression(FILE *f, Expression *e) {
       t = t->child;
       fprintf(f, "__NEW_ARRAY(");
       if (c_type_declare(f, t, e->location, "<<>>"))
-        FATAL(e->location, "Type '%s' not working as dynamic array!", Type_name(t).s);
+        FATAL(e->location, "Type '%s' not working as dynamic array!", Type_name(t));
       fprintf(f, ", %d)", count);
       Module_find_pointer_type(Type_defined_module(t), t);
     } else {
@@ -3508,7 +3461,7 @@ void c_expression(FILE *f, Expression *e) {
     } else if (type_to_access->kind == PointerT) {
       fprintf(f, "__slice_from_pointer(");
     } else
-      FATAL(e->location, "Problem with slice creation for '%s'", Type_name(type_to_access).s);
+      FATAL(e->location, "Problem with slice creation for '%s'", Type_name(type_to_access));
 
     c_expression(f, e->slice->o);
     fprintf(f, ", sizeof(");
@@ -3604,10 +3557,10 @@ void c_expression(FILE *f, Expression *e) {
       kk = (TypeKind)e->member->member->type->child->kind;
     switch (kk) {
     case ConstantWrapperT:
-      FATAL(e->location, "Internal error for constant type '%s'", Type_name(e->member->member->type).s);
+      FATAL(e->location, "Internal error for constant type '%s'", Type_name(e->member->member->type));
       break;
     case PlaceHolder:
-      FATAL(e->location, "Use of unknow type '%s'", Type_name(e->member->member->type).s);
+      FATAL(e->location, "Use of unknow type '%s'", Type_name(e->member->member->type));
       break;
     case EnumT:
     case CEnumT:
@@ -3813,7 +3766,7 @@ void c_statements(FILE *f, Statement *s, int indent) {
     case ConstantWrapperT:
     case SliceT:
     case PlaceHolder:
-      FATAL(s->deleteS->e->location, "Can't delete type '%s'!", Type_name(arg_type).s);
+      FATAL(s->deleteS->e->location, "Can't delete type '%s'!", Type_name(arg_type));
       break;
     }
 
@@ -4180,7 +4133,7 @@ Type *Module_find_member(Type *t, const char *name) {
     break;
   }
   case UseT:
-    FATALX("module name could not be used to access member '%s'!", Type_name(t).s);
+    FATALX("module name could not be used to access member '%s'!", Type_name(t));
 
   case BaseT:
   case ArrayT:
@@ -4210,8 +4163,7 @@ void CheckInterface_for(Type *got, Type *expect, Location l) {
     const char *name = allName + strlen(expect->name);
     Type *fnt = Module_find_member(got, name);
     if (!fnt || fnt->kind != FnT) {
-      FATAL(l, "Type '%s' does not fit interface '%s'\n  missing method '%s'", Type_name(got).s, Type_name(expect).s,
-            name);
+      FATAL(l, "Type '%s' does not fit interface '%s'\n  missing method '%s'", Type_name(got), Type_name(expect), name);
     }
   }
 }
@@ -4231,8 +4183,8 @@ Expression *Interface_construct(Program *p, Type *got, Type *expect, Expression 
 
   bool is_pointer = got->kind == PointerT;
   if (!is_pointer) {
-    fprintf(stderr, " %s <=> %s %p %p\n", Type_name(got).s, Type_name(expect).s, got, expect);
-    FATAL(pr->location, "construct interface from none pointer type '%s'", Type_name(got).s);
+    fprintf(stderr, " %s <=> %s %p %p\n", Type_name(got), Type_name(expect), got, expect);
+    FATAL(pr->location, "construct interface from none pointer type '%s'", Type_name(got));
   }
 
   if (is_pointer)
@@ -4256,7 +4208,7 @@ Expression *Interface_construct(Program *p, Type *got, Type *expect, Expression 
   cE->construct->p.p[1].p->location = pr->location;
   Module *gotM = Type_defined_module(got);
   if (!gotM)
-    FATAL(pr->location, "could not find module for type '%s'", Type_name(got).s);
+    FATAL(pr->location, "could not find module for type '%s'", Type_name(got));
   cE->construct->p.p[1].p->id->name =
       Program_copy_str(p, str("%s%s_%s%s", expect->interfaceT->module->c_name, expect->name, gotM->c_name, got->name));
   cE->construct->p.p[1].p->id->type = NULL;
@@ -4285,9 +4237,9 @@ Type *AdaptParameter_for(Program *p, Type *got, Type *expect, Parameter *param) 
   } else if (expect->kind == PointerT && expect->child->kind == InterfaceT && got != expect->child) {
     Type *x = AdaptParameter_for(p, got, expect->child, param);
     if (x != expect->child)
-      FATAL(param->p->location, "internal error constructing interface '%s'", Type_name(expect).s);
+      FATAL(param->p->location, "internal error constructing interface '%s'", Type_name(expect));
     if (param->p->type != BraceE || param->p->brace->o->type != ConstructE)
-      FATAL(param->p->location, "internal error constructing interface '%s'", Type_name(expect).s);
+      FATAL(param->p->location, "internal error constructing interface '%s'", Type_name(expect));
     param->p->brace->o->construct->pointer = true;
     Type *xP = Module_find_pointer_type(expect->child->interfaceT->module, expect->child);
     if (!xP) {
@@ -4406,7 +4358,7 @@ Type *c_Macro_make_variables_typed(VariableStack *s, Program *p, Module *m, cons
     if (nb_param > 2)
       FATAL(e->location, "too much parameter for macro '%s'!", macro_name);
     if (param[0]->kind != DynArrayT)
-      FATAL(pl.p[0].p->location, "expect dynamic array for macro '%s' got '%s'!", macro_name, Type_name(param[0]).s);
+      FATAL(pl.p[0].p->location, "expect dynamic array for macro '%s' got '%s'!", macro_name, Type_name(param[0]));
     if (!Type_convertable(&u64, param[1]) && !Type_convertable(&i64, param[1]))
       FATAL(pl.p[1].p->location, "expect length unit for macro '%s'!", macro_name);
     return param[0];
@@ -4416,10 +4368,10 @@ Type *c_Macro_make_variables_typed(VariableStack *s, Program *p, Module *m, cons
     if (nb_param > 2)
       FATAL(e->location, "too much parameter for macro '%s'!", macro_name);
     if (param[0]->kind != DynArrayT)
-      FATAL(pl.p[0].p->location, "expect dynamic array for macro '%s' got '%s'!", macro_name, Type_name(param[0]).s);
+      FATAL(pl.p[0].p->location, "expect dynamic array for macro '%s' got '%s'!", macro_name, Type_name(param[0]));
     param[1] = AdaptParameter_for(p, param[1], param[0]->child, &pl.p[1]);
     if (!Type_convertable(param[0]->child, param[1]))
-      FATAL(pl.p[1].p->location, "can not '%s' type '%s'!", macro_name, Type_name(param[1]).s);
+      FATAL(pl.p[1].p->location, "can not '%s' type '%s'!", macro_name, Type_name(param[1]));
     if ((ExpressionType)pl.p[0].p->type == CallE)
       FATAL(pl.p[0].p->location, "'%s' does not work for r-values!", macro_name);
     return param[0];
@@ -4429,7 +4381,7 @@ Type *c_Macro_make_variables_typed(VariableStack *s, Program *p, Module *m, cons
     if (nb_param > 1)
       FATAL(e->location, "too much parameter for macro '%s'!", macro_name);
     if (param[0]->kind != DynArrayT)
-      FATAL(pl.p[0].p->location, "expect dynamic array for macro '%s' got '%s'!", macro_name, Type_name(param[0]).s);
+      FATAL(pl.p[0].p->location, "expect dynamic array for macro '%s' got '%s'!", macro_name, Type_name(param[0]));
     return param[0]->child;
   } else if (streq("clear", macro_name)) {
     if (nb_param < 1)
@@ -4437,7 +4389,7 @@ Type *c_Macro_make_variables_typed(VariableStack *s, Program *p, Module *m, cons
     if (nb_param > 1)
       FATAL(e->location, "too much parameter for macro '%s'!", macro_name);
     if (param[0]->kind != DynArrayT)
-      FATAL(pl.p[0].p->location, "expect dynamic array for macro '%s' got '%s'!", macro_name, Type_name(param[0]).s);
+      FATAL(pl.p[0].p->location, "expect dynamic array for macro '%s' got '%s'!", macro_name, Type_name(param[0]));
     return param[0];
   } else if (str_any_of(macro_name, "sizeof", "offsetof", "len_s", "cap_s", NULL)) {
     if (nb_param < 1)
@@ -4461,8 +4413,7 @@ Type *c_Macro_make_variables_typed(VariableStack *s, Program *p, Module *m, cons
     if (!param[0])
       FATAL(pl.p[0].p->location, "void type in macro '%s'!", macro_name);
     if (!Type_convertable(&Bool, param[0]))
-      FATAL(pl.p[0].p->location, "expect boolean condition for macro '%s' got '%s'!", macro_name,
-            Type_name(param[0]).s);
+      FATAL(pl.p[0].p->location, "expect boolean condition for macro '%s' got '%s'!", macro_name, Type_name(param[0]));
     param[0] = AdaptParameter_for(p, param[0], &Bool, &pl.p[0]);
 
     return &Bool;
@@ -4527,9 +4478,9 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
     }
     if (t->kind != StructT && t->kind != CStructT && t->kind != UnionT && t->kind != InterfaceT && t->kind != EnumT &&
         t->kind != CEnumT)
-      FATAL(e->location, "Expect structure type for member access got '%s'", Type_name(t).s);
+      FATAL(e->location, "Expect structure type for member access got '%s'", Type_name(t));
     if (!(e->member->member->type = Module_find_member(t, e->member->member->name)))
-      FATAL(e->location, "unknown member '%s' for '%s'", e->member->member->name, Type_name(t).s);
+      FATAL(e->location, "unknown member '%s' for '%s'", e->member->member->name, Type_name(t));
     if (e->member->member->type->kind == FnT)
       e->member->member->name = e->member->member->type->name;
     return e->member->member->type;
@@ -4569,11 +4520,11 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
         pt = c_Expression_make_variables_typed(s, p, m, e->call->p.p[i].p);
       if (!pt)
         FATAL(e->call->p.p[i].p->location, "Type missmatch got 'void', expect '%s'",
-              Type_name(t->fnT->d.parameter.v[j].type).s);
+              Type_name(t->fnT->d.parameter.v[j].type));
       pt = AdaptParameter_for(p, pt, t->fnT->d.parameter.v[j].type, &e->call->p.p[i]);
       if (!Type_convertable(t->fnT->d.parameter.v[j].type, pt))
-        FATAL(e->call->p.p[i].p->location, "Type missmatch got '%s', expect '%s'", Type_name(pt).s,
-              Type_name(t->fnT->d.parameter.v[j].type).s);
+        FATAL(e->call->p.p[i].p->location, "Type missmatch got '%s', expect '%s'", Type_name(pt),
+              Type_name(t->fnT->d.parameter.v[j].type));
     }
     for (; i < e->call->p.len; ++i)
       c_Expression_make_variables_typed(s, p, m, e->call->p.p[i].p);
@@ -4586,7 +4537,7 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
       for (Parameter *pa = e->construct->p.p; pa < e->construct->p.p + e->construct->p.len; ++pa) {
         Type *pt = c_Expression_make_variables_typed(s, p, m, pa->p);
         if (first && !Type_equal(pt, first))
-          FATAL(e->location, "Type missmatch for array element of '%s'!", Type_name(first).s);
+          FATAL(e->location, "Type missmatch for array element of '%s'!", Type_name(first));
         if (!first)
           first = pt;
       }
@@ -4595,7 +4546,7 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
 
       Module *first_m = Type_defined_module(first);
       if (!first_m)
-        FATAL(e->location, "unknown module for type '%s'", Type_name(first).s);
+        FATAL(e->location, "unknown module for type '%s'", Type_name(first));
       e->construct->type = Module_find_array_type(first_m, e->construct->p.len, first);
       if (!e->construct->type) {
         e->construct->type = Program_add_type(p, ArrayT, "", first_m);
@@ -4609,16 +4560,16 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
         Parameter *pa = &e->construct->p.p[i];
         if (pa->name)
           FATAL(pa->p->location, "Named construction '%s' for none struct type '%s'!", pa->name,
-                Type_name(e->construct->type).s);
+                Type_name(e->construct->type));
       }
     if (e->construct->type->kind == ArrayT) {
       if (e->construct->type->array_count > 0 && e->construct->p.len > e->construct->type->array_count)
-        FATAL(e->location, "Too many initializer for array of '%s'!", Type_name(e->construct->type).s);
+        FATAL(e->location, "Too many initializer for array of '%s'!", Type_name(e->construct->type));
       for (Parameter *pa = e->construct->p.p; pa < e->construct->p.p + e->construct->p.len; ++pa) {
         Type *pt = c_Expression_make_variables_typed(s, p, m, pa->p);
         Type *et = e->construct->type->child;
         if (!Type_equal(pt, et))
-          FATAL(e->location, "Type missmatch for array element of '%s'!", Type_name(e->construct->type->child).s);
+          FATAL(e->location, "Type missmatch for array element of '%s'!", Type_name(e->construct->type->child));
       }
     } else if (e->construct->type->kind == StructT || e->construct->type->kind == CStructT) {
       for (int i = 0; i < e->construct->p.len; ++i) {
@@ -4627,19 +4578,19 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
         if (pa->name) {
           Type *vt = Module_find_member(e->construct->type, pa->name);
           if (!vt)
-            FATAL(pa->p->location, "Type '%s' has no member '%s'!", Type_name(e->construct->type).s, pa->name);
+            FATAL(pa->p->location, "Type '%s' has no member '%s'!", Type_name(e->construct->type), pa->name);
           pt = AdaptParameter_for(p, pt, vt, &e->construct->p.p[i]);
           if (!Type_convertable(vt, pt))
             FATAL(pa->p->location, "Type missmatch for member '%s' of '%s'!\n  expect '%s', got '%s' ", pa->name,
-                  Type_name(e->construct->type).s, Type_name(vt).s, Type_name(pt).s);
+                  Type_name(e->construct->type), Type_name(vt), Type_name(pt));
         } else {
           if (i >= e->construct->type->structT->member.len)
-            FATAL(e->location, "Too many initializer for struct '%s'", Type_name(e->construct->type).s);
+            FATAL(e->location, "Too many initializer for struct '%s'", Type_name(e->construct->type));
           Variable *ma = &e->construct->type->structT->member.v[i];
           pt = AdaptParameter_for(p, pt, ma->type, &e->construct->p.p[i]);
           if (!Type_convertable(ma->type, pt))
             FATAL(pa->p->location, "Type missmatch for member '%s' of '%s'!\n  expect '%s', got '%s' ", ma->name,
-                  Type_name(e->construct->type).s, Type_name(ma->type).s, Type_name(pt).s);
+                  Type_name(e->construct->type), Type_name(ma->type), Type_name(pt));
         }
       }
     } else if (e->construct->type->kind == InterfaceT) {
@@ -4649,17 +4600,17 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
         FATAL(e->location, "interfaces could only be constructed with corresponding struct");
     } else if (e->construct->type->kind == UnionT) {
       if (e->construct->p.len > 1)
-        FATAL(e->location, "Too many initializer for union '%s'!", Type_name(e->construct->type).s);
+        FATAL(e->location, "Too many initializer for union '%s'!", Type_name(e->construct->type));
       if (e->construct->p.len > 0) {
         Parameter *pa = &e->construct->p.p[0];
         Type *pt = c_Expression_make_variables_typed(s, p, m, pa->p);
         if (pa->name) {
           Type *vt = Module_find_member(e->construct->type, pa->name);
           if (!vt)
-            FATAL(pa->p->location, "Type '%s' has no member '%s'!", Type_name(e->construct->type).s, pa->name);
+            FATAL(pa->p->location, "Type '%s' has no member '%s'!", Type_name(e->construct->type), pa->name);
           if (!Type_equal(pt, vt))
             FATAL(pa->p->location, "Type missmatch for member '%s' of '%s'!\n  expect '%s', got '%s' ", pa->name,
-                  Type_name(e->construct->type).s, Type_name(vt).s, Type_name(pt).s);
+                  Type_name(e->construct->type), Type_name(vt), Type_name(pt));
         } else {
           bool any_type_fit = false;
           for (int i = 0; !any_type_fit && i < e->construct->type->structT->member.len; ++i) {
@@ -4670,37 +4621,37 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
           }
           if (!any_type_fit)
             FATAL(pa->p->location, "Type missmatch for union '%s'!\n  '%s' is not a valid member type",
-                  Type_name(e->construct->type).s, Type_name(pt).s);
+                  Type_name(e->construct->type), Type_name(pt));
         }
       }
     } else {
-      FATAL(e->location, "construction not possible (or not implemented) for '%s'", Type_name(e->construct->type).s);
+      FATAL(e->location, "construction not possible (or not implemented) for '%s'", Type_name(e->construct->type));
     }
     return e->construct->type;
   }
   case AccessE: {
     Type *subt = c_Expression_make_variables_typed(s, p, m, e->access->p);
     if (!Type_convertable(&u64, subt) && !Type_convertable(&i64, subt))
-      FATAL(e->access->p->location, "Expect integral type for array subscription, got '%s'", Type_name(subt).s);
+      FATAL(e->access->p->location, "Expect integral type for array subscription, got '%s'", Type_name(subt));
     Type *t = c_Expression_make_variables_typed(s, p, m, e->access->o);
     if (t == &String)
       return &Char;
     if ((TypeKind)t->kind != ArrayT && t->kind != DynArrayT && t->kind != PointerT && t->kind != SliceT)
-      FATAL(e->location, "Expect array/pointer type for access got '%s'", Type_name(t).s);
+      FATAL(e->location, "Expect array/pointer type for access got '%s'", Type_name(t));
     return t->child;
   }
   case SliceE: {
     Type *begT = c_Expression_make_variables_typed(s, p, m, e->slice->begin);
     if (!Type_convertable(&u64, begT) && !Type_convertable(&i64, begT))
-      FATAL(e->slice->begin->location, "Expect integral type for slice subscription, got '%s'", Type_name(begT).s);
+      FATAL(e->slice->begin->location, "Expect integral type for slice subscription, got '%s'", Type_name(begT));
     if (e->slice->end) {
       Type *endT = c_Expression_make_variables_typed(s, p, m, e->slice->end);
       if (!Type_convertable(&u64, endT) && !Type_convertable(&i64, endT))
-        FATAL(e->slice->end->location, "Expect integral type for slice subscription, got '%s'", Type_name(endT).s);
+        FATAL(e->slice->end->location, "Expect integral type for slice subscription, got '%s'", Type_name(endT));
     }
     Type *t = c_Expression_make_variables_typed(s, p, m, e->slice->o);
     if ((TypeKind)t->kind != ArrayT && t->kind != DynArrayT && t->kind != PointerT && t->kind != SliceT && t != &String)
-      FATAL(e->location, "Expect array/pointer type for slice creation got '%s'", Type_name(t).s);
+      FATAL(e->location, "Expect array/pointer type for slice creation got '%s'", Type_name(t));
     Type *child = t == &String ? &Char : t->child;
     Module *cm = Type_defined_module(child);
     Type *st = Module_find_slice_type(cm, child);
@@ -4748,11 +4699,11 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
       return td;
     } else if (streq(e->unpre->op, "*")) {
       if (st->kind != PointerT)
-        FATAL(e->location, "dereferenceing none pointer type '%s'!", Type_name(st).s);
+        FATAL(e->location, "dereferenceing none pointer type '%s'!", Type_name(st));
       return st->child;
     } else if (streq(e->unpre->op, "!")) {
       if (!Type_convertable(&Bool, st))
-        FATAL(e->location, "wrong type for '!' operator '%s'", Type_name(st).s);
+        FATAL(e->location, "wrong type for '!' operator '%s'", Type_name(st));
       if (st->kind == InterfaceT) {
         Expression *cd = Program_new_Expression(p, CDelegateE);
         cd->location = e->unpre->o->location;
@@ -4815,7 +4766,7 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
     }
     if (!Type_convertable(t1, t2) && !Type_convertable(t2, t1)) {
       FATAL(e->location, "Expect equal types for binary operation '%s' (%s, %s) (%p, %p)", e->binop->op->op,
-            Type_name(t1).s, Type_name(t2).s, t1, t2);
+            Type_name(t1), Type_name(t2), t1, t2);
     }
     if (e->binop->op->returns_bool)
       return &Bool;
@@ -4824,7 +4775,7 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
   case TernaryOperationE: {
     Type *tc = c_Expression_make_variables_typed(s, p, m, e->ternop->condition);
     if (tc != &Bool && tc != &Null && tc->kind != PointerT && tc->kind != InterfaceT)
-      FATAL(e->location, "Expect 'bool' or pointer as contition got '%s'", Type_name(tc).s);
+      FATAL(e->location, "Expect 'bool' or pointer as contition got '%s'", Type_name(tc));
     if (tc->kind == InterfaceT) {
       Expression *cd = Program_new_Expression(p, CDelegateE);
       cd->location = e->location;
@@ -4835,7 +4786,7 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
     Type *t1 = c_Expression_make_variables_typed(s, p, m, e->ternop->if_e);
     Type *t2 = c_Expression_make_variables_typed(s, p, m, e->ternop->else_e);
     if (!Type_equal(t1, t2))
-      FATAL(e->location, "Expect equal types for ternary operation (%s, %s)", Type_name(t1).s, Type_name(t2).s);
+      FATAL(e->location, "Expect equal types for ternary operation (%s, %s)", Type_name(t1), Type_name(t2));
     return t1;
   }
   case CDelegateE: {
@@ -4933,7 +4884,7 @@ void c_Function_make_variables_typed(VariableStack *s, Program *p, Module *m, Fu
   int size = s->stackSize;
   for (Variable *p = f->d.parameter.v; p < f->d.parameter.v + f->d.parameter.len; ++p) {
     if (p->type->kind == ArrayT)
-      FATAL(p->location, "Array type parameter is not allowed '%s'", Type_name(p->type).s);
+      FATAL(p->location, "Array type parameter is not allowed '%s'", Type_name(p->type));
     VariableStack_push(s, p->name, p->type);
   }
 
@@ -4976,7 +4927,7 @@ void c_check_types(Module *m) {
 
   for (TypeList *tl = m->types; tl; tl = tl->next) {
     if (tl->type->kind == PlaceHolder)
-      FATALX("undefined type '%s' in module '%s'", Type_name(tl->type).s, m->path);
+      FATALX("undefined type '%s' in module '%s'", Type_name(tl->type), m->path);
     else if (tl->type->kind == UseT)
       c_check_types(tl->type->useT->module);
   }
@@ -4988,7 +4939,7 @@ void c_check_types(Module *m) {
       if ((*t)->kind == PlaceHolder) {
         Location *r = &tl->type->useT->location;
         Location l = (Location){r->file, r->line, r->column};
-        FATAL(l, "include unkown type '%s' in module '%s'", Type_name(*t).s, tl->type->useT->module->path);
+        FATAL(l, "include unkown type '%s' in module '%s'", Type_name(*t), tl->type->useT->module->path);
       }
     }
   }
