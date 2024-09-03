@@ -3031,6 +3031,8 @@ Type *c_expression_get_type(Expression *e) {
   case IdentifierA: {
     if (!e->id->type)
       FATAL(e->location, "unknown type for '%s'", e->id->name);
+    if (e->id->type->kind == ConstantWrapperT)
+      return e->id->type->child;
     return e->id->type;
   }
   case AutoTypeE: {
@@ -3079,8 +3081,6 @@ Type *c_expression_get_type(Expression *e) {
   }
   case AccessE: {
     Type *t = c_expression_get_type(e->access->o);
-    if (t->kind == ConstantWrapperT)
-      t = t->child;
     if (t == &String)
       return &Char;
     if (!t->child)
