@@ -375,6 +375,42 @@ BinOp *getop(const char *ch) {
   return NULL;
 }
 
+const char *operator_method_for(const char *op) {
+  if (streq(op, "=="))
+    return "__eq";
+  else if (streq(op, "!="))
+    return "__ne";
+  else if (streq(op, "+"))
+    return "__add";
+  else if (streq(op, "-"))
+    return "__sub";
+  else if (streq(op, "*"))
+    return "__mul";
+  else if (streq(op, "/"))
+    return "__div";
+  else if (streq(op, "%"))
+    return "__mod";
+  else if (streq(op, "<"))
+    return "__lt";
+  else if (streq(op, "<="))
+    return "__le";
+  else if (streq(op, ">"))
+    return "__gt";
+  else if (streq(op, ">="))
+    return "__ge";
+  else if (streq(op, "&"))
+    return "__bin_and";
+  else if (streq(op, "|"))
+    return "__bin_or";
+  else if (streq(op, "^"))
+    return "__bin_xor";
+  else if (streq(op, "<<"))
+    return "__lshift";
+  else if (streq(op, ">>"))
+    return "__rshift";
+  return NULL;
+}
+
 typedef struct BinaryOperation {
   Expression *o1;
   Expression *o2;
@@ -2858,7 +2894,7 @@ void c_type(FILE *f, const char *module_name, Type *t) {
   }
 }
 
-void c_expression(FILE *f, Expression *e);
+Type *c_expression(FILE *f, Expression *e);
 
 void c_parameter(FILE *f, ParameterList *pl, bool braces) {
   if (pl->len == 0)
@@ -3026,9 +3062,14 @@ Type *c_expression_get_type(Expression *e) {
         return &Bool;
       else if (str_any_of(t->macro_name, "print", "eprint", NULL))
         return &i32;
-      else if (str_any_of(t->macro_name, "resize", "reserve", NULL))
-        FATAL(e->location, "'%s' may be more complicated here!", t->macro_name);
-      else
+      else if (str_any_of(t->macro_name, "resize", "reserve", "push", "pop", "clear", NULL))
+        return &Void;
+      else if (streq(t->macro_name, "back")) {
+        Type *arg_type = c_expression_get_type(e->call->p.p[0].p);
+        if (!arg_type || arg_type->kind != DynArrayT)
+          FATAL(e->location, "Type '%s' not working as dynamic array!", Type_name(arg_type));
+        return arg_type->child;
+      } else
         FATAL(e->location, "Need a function to be called!");
     }
   }
@@ -3113,7 +3154,6 @@ Type *c_expression_get_type(Expression *e) {
     }
     if (e->binop->op->returns_bool)
       return &Bool;
-    // return  Type_more_common(t1, t2);
     return t1;
   }
 
@@ -3126,7 +3166,6 @@ Type *c_expression_get_type(Expression *e) {
   }
 
   case CDelegateE: {
-    FATAL(e->location, "internal error: unexpected delegate");
     return c_expression_get_type(e->cdelegate->o);
   }
   }
@@ -3309,9 +3348,9 @@ bool c_check_macro(FILE *f, Call *ca, Location l) {
   return false;
 }
 
-void c_expression(FILE *f, Expression *e) {
+Type *c_expression(FILE *f, Expression *e) {
   if (!e)
-    return;
+    return NULL;
 
   switch ((ExpressionType)e->type) {
   case BaseA:
@@ -3323,7 +3362,7 @@ void c_expression(FILE *f, Expression *e) {
       fprintf(f, "NULL");
     else
       fprintf(f, "%s", e->baseconst->text);
-    break;
+    return e->baseconst->type;
 
   case IdentifierA:
     if (!e->id->type)
@@ -3337,56 +3376,57 @@ void c_expression(FILE *f, Expression *e) {
       fprintf(f, "%s", Type_defined_module(e->id->type)->c_name);
     else if (e->id->type->kind == BaseT && e->id->type == Module_find_type(&global, c_sv(e->id->name))) {
       fprintf(f, "%s", e->id->type->c_name);
-      break;
+      return e->id->type;
     }
     fprintf(f, "%s", e->id->name);
-    break;
+    return e->id->type;
 
   case AutoTypeE: {
     if (!c_type_declare(f, e->autotype->type, e->location, e->autotype->name))
       fprintf(f, " %s", e->autotype->name);
     fprintf(f, " = ");
     c_expression(f, e->autotype->e);
-    break;
+    return e->autotype->type;
   }
 
   case BraceE: {
     fprintf(f, "(");
-    c_expression(f, e->brace->o);
+    Type *rt = c_expression(f, e->brace->o);
     fprintf(f, ")");
-    break;
+    return rt;
   }
 
   case CallE: {
     if (c_check_macro(f, e->call, e->location))
-      return;
+      return c_expression_get_type(e);
 
     c_expression(f, e->call->o);
     fprintf(f, "(");
     c_parameter(f, &e->call->p, false);
     fprintf(f, ")");
-    break;
+
+    return c_expression_get_type(e);
   }
 
   case NewE: {
     if (e->newE->o->type != ConstructE)
       FATAL(e->location, "expect construction for 'new'");
-    Type *t = e->newE->o->construct->type;
-    if ((TypeKind)t->kind == ArrayT) {
-      int count = t->array_count;
-      t = t->child;
+    Type *rt = e->newE->o->construct->type;
+    if ((TypeKind)rt->kind == ArrayT) {
+      int count = rt->array_count;
+      rt = rt->child;
       fprintf(f, "__NEW_ARRAY(");
-      if (c_type_declare(f, t, e->location, "<<>>"))
-        FATAL(e->location, "Type '%s' not working as dynamic array!", Type_name(t));
+      if (c_type_declare(f, rt, e->location, "<<>>"))
+        FATAL(e->location, "Type '%s' not working as dynamic array!", Type_name(rt));
       fprintf(f, ", %d)", count);
-      Module_find_pointer_type(Type_defined_module(t), t);
+      Module_find_pointer_type(Type_defined_module(rt), rt);
     } else {
-      fprintf(f, "__NEW_(%s%s, &(", Type_defined_module(t)->c_name, t->name);
+      fprintf(f, "__NEW_(%s%s, &(", Type_defined_module(rt)->c_name, rt->name);
       c_expression(f, e->newE->o);
       fprintf(f, "))");
-      Module_find_pointer_type(Type_defined_module(t), t);
+      Module_find_pointer_type(Type_defined_module(rt), rt);
     }
-    break;
+    return rt;
   }
 
   case ConstructE: {
@@ -3416,7 +3456,7 @@ void c_expression(FILE *f, Expression *e) {
       c_parameter(f, &e->construct->p, false);
       fprintf(f, "}");
     }
-    break;
+    return e->construct->type;
   }
 
   case AccessE: {
@@ -3444,7 +3484,7 @@ void c_expression(FILE *f, Expression *e) {
       c_expression(f, e->access->p);
       fprintf(f, "]");
     }
-    break;
+    return type_to_access->child;
   }
 
   case SliceE: {
@@ -3484,7 +3524,8 @@ void c_expression(FILE *f, Expression *e) {
     else
       fprintf(f, "INT64_MAX");
     fprintf(f, ")");
-    break;
+
+    return c_expression_get_type(e);
   }
 
   case MemberAccessE: {
@@ -3593,7 +3634,7 @@ void c_expression(FILE *f, Expression *e) {
     fprintf(f, ")(");
     c_expression(f, e->cast->o);
     fprintf(f, "))");
-    break;
+    return e->cast->type;
 
   case UnaryPrefixE: {
     fprintf(f, "%s", e->unpre->op);
@@ -3602,32 +3643,60 @@ void c_expression(FILE *f, Expression *e) {
   }
 
   case UnaryPostfixE: {
-    c_expression(f, e->unpost->o);
+    Type *rt = c_expression(f, e->unpost->o);
     fprintf(f, "%s", e->unpost->op);
-    break;
+    return rt;
   }
 
   case BinaryOperationE: {
+    Type *rt = c_expression_get_type(e->binop->o1);
+    if (rt->kind == StructT || rt->kind == CStructT || rt->kind == UnionT) {
+      const char *op_meth = operator_method_for(e->binop->op->op);
+      if (op_meth) {
+        Expression c = (Expression){
+            .call =
+                &(Call){
+                    .o =
+                        &(Expression){
+                            .id = &(Identifier){op_meth, Module_find_member(rt, op_meth)},
+                            .type = IdentifierA,
+                        },
+                    .p =
+                        (ParameterList){
+                            .p = (Parameter[]){(Parameter){e->binop->o1, NULL}, (Parameter){e->binop->o2, NULL}},
+                            .len = 2,
+                        },
+                },
+            .type = CallE};
+        if (!c.call->o->id->type)
+          FATAL(e->location, "operator '%s' not implemented for type '%s'!", e->binop->op->op, Type_name(rt));
+        c_expression(f, &c);
+        return rt;
+      }
+    }
     c_expression(f, e->binop->o1);
     fprintf(f, " %s ", e->binop->op->op);
     c_expression(f, e->binop->o2);
-    break;
+    return rt;
   }
 
   case TernaryOperationE: {
     c_expression(f, e->ternop->condition);
     fprintf(f, " ? ");
-    c_expression(f, e->ternop->if_e);
+    Type *rt = c_expression(f, e->ternop->if_e);
     fprintf(f, " : ");
     c_expression(f, e->ternop->else_e);
-    break;
+    return rt;
   }
 
   case CDelegateE: {
-    c_expression(f, e->cdelegate->o);
+    Type *rt = c_expression(f, e->cdelegate->o);
     fprintf(f, "%s", e->cdelegate->delegate);
+    return rt;
   }
   }
+
+  return c_expression_get_type(e);
 }
 
 const char *SPACE = "                                                ";

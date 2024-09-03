@@ -1,0 +1,96 @@
+type Vec3i struct {
+  i i32,
+  j i32,
+  k i32,
+}
+
+fn __eq(a Vec3i, b Vec3i) bool {
+  return a.i == b.i && a.j == b.j && a.k == b.k
+}
+fn __ne(a Vec3i, b Vec3i) bool {
+  return !__eq(a, b)
+}
+fn __lt(a Vec3i, b Vec3i) bool {
+  return a.i < b.i && a.j < b.j && a.k < b.k
+}
+fn __le(a Vec3i, b Vec3i) bool {
+  return a.i <= b.i && a.j <= b.j && a.k <= b.k
+}
+fn __gt(a Vec3i, b Vec3i) bool {
+  return a.i > b.i && a.j > b.j && a.k > b.k
+}
+fn __ge(a Vec3i, b Vec3i) bool {
+  return a.i >= b.i && a.j >= b.j && a.k >= b.k
+}
+fn __add(a Vec3i, b Vec3i) Vec3i {
+  return Vec3i{a.i + b.i, a.j + b.j, a.k + b.k}
+}
+fn __sub(a Vec3i, b Vec3i) Vec3i {
+  return Vec3i{a.i - b.i, a.j - b.j, a.k - b.k}
+}
+fn __mul(a Vec3i, b Vec3i) Vec3i {
+  return Vec3i{a.i * b.i, a.j * b.j, a.k * b.k}
+}
+fn __div(a Vec3i, b Vec3i) Vec3i {
+  return Vec3i{a.i / b.i, a.j / b.j, a.k / b.k}
+}
+fn __mod(a Vec3i, b Vec3i) Vec3i {
+  return Vec3i{a.i % b.i, a.j % b.j, a.k % b.k}
+}
+fn __bin_and(a Vec3i, b Vec3i) Vec3i {
+  return Vec3i{a.i & b.i, a.j & b.j, a.k & b.k}
+}
+fn __bin_or(a Vec3i, b Vec3i) Vec3i {
+  return Vec3i{a.i | b.i, a.j | b.j, a.k | b.k}
+}
+fn __bin_xor(a Vec3i, b Vec3i) Vec3i {
+  return Vec3i{a.i ^ b.i, a.j ^ b.j, a.k ^ b.k}
+}
+fn __lshift(a Vec3i, b Vec3i) Vec3i {
+  return Vec3i{a.i << b.i, a.j << b.j, a.k << b.k}
+}
+fn __rshift(a Vec3i, b Vec3i) Vec3i {
+  return Vec3i{a.i >> b.i, a.j >> b.j, a.k >> b.k}
+}
+
+fn overload_operator_types() {
+  print(" .overload_operator_types")
+
+  a := Vec3i{0, 0, 0}
+  b := Vec3i{1, 2, 3}
+
+  ASSERT(a == a)
+  ASSERT(a != b)
+
+  ASSERT(a % b == a)
+  ASSERT(b % b == Vec3i{0})
+  ASSERT(b - b == Vec3i{0})
+  ASSERT(a + b == b)
+  ASSERT(a * b == a)
+  ASSERT(a / b == a)
+
+  ASSERT((a & b) == a)
+  ASSERT((b & b) == b)
+  ASSERT((a | b) == b)
+  ASSERT((b | b) == b)
+  ASSERT((a ^ b) == b)
+  ASSERT((b ^ b) == a)
+
+  ASSERT((b << a) == b)
+  ASSERT((b << b) == Vec3i{1 << 1, 2 << 2, 3 << 3})
+  ASSERT((b >> a) == b)
+
+  ASSERT(a < b)
+  ASSERT(b <= b)
+  ASSERT(b > a)
+  ASSERT(b >= b)
+}
+
+fn main() i32 {
+  print("operator overload")
+
+  overload_operator_types()
+
+  print(" ...ok")
+  return 0
+}
