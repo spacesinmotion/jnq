@@ -3024,7 +3024,7 @@ Type *c_expression_get_type(Module *m, Expression *e) {
         return &i32;
       else if (streq(t->macro_name, "ASSERT"))
         return &Bool;
-      else if (streq(t->macro_name, "print"))
+      else if (str_any_of(t->macro_name, "print", "eprint", NULL))
         return &i32;
       else if (str_any_of(t->macro_name, "resize", "reserve", NULL))
         FATAL(e->location, "'%s' may be more complicated here!", t->macro_name);
@@ -3147,8 +3147,8 @@ bool c_check_macro(FILE *f, Call *ca, Location l) {
     jnq_expression(f, ca->p.p[0].p);
     fprintf(f, "'\")");
     return true;
-  } else if (streq(ca->o->id->name, "print")) {
-    fprintf(f, "printf(\"");
+  } else if (str_any_of(ca->o->id->name, "print", "eprint", NULL)) {
+    fprintf(f, "fprintf(%s, \"", (ca->o->id->name[0] == 'e' ? "stderr" : "stdout"));
     Type *param[128];
     int i = 0;
     for (; i < ca->p.len; ++i) {
@@ -4403,7 +4403,7 @@ Type *c_Macro_make_variables_typed(VariableStack *s, Program *p, Module *m, cons
     if (nb_param > 1)
       FATAL(e->location, "too much parameter for macro '%s'!", macro_name);
     return &i32;
-  } else if (streq("print", macro_name)) {
+  } else if (str_any_of(macro_name, "print", "eprint", NULL)) {
     return &i32;
   } else if (streq("ASSERT", macro_name)) {
     if (nb_param < 1)
@@ -5138,6 +5138,7 @@ void Program_add_defaults(Program *p) {
   Program_declare_macro(p, "pop");
   Program_declare_macro(p, "back");
   Program_declare_macro(p, "print");
+  Program_declare_macro(p, "eprint");
 }
 
 #ifndef WIN32
