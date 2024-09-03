@@ -64,8 +64,6 @@ State State_new(const char *c, const char *file) {
   return (State){.c = c, .location = (Location){.file = file, .line = 1, .column = 1}};
 }
 
-#define null_location ((Location){.file = "", .line = 1, .column = 1})
-
 void State_skip(State *s, int c) {
   s->c += c;
   s->location.column += c;
@@ -101,24 +99,6 @@ Location back(State *s, size_t c) {
   }
   b.column -= c;
   return b;
-}
-
-Location back_to_none_whitespace(State s, State old) {
-  while (s.c > old.c) {
-    s.c--;
-    if (!isspace(*s.c))
-      break;
-  }
-  s.c++;
-  while (s.c > old.c) {
-    if (*old.c == '\n') {
-      old.location.line++;
-      old.location.column = 1;
-    } else
-      ++old.location.column;
-    old.c++;
-  }
-  return old.location;
 }
 
 typedef struct BufString {
