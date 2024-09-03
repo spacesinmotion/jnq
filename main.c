@@ -2984,7 +2984,7 @@ void jnq_expression(FILE *f, Expression *e) {
   }
 }
 
-Type *c_expression_get_type(Module *m, Expression *e) {
+Type *c_expression_get_type(Expression *e) {
   if (!e)
     return NULL;
 
@@ -3003,7 +3003,7 @@ Type *c_expression_get_type(Module *m, Expression *e) {
     return e->autotype->type;
   }
   case BraceE:
-    return c_expression_get_type(m, e->brace->o);
+    return c_expression_get_type(e->brace->o);
 
   case MemberAccessE: {
     if (!e->member->member->type)
@@ -3012,7 +3012,7 @@ Type *c_expression_get_type(Module *m, Expression *e) {
   }
 
   case CallE: {
-    Type *t = c_expression_get_type(m, e->call->o);
+    Type *t = c_expression_get_type(e->call->o);
     if (!t || (t->kind != FnT && t->kind != MacroT))
       FATAL(e->location, "Need a function to be called!");
     if (t->kind == FnT)
@@ -3039,7 +3039,7 @@ Type *c_expression_get_type(Module *m, Expression *e) {
     return e->construct->type;
   }
   case AccessE: {
-    Type *t = c_expression_get_type(m, e->access->o);
+    Type *t = c_expression_get_type(e->access->o);
     if (t == &String)
       return &Char;
     if (!t->child)
@@ -3047,7 +3047,7 @@ Type *c_expression_get_type(Module *m, Expression *e) {
     return t->child;
   }
   case SliceE: {
-    Type *t = c_expression_get_type(m, e->slice->o);
+    Type *t = c_expression_get_type(e->slice->o);
     if (t == &String) {
       Type *st = Module_find_slice_type(global_module(), &Char);
       if (!st)
@@ -3065,7 +3065,7 @@ Type *c_expression_get_type(Module *m, Expression *e) {
     return e->cast->type;
 
   case NewE: {
-    Type *st = c_expression_get_type(m, e->newE->o);
+    Type *st = c_expression_get_type(e->newE->o);
     Module *cm = Type_defined_module(st);
     if (!cm)
       FATAL(e->location, "internal problem finding module for type '%s'", Type_name(st));
@@ -3082,7 +3082,7 @@ Type *c_expression_get_type(Module *m, Expression *e) {
   }
 
   case UnaryPrefixE: {
-    Type *st = c_expression_get_type(m, e->unpost->o);
+    Type *st = c_expression_get_type(e->unpost->o);
     if (streq(e->unpre->op, "&")) {
       Module *cm = Type_defined_module(st);
       if (!cm)
@@ -3102,11 +3102,11 @@ Type *c_expression_get_type(Module *m, Expression *e) {
   }
 
   case UnaryPostfixE:
-    return c_expression_get_type(m, e->unpre->o);
+    return c_expression_get_type(e->unpre->o);
 
   case BinaryOperationE: {
-    Type *t1 = c_expression_get_type(m, e->binop->o1);
-    Type *t2 = c_expression_get_type(m, e->binop->o2);
+    Type *t1 = c_expression_get_type(e->binop->o1);
+    Type *t2 = c_expression_get_type(e->binop->o2);
     if (!Type_convertable(t1, t2) && !Type_convertable(t2, t1)) {
       FATAL(e->location, "Expect equal types for binary operation '%s' (%s, %s) (%p, %p)", e->binop->op->op,
             Type_name(t1), Type_name(t2), t1, t2);
@@ -3118,8 +3118,8 @@ Type *c_expression_get_type(Module *m, Expression *e) {
   }
 
   case TernaryOperationE: {
-    Type *t1 = c_expression_get_type(m, e->ternop->if_e);
-    Type *t2 = c_expression_get_type(m, e->ternop->else_e);
+    Type *t1 = c_expression_get_type(e->ternop->if_e);
+    Type *t2 = c_expression_get_type(e->ternop->else_e);
     if (!Type_equal(t1, t2))
       FATAL(e->location, "Expect equal types for ternary operation (%s, %s)", Type_name(t1), Type_name(t2));
     return t1;
@@ -3127,7 +3127,7 @@ Type *c_expression_get_type(Module *m, Expression *e) {
 
   case CDelegateE: {
     FATAL(e->location, "internal error: unexpected delegate");
-    return c_expression_get_type(m, e->cdelegate->o);
+    return c_expression_get_type(e->cdelegate->o);
   }
   }
   FATAL(e->location, "unknown type for expression!");
@@ -3154,7 +3154,7 @@ bool c_check_macro(FILE *f, Call *ca, Location l) {
     for (; i < ca->p.len; ++i) {
       if (i >= 128)
         FATAL(ca->p.p[i].p->location, "Internal error to much parameter for 'print' macro.");
-      param[i] = c_expression_get_type(NULL, ca->p.p[i].p);
+      param[i] = c_expression_get_type(ca->p.p[i].p);
       if (param[i] && param[i]->kind == ConstantWrapperT)
         param[i] = param[i]->child;
       if (param[i] == &String || param[i] == &Bool || (param[i]->kind == PointerT && param[i]->child == &Char))
@@ -3225,7 +3225,7 @@ bool c_check_macro(FILE *f, Call *ca, Location l) {
             ma->member->name);
     return true;
   } else if (str_any_of(ca->o->id->name, "resize", "reserve", "push", NULL)) {
-    Type *arg_type = c_expression_get_type(NULL, ca->p.p[0].p);
+    Type *arg_type = c_expression_get_type(ca->p.p[0].p);
     if (!arg_type || arg_type->kind != DynArrayT)
       FATAL(l, "Type '%s' not working as dynamic array!", Type_name(arg_type));
     fprintf(f, "__%s_ARRAY(", ca->o->id->name);
@@ -3236,7 +3236,7 @@ bool c_check_macro(FILE *f, Call *ca, Location l) {
     fprintf(f, ")");
     return true;
   } else if (str_any_of(ca->o->id->name, "pop", "back", "clear", NULL)) {
-    Type *arg_type = c_expression_get_type(NULL, ca->p.p[0].p);
+    Type *arg_type = c_expression_get_type(ca->p.p[0].p);
     if (!arg_type || arg_type->kind != DynArrayT)
       FATAL(l, "Type '%s' not working as dynamic array!", Type_name(arg_type));
     fprintf(f, "__%s_ARRAY(", ca->o->id->name);
@@ -3249,7 +3249,7 @@ bool c_check_macro(FILE *f, Call *ca, Location l) {
   } else if (str_any_of(ca->o->id->name, "len_s", "cap_s", "len", "cap", NULL)) {
     if (ca->p.len != 1)
       FATAL(l, "'%s' expects exact 1 parameter!", ca->o->id->name);
-    Type *arg_type = c_expression_get_type(NULL, ca->p.p[0].p);
+    Type *arg_type = c_expression_get_type(ca->p.p[0].p);
 
     if ((TypeKind)arg_type->kind == ConstantWrapperT)
       arg_type = arg_type->child;
@@ -3420,7 +3420,7 @@ void c_expression(FILE *f, Expression *e) {
   }
 
   case AccessE: {
-    Type *type_to_access = c_expression_get_type(NULL, e->access->o);
+    Type *type_to_access = c_expression_get_type(e->access->o);
     if (type_to_access && (TypeKind)type_to_access->kind == SliceT) {
       fprintf(f, "(*(");
       if (type_to_access->child == &String)
@@ -3448,7 +3448,7 @@ void c_expression(FILE *f, Expression *e) {
   }
 
   case SliceE: {
-    Type *type_to_access = c_expression_get_type(NULL, e->slice->o);
+    Type *type_to_access = c_expression_get_type(e->slice->o);
     if (!type_to_access || (!type_to_access->child && type_to_access != &String))
       FATAL(e->location, "Error creating slice type");
 
@@ -3740,7 +3740,7 @@ void c_statements(FILE *f, Statement *s, int indent) {
     fprintf(f, ";\n");
     break;
   case Delete: {
-    Type *arg_type = c_expression_get_type(NULL, s->deleteS->e);
+    Type *arg_type = c_expression_get_type(s->deleteS->e);
     switch ((TypeKind)arg_type->kind) {
     case DynArrayT:
       fprintf(f, "__FREE_ARRAY(");
