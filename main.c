@@ -4122,13 +4122,15 @@ typedef struct StackVar {
   Type *type;
 } StackVar;
 
+#define STACK_SIZE 4096
+
 typedef struct VariableStack {
-  StackVar stack[256];
+  StackVar stack[STACK_SIZE];
   int stackSize;
 } VariableStack;
 
 void VariableStack_push(VariableStack *s, const char *n, Type *t) {
-  if (s->stackSize >= 256)
+  if (s->stackSize >= STACK_SIZE)
     FATALX("Variable stack limit reached");
   s->stack[s->stackSize] = (StackVar){n, t};
   s->stackSize++;
@@ -5404,14 +5406,14 @@ typedef struct DeclarationVar {
 } DeclarationVar;
 
 typedef struct DeclarationStack {
-  DeclarationVar stack[256];
+  DeclarationVar stack[STACK_SIZE];
   int stackSize;
 } DeclarationStack;
 
 void DeclarationStack_push(DeclarationStack *s, const char *n, Type *t, LocationRange r) {
   // printf("push %s\n", n);
-  if (s->stackSize >= 256)
-    FATALX("Variable stack limit reached");
+  if (s->stackSize >= STACK_SIZE)
+    FATALX("Declaration stack limit reached");
   s->stack[s->stackSize] = (DeclarationVar){n, t, r};
   s->stackSize++;
 }

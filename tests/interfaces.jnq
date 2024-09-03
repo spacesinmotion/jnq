@@ -6,14 +6,14 @@ type SomeAble interface {
   fn val(s *SomeAble) int
 }
 
-fn some(x SomeAble) int {
+fn some(x SomeAble) i32 {
   return x.id(42) + x.val()
 }
-fn some1(x *SomeAble) int {
+fn some1(x *SomeAble) i32 {
   return x.id(42) + x.val()
 }
-fn some2(x any) int {
-  return(x as *SomeAble).id(42) + (x as *SomeAble).val()
+fn some2(x any) i32 {
+  return (x as *SomeAble).id(42) + (x as *SomeAble).val()
 }
 
 type SomeContainer struct {
@@ -24,13 +24,13 @@ type Some1 struct {
   xx int
 }
 
-fn id(s *Some1, m int) int {
+fn id(s *Some1, m i32) i32 {
   printf("--- id Some1 %d\n", s.xx)
 
   return s.xx * m
 }
 
-fn val(s *Some1) int {
+fn val(s *Some1) i32 {
   printf("--- val Some1 %d\n", s.xx)
 
   return s.xx
@@ -117,11 +117,10 @@ type Object2 interface {
 }
 
 type RealObject struct {
+  name *char // need a non empty object
 }
 
-fn destroy(ro *RealObject, g *Game) {
-
-}
+fn destroy(ro *RealObject, g *Game) {}
 
 type Game struct {
   object Object
@@ -155,7 +154,7 @@ fn compare_interface_as_pointer()
   ASSERT(!(g.os1[1] == g.os1[2]))
 }
 
-fn main() int
+fn main() i32
 {
   printf("interfaces\n")
   basic_2_structs_1_interface()
