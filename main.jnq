@@ -6,31 +6,7 @@ fn array_ptr_check(vvv *[*]i32) {
 }
 
 fn main(argc i32, argv **char) i32 {
-  print("hallo len cap member")
-
-  more_text := ["A", "B", "C"]
-  ASSERT(len(more_text) == 3)
-  ASSERT(cap(more_text) == 3)
-  ASSERT(more_text.len == 3)
-  ASSERT(more_text.cap == 3)
-  ASSERT(more_text.len_s == 3u)
-  ASSERT(more_text.cap_s == 3u)
-
-  vvv := more_text[0: 2]
-  ASSERT(len(vvv) == 2)
-  ASSERT(cap(vvv) == 2)
-  ASSERT(vvv.len == 2)
-  ASSERT(vvv.cap == 2)
-  ASSERT(vvv.len_s == 2ul)
-  ASSERT(vvv.cap_s == 2ul)
-
-  vvv_ptr := &vvv
-  ASSERT(len(vvv_ptr) == 2)
-  ASSERT(cap(vvv_ptr) == 2)
-  ASSERT(vvv_ptr.len == 2)
-  ASSERT(vvv_ptr.cap == 2)
-  ASSERT(vvv_ptr.len_s == 2ul)
-  ASSERT(vvv_ptr.cap_s == 2ul)
+  print("hallo push pop member")
 
   a := new[32]i32{}
   for (i := 0; i < 32; ++i)
@@ -40,18 +16,23 @@ fn main(argc i32, argv **char) i32 {
   array_ptr_check(a)
   ASSERT(a[0] == 42)
 
-  ASSERT(len(a) == 32)
-  ASSERT(cap(a) == 32)
-  ASSERT(a.len == 32)
-  ASSERT(a.cap == 32)
-  ASSERT(a.len_s == 32ul)
-  ASSERT(a.cap_s == 32ul)
+  a.push(42)
+  ASSERT(a.len == 33)
 
-  a_ptr := &a
-  ASSERT(a_ptr.len == 32)
-  ASSERT(a_ptr.cap == 32)
-  ASSERT(a_ptr.len_s == 32ul)
-  ASSERT(a_ptr.cap_s == 32ul)
+  ASSERT(42 == a.pop())
+  ASSERT(a.len == 32)
+
+  ASSERT(a.cap < 1024)
+  a = a.reserve(1024)
+  ASSERT(a.cap == 1024)
+
+  ASSERT(a.len < 2048)
+  a = a.resize(2048)
+  ASSERT(a.cap == 2048)
+  ASSERT(a.len == 2048)
+
+  a = a.clear()
+  ASSERT(a.len == 0)
 
   delete a
 

@@ -33,6 +33,20 @@
 
 bool streq(const char *a, const char *b) { return strcmp(a, b) == 0; }
 
+bool str_any_of(const char *a, ...) {
+  va_list args;
+  va_start(args, a);
+  bool is_in = false;
+  for (; !is_in;) {
+    const char *t = va_arg(args, const char *);
+    if (!t)
+      break;
+    is_in = streq(a, t);
+  }
+  va_end(args);
+  return is_in;
+}
+
 char lib_path[256] = {0};
 
 typedef PACK(struct Location {
@@ -4457,8 +4471,15 @@ Type *AdaptParameter_for(Program *p, Type *got, Type *expect, Parameter *param) 
 Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m, Expression *e);
 
 Type *c_Macro_make_variables_typed(VariableStack *s, Program *p, Module *m, const char *macro_name, Expression *e) {
+  if (e->type != CallE)
+    FATALR(e->range, "makro expected to be called '%s'!", macro_name);
+
   Type *param[32];
   int nb_param = 0;
+  if (e->call->o->type == MemberAccessE) {
+    param[0] = e->call->o->member->o_type;
+    ++nb_param;
+  }
   ParameterList pl = e->call->p;
   for (; nb_param < pl.len; ++nb_param) {
     if (nb_param >= 32)
@@ -4582,8 +4603,11 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
     if (t->kind == ArrayT || t->kind == DynArrayT || t->kind == SliceT) {
       if (streq(e->member->member->name, "len") || streq(e->member->member->name, "cap"))
         return e->member->member->type = &i32;
-      if (streq(e->member->member->name, "len_s") || streq(e->member->member->name, "cap_s"))
+      else if (streq(e->member->member->name, "len_s") || streq(e->member->member->name, "cap_s"))
         return e->member->member->type = &u64;
+      else if ((str_any_of(e->member->member->name, "push", "pop", "clear", "reserve", "resize", NULL)) &&
+               t->kind == DynArrayT)
+        return e->member->member->type = Module_find_type(global_module(), c_sv(e->member->member->name));
 
       const char *tn = t->kind == ArrayT ? "array" : (t->kind == DynArrayT ? "dynamic array" : "slice");
       FATALR(e->range, "unknown %s member '%s'", tn, e->member->member->name);
@@ -4602,9 +4626,6 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
     if (!t || (t->kind != FnT && t->kind != MacroT))
       FATALR(e->range, "Need a function to be called!");
 
-    if (t->kind == MacroT)
-      return c_Macro_make_variables_typed(s, p, m, t->macro_name, e);
-
     Type *first_param_type = NULL;
     if (e->call->o->type == MemberAccessE) {
       first_param_type = e->call->o->member->o_type;
@@ -4615,6 +4636,11 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
       e->call->p.p[0].p = e->call->o->member->o;
       e->call->o->type = IdentifierA;
       e->call->o->id = e->call->o->member->member;
+    }
+
+    if (t->kind == MacroT) {
+
+      return c_Macro_make_variables_typed(s, p, m, t->macro_name, e);
     }
 
     int p_len = e->call->p.len;

@@ -87,6 +87,56 @@ fn len_and_cap_member() {
   ASSERT(0 == cap(a))
 }
 
+fn push_and_pop_member() {
+  printf(" .push_and_pop_member\n")
+  a := new[32]i32{}
+  for (i := 0; i < 32; ++i)
+    a[i] = i * 2
+
+  a.push(42)
+  ASSERT(a.len == 33)
+
+  ASSERT(42 == a.pop())
+  ASSERT(a.len == 32)
+
+  ASSERT(a.cap < 1024)
+  a = a.reserve(1024)
+  ASSERT(a.cap == 1024)
+
+  ASSERT(a.len < 2048)
+  a = a.resize(2048)
+  ASSERT(a.cap == 2048)
+  ASSERT(a.len == 2048)
+
+  a = a.clear()
+  ASSERT(a.len == 0)
+
+  delete a;
+}
+
+fn adapt_array(vvv *[*]i32) {
+  ASSERT((*vvv)[0] != 42)
+  (*vvv)[0] = 42
+  ASSERT((*vvv)[0] == 42)
+
+  (*vvv).push(654321);
+}
+
+fn adapt_array_as_pointer() {
+  printf(" .adapt_array_as_pointer\n")
+  a := new[32]i32{}
+  for (i := 0; i < 32; ++i)
+    a[i] = i * 2
+
+  ASSERT(a.len == 32)
+  ASSERT(a[0] == 0)
+  adapt_array(a)
+  ASSERT(a[0] == 42)
+  ASSERT(a.len == 33)
+
+  delete a;
+}
+
 fn simple_struct()
 {
   printf(" .simple_struct\n")
@@ -255,6 +305,7 @@ fn main() i32 {
 
   simple_int()
   len_and_cap_member()
+  push_and_pop_member()
   simple_struct()
   as_members()
   qsort_any_dynamic_array()
