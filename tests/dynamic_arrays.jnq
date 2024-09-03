@@ -95,6 +95,7 @@ fn push_and_pop_member() {
 
   a.push(42)
   ASSERT(a.len == 33)
+  ASSERT(a.back() == 42)
 
   ASSERT(42 == a.pop())
   ASSERT(a.len == 32)

@@ -441,7 +441,7 @@ BinOp ops[] = {
 };
 BinOp *getop(const char *ch) {
   for (size_t i = 0; i < sizeof(ops) / sizeof(ops[0]); ++i)
-    if (strcmp(ops[i].op, ch) == 0)
+    if (streq(ops[i].op, ch))
       return ops + i;
   return NULL;
 }
@@ -819,7 +819,7 @@ char *readFile(const char *filename) {
 
 Module *Program_find_module(Program *p, const char *path) {
   for (Module *m = p->modules; m; m = m->next)
-    if (strcmp(m->path, path) == 0)
+    if (streq(m->path, path))
       return m;
 
   return NULL;
@@ -3139,16 +3139,15 @@ Type *c_expression_get_type(Module *m, Expression *e) {
     if (t->kind == FnT)
       return t->fnT->d.returnType;
     if (t->kind == MacroT) {
-      if (strcmp(t->macro_name, "len_s") == 0 || strcmp(t->macro_name, "offsetof") == 0 ||
-          strcmp(t->macro_name, "cap_s") == 0 || strcmp(t->macro_name, "sizeof") == 0)
+      if (str_any_of(t->macro_name, "len_s", "offsetof", "cap_s", "sizeof", NULL))
         return &u64;
-      else if (strcmp(t->macro_name, "len") == 0 || strcmp(t->macro_name, "cap") == 0)
+      else if (str_any_of(t->macro_name, "len", "cap", NULL))
         return &i32;
-      else if (strcmp(t->macro_name, "ASSERT") == 0)
+      else if (streq(t->macro_name, "ASSERT"))
         return &Bool;
-      else if (strcmp(t->macro_name, "print") == 0)
+      else if (streq(t->macro_name, "print"))
         return &i32;
-      else if (strcmp(t->macro_name, "resize") == 0 || strcmp(t->macro_name, "reserve") == 0)
+      else if (str_any_of(t->macro_name, "resize", "reserve", NULL))
         FATALR(e->range, "'%s' may be more complicated here!", t->macro_name);
       else
         FATALR(e->range, "Need a function to be called!");
@@ -3205,7 +3204,7 @@ Type *c_expression_get_type(Module *m, Expression *e) {
 
   case UnaryPrefixE: {
     Type *st = c_expression_get_type(m, e->unpost->o);
-    if (strcmp(e->unpre->op, "&") == 0) {
+    if (streq(e->unpre->op, "&")) {
       Module *cm = Type_defined_module(st);
       if (!cm)
         FATALX("internal problem finding module for type");
@@ -3213,11 +3212,11 @@ Type *c_expression_get_type(Module *m, Expression *e) {
       if (!td)
         FATALR(e->range, "internal problem finding pointer type for '%s'", Type_name(st).s);
       return td;
-    } else if (strcmp(e->unpre->op, "*") == 0) {
+    } else if (streq(e->unpre->op, "*")) {
       if (st->kind != PointerT)
         FATALR(e->range, "dereferenceing none pointer type '%s'!", Type_name(st).s);
       return st->child;
-    } else if (strcmp(e->unpre->op, "!") == 0) {
+    } else if (streq(e->unpre->op, "!")) {
       return &Bool;
     }
     return st;
@@ -3260,7 +3259,7 @@ bool c_check_macro(FILE *f, Call *ca, LocationRange l) {
   if (ca->o->type != IdentifierA)
     return false;
 
-  if (strcmp(ca->o->id->name, "ASSERT") == 0) {
+  if (streq(ca->o->id->name, "ASSERT")) {
     if (ca->p.len != 1)
       FATALR(l, "'ASSERT' expects exact 1 parameter!");
     fprintf(f, "assert_imp_(\"%s\", %d, %d, ", l.file ? l.file : "", l.start_line, l.start_column);
@@ -3269,7 +3268,7 @@ bool c_check_macro(FILE *f, Call *ca, LocationRange l) {
     jnq_expression(f, ca->p.p[0].p);
     fprintf(f, "'\")");
     return true;
-  } else if (strcmp(ca->o->id->name, "print") == 0) {
+  } else if (streq(ca->o->id->name, "print")) {
     fprintf(f, "printf(\"");
     Type *param[128];
     int i = 0;
@@ -3331,7 +3330,7 @@ bool c_check_macro(FILE *f, Call *ca, LocationRange l) {
     fprintf(f, ")");
 
     return true;
-  } else if (strcmp(ca->o->id->name, "offsetof") == 0) {
+  } else if (streq(ca->o->id->name, "offsetof")) {
     if (ca->p.len != 1)
       FATALR(l, "'offsetof' expects exact 1 parameter!");
     if (ca->p.p[0].p->type != MemberAccessE)
@@ -3346,8 +3345,7 @@ bool c_check_macro(FILE *f, Call *ca, LocationRange l) {
     fprintf(f, "offsetof(%s%s, %s)", (ma->o_type->kind == CStructT ? "" : mam->c_name), ma->o->id->name,
             ma->member->name);
     return true;
-  } else if (strcmp(ca->o->id->name, "resize") == 0 || strcmp(ca->o->id->name, "reserve") == 0 ||
-             strcmp(ca->o->id->name, "push") == 0) {
+  } else if (str_any_of(ca->o->id->name, "resize", "reserve", "push", NULL)) {
     Type *arg_type = c_expression_get_type(NULL, ca->p.p[0].p);
     if (!arg_type || arg_type->kind != DynArrayT)
       FATALR(l, "Type '%s' not working as dynamic array!", Type_name(arg_type).s);
@@ -3358,8 +3356,7 @@ bool c_check_macro(FILE *f, Call *ca, LocationRange l) {
     c_parameter(f, &ca->p, true);
     fprintf(f, ")");
     return true;
-  } else if (strcmp(ca->o->id->name, "pop") == 0 || strcmp(ca->o->id->name, "back") == 0 ||
-             strcmp(ca->o->id->name, "clear") == 0) {
+  } else if (str_any_of(ca->o->id->name, "pop", "back", "clear", NULL)) {
     Type *arg_type = c_expression_get_type(NULL, ca->p.p[0].p);
     if (!arg_type || arg_type->kind != DynArrayT)
       FATALR(l, "Type '%s' not working as dynamic array!", Type_name(arg_type).s);
@@ -3370,8 +3367,7 @@ bool c_check_macro(FILE *f, Call *ca, LocationRange l) {
     c_parameter(f, &ca->p, true);
     fprintf(f, ")");
     return true;
-  } else if (strcmp(ca->o->id->name, "len_s") == 0 || strcmp(ca->o->id->name, "cap_s") == 0 ||
-             strcmp(ca->o->id->name, "len") == 0 || strcmp(ca->o->id->name, "cap") == 0) {
+  } else if (str_any_of(ca->o->id->name, "len_s", "cap_s", "len", "cap", NULL)) {
     if (ca->p.len != 1)
       FATALR(l, "'%s' expects exact 1 parameter!", ca->o->id->name);
     Type *arg_type = c_expression_get_type(NULL, ca->p.p[0].p);
@@ -3380,7 +3376,7 @@ bool c_check_macro(FILE *f, Call *ca, LocationRange l) {
       arg_type = arg_type->child;
 
     if (arg_type == &String) {
-      if (strcmp(ca->o->id->name, "len") == 0 || strcmp(ca->o->id->name, "cap") == 0)
+      if (str_any_of(ca->o->id->name, "len", "cap", NULL))
         fprintf(f, "(int32_t)");
       fprintf(f, "sizeof(");
       c_expression(f, ca->p.p[0].p);
@@ -3394,7 +3390,7 @@ bool c_check_macro(FILE *f, Call *ca, LocationRange l) {
 
     switch ((TypeKind)arg_type->kind) {
     case DynArrayT:
-      if (strcmp(ca->o->id->name, "len") == 0 || strcmp(ca->o->id->name, "cap") == 0)
+      if (str_any_of(ca->o->id->name, "len", "cap", NULL))
         fprintf(f, "(int32_t)");
       fprintf(f, "_%.3s_array((char*)", ca->o->id->name);
       c_expression(f, ca->p.p[0].p);
@@ -3407,7 +3403,7 @@ bool c_check_macro(FILE *f, Call *ca, LocationRange l) {
 
     case SliceT:
       fprintf(f, "(");
-      if (strcmp(ca->o->id->name, "len") == 0 || strcmp(ca->o->id->name, "cap") == 0)
+      if (str_any_of(ca->o->id->name, "len", "cap", NULL))
         fprintf(f, "(int32_t)");
       c_expression(f, ca->p.p[0].p);
       fprintf(f, "%sl)", (pointer ? "->" : "."));
@@ -3458,7 +3454,7 @@ void c_expression(FILE *f, Expression *e) {
     else if (e->id->type->kind == ConstantWrapperT && e->id->type->constantModule)
       fprintf(f, "%s", e->id->type->constantModule->c_name);
     else if ((e->id->type->kind == StructT || e->id->type->kind == InterfaceT || e->id->type->kind == UnionT) &&
-             e->id->type->name && strcmp(e->id->name, e->id->type->name) == 0)
+             e->id->type->name && streq(e->id->name, e->id->type->name))
       fprintf(f, "%s", Type_defined_module(e->id->type)->c_name);
     else if (e->id->type->kind == BaseT && e->id->type == Module_find_type(&global, c_sv(e->id->name))) {
       fprintf(f, "%s", e->id->type->c_name);
@@ -4199,7 +4195,7 @@ void VariableStack_push(VariableStack *s, const char *n, Type *t) {
 
 Type *VariableStack_find(VariableStack *s, const char *n) {
   for (int i = s->stackSize - 1; i >= 0; i--)
-    if (strcmp(s->stack[i].name, n) == 0)
+    if (streq(s->stack[i].name, n))
       return s->stack[i].type;
   return NULL;
 }
@@ -4215,9 +4211,9 @@ bool is_member_fn_for(Type *ot, Type *ft, const char *name) {
   const size_t ol = strlen(ot->name);
   const size_t nl = strlen(name);
   if (ol + nl == strlen(ft->name) && strncmp(ft->name, ot->name, ol) == 0) {
-    if (strcmp(name, ft->name + ol) != 0)
+    if (!streq(name, ft->name + ol))
       return false;
-  } else if (strcmp(ft->name, name) != 0)
+  } else if (!streq(ft->name, name))
     return false;
 
   Variable *first = &f->d.parameter.v[0];
@@ -4238,7 +4234,7 @@ Type *Module_find_member(Type *t, const char *name) {
   case CStructT:
   case StructT: {
     for (Variable *v = t->structT->member.v; v < t->structT->member.v + t->structT->member.len; ++v)
-      if (strcmp(v->name, name) == 0) {
+      if (streq(v->name, name)) {
         return v->type;
       }
     break;
@@ -4246,14 +4242,14 @@ Type *Module_find_member(Type *t, const char *name) {
   case CEnumT:
   case EnumT: {
     for (EnumEntry *ee = t->enumT->entries; ee; ee = ee->next)
-      if (strcmp(ee->name, name) == 0)
+      if (streq(ee->name, name))
         return t;
     break;
   }
   case InterfaceT: {
     int offset = strlen(t->name);
     for (int i = 0; i < t->interfaceT->methods.len; ++i)
-      if (strcmp(t->interfaceT->methods.fns[i].name + offset, name) == 0)
+      if (streq(t->interfaceT->methods.fns[i].name + offset, name))
         return &t->interfaceT->methods.fns[i];
     break;
   }
@@ -4478,7 +4474,7 @@ Type *c_Macro_make_variables_typed(VariableStack *s, Program *p, Module *m, cons
     param[nb_param] = c_Expression_make_variables_typed(s, p, m, pl.p[nb_param].p);
   }
 
-  if (strcmp("resize", macro_name) == 0 || strcmp("reserve", macro_name) == 0) {
+  if (str_any_of(macro_name, "resize", "reserve", NULL)) {
     if (nb_param < 2)
       FATALR(e->range, "missing parameter for macro '%s'!", macro_name);
     if (nb_param > 2)
@@ -4488,7 +4484,7 @@ Type *c_Macro_make_variables_typed(VariableStack *s, Program *p, Module *m, cons
     if (!Type_convertable(&u64, param[1]) && !Type_convertable(&i64, param[1]))
       FATALR(pl.p[1].p->range, "expect length unit for macro '%s'!", macro_name);
     return param[0];
-  } else if (strcmp("push", macro_name) == 0) {
+  } else if (streq("push", macro_name)) {
     if (nb_param < 2)
       FATALR(e->range, "missing parameter for macro '%s'!", macro_name);
     if (nb_param > 2)
@@ -4501,7 +4497,7 @@ Type *c_Macro_make_variables_typed(VariableStack *s, Program *p, Module *m, cons
     if ((ExpressionType)pl.p[0].p->type == CallE)
       FATALR(pl.p[0].p->range, "'%s' does not work for r-values!", macro_name);
     return param[0];
-  } else if (strcmp("pop", macro_name) == 0 || strcmp("back", macro_name) == 0) {
+  } else if (str_any_of(macro_name, "pop", "back", NULL)) {
     if (nb_param < 1)
       FATALR(e->range, "missing parameter for macro '%s'!", macro_name);
     if (nb_param > 1)
@@ -4509,7 +4505,7 @@ Type *c_Macro_make_variables_typed(VariableStack *s, Program *p, Module *m, cons
     if (param[0]->kind != DynArrayT)
       FATALR(pl.p[0].p->range, "expect dynamic array for macro '%s' got '%s'!", macro_name, Type_name(param[0]).s);
     return param[0]->child;
-  } else if (strcmp("clear", macro_name) == 0) {
+  } else if (streq("clear", macro_name)) {
     if (nb_param < 1)
       FATALR(e->range, "missing parameter for macro '%s'!", macro_name);
     if (nb_param > 1)
@@ -4517,22 +4513,21 @@ Type *c_Macro_make_variables_typed(VariableStack *s, Program *p, Module *m, cons
     if (param[0]->kind != DynArrayT)
       FATALR(pl.p[0].p->range, "expect dynamic array for macro '%s' got '%s'!", macro_name, Type_name(param[0]).s);
     return param[0];
-  } else if (strcmp("sizeof", macro_name) == 0 || strcmp("offsetof", macro_name) == 0 ||
-             strcmp("len_s", macro_name) == 0 || strcmp("cap_s", macro_name) == 0) {
+  } else if (str_any_of(macro_name, "sizeof", "offsetof", "len_s", "cap_s", NULL)) {
     if (nb_param < 1)
       FATALR(e->range, "missing parameter for macro '%s'!", macro_name);
     if (nb_param > 1)
       FATALR(e->range, "too much parameter for macro '%s'!", macro_name);
     return &u64;
-  } else if (strcmp("len", macro_name) == 0 || strcmp("cap", macro_name) == 0) {
+  } else if (str_any_of(macro_name, "len", "cap", NULL)) {
     if (nb_param < 1)
       FATALR(e->range, "missing parameter for macro '%s'!", macro_name);
     if (nb_param > 1)
       FATALR(e->range, "too much parameter for macro '%s'!", macro_name);
     return &i32;
-  } else if (strcmp("print", macro_name) == 0) {
+  } else if (streq("print", macro_name)) {
     return &i32;
-  } else if (strcmp("ASSERT", macro_name) == 0) {
+  } else if (streq("ASSERT", macro_name)) {
     if (nb_param < 1)
       FATALR(e->range, "missing parameter for macro '%s'!", macro_name);
     if (nb_param > 1)
@@ -4592,11 +4587,11 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
       t = t->child;
 
     if (t->kind == ArrayT || t->kind == DynArrayT || t->kind == SliceT) {
-      if (streq(e->member->member->name, "len") || streq(e->member->member->name, "cap"))
+      if (str_any_of(e->member->member->name, "len", "cap", NULL))
         return e->member->member->type = &i32;
-      else if (streq(e->member->member->name, "len_s") || streq(e->member->member->name, "cap_s"))
+      else if (str_any_of(e->member->member->name, "len_s", "cap_s", NULL))
         return e->member->member->type = &u64;
-      else if ((str_any_of(e->member->member->name, "push", "pop", "clear", "reserve", "resize", NULL)) &&
+      else if ((str_any_of(e->member->member->name, "push", "pop", "back", "clear", "reserve", "resize", NULL)) &&
                t->kind == DynArrayT)
         return e->member->member->type = Module_find_type(global_module(), c_sv(e->member->member->name));
 
@@ -4814,7 +4809,7 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
   }
   case UnaryPrefixE: {
     Type *st = c_Expression_make_variables_typed(s, p, m, e->unpost->o);
-    if (strcmp(e->unpre->op, "&") == 0) {
+    if (streq(e->unpre->op, "&")) {
       Module *cm = Type_defined_module(st);
       if (!cm)
         FATALX("internal problem finding module for type");
@@ -4824,11 +4819,11 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
         td->child = st;
       }
       return td;
-    } else if (strcmp(e->unpre->op, "*") == 0) {
+    } else if (streq(e->unpre->op, "*")) {
       if (st->kind != PointerT)
         FATALR(e->range, "dereferenceing none pointer type '%s'!", Type_name(st).s);
       return st->child;
-    } else if (strcmp(e->unpre->op, "!") == 0) {
+    } else if (streq(e->unpre->op, "!")) {
       if (!Type_convertable(&Bool, st))
         FATALR(e->range, "wrong type for '!' operator '%s'", Type_name(st).s);
       if (st->kind == InterfaceT) {
@@ -4854,7 +4849,7 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
     Type *t2 = c_Expression_make_variables_typed(s, p, m, e->binop->o2);
     if (!t2)
       FATALR(e->range, "void right side in binary expression '%s'", e->binop->op->op);
-    if (t1->kind == InterfaceT && (strcmp(e->binop->op->op, "==") == 0 || strcmp(e->binop->op->op, "!=") == 0)) {
+    if (t1->kind == InterfaceT && (str_any_of(e->binop->op->op, "==", "!=", NULL))) {
       Expression *cd = Program_new_Expression(p, CDelegateE);
       cd->range = e->binop->o1->range;
       Expression *br = Program_new_Expression(p, BraceE);
@@ -4865,7 +4860,7 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
       e->binop->o1 = cd;
       // return &Bool;
     }
-    if (t2->kind == InterfaceT && (strcmp(e->binop->op->op, "==") == 0 || strcmp(e->binop->op->op, "!=") == 0)) {
+    if (t2->kind == InterfaceT && (str_any_of(e->binop->op->op, "==", "!=", NULL))) {
       Expression *cd = Program_new_Expression(p, CDelegateE);
       cd->range = e->binop->o2->range;
       Expression *br = Program_new_Expression(p, BraceE);
@@ -4876,11 +4871,11 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
       e->binop->o2 = cd;
       // return &Bool;
     }
-    if (t1 != t2 && t1->kind == InterfaceT && strcmp(e->binop->op->op, "=") == 0) {
+    if (t1 != t2 && t1->kind == InterfaceT && streq(e->binop->op->op, "=")) {
       e->binop->o2 = Interface_construct(p, t2, t1, e->binop->o2);
       return t1;
     }
-    if (t1 != t2 && t2->kind == InterfaceT && t1 == &Bool && strcmp(e->binop->op->op, "=") == 0) {
+    if (t1 != t2 && t2->kind == InterfaceT && t1 == &Bool && streq(e->binop->op->op, "=")) {
       Expression *cd = Program_new_Expression(p, CDelegateE);
       cd->range = e->binop->o2->range;
       Expression *br = Program_new_Expression(p, BraceE);
@@ -5226,7 +5221,7 @@ void c_Program(FILE *f, Program *p, Module *m) {
 
     int nb_main_args = 0;
     for (TypeList *tl = m->types; tl; tl = tl->next) {
-      if (tl->type->kind != FnT || strcmp(tl->type->name, "main") != 0)
+      if (tl->type->kind != FnT || !streq(tl->type->name, "main"))
         continue;
       nb_main_args = tl->type->fnT->d.parameter.len;
     }
@@ -5300,8 +5295,6 @@ typedef struct CommandLineArgs {
   ProgramMode mode;
   const char *output;
   const char *main_file;
-  const char *uri;
-  int line, column;
   bool debug;
 } CommandLineArgs;
 
@@ -5309,38 +5302,29 @@ CommandLineArgs parse_command_line(int argc, char *argv[]) {
   if (argc <= 1)
     FATALX("missing command line arguments\n");
 
-  CommandLineArgs args = (CommandLineArgs){Run, JNQ_BIN, NULL, NULL, 0, 0, false};
+  CommandLineArgs args = (CommandLineArgs){Run, JNQ_BIN, NULL, false};
   int start = 2;
-  if (strcmp(argv[1], "build") == 0)
+  if (streq(argv[1], "build"))
     args.mode = Build;
-  else if (strcmp(argv[1], "transpile") == 0)
+  else if (streq(argv[1], "transpile"))
     args.mode = Transpile;
-  else if (strcmp(argv[1], "run") == 0)
+  else if (streq(argv[1], "run"))
     args.mode = Run;
   else
     start = 1;
 
   int main_file = -1;
   for (int i = start; i < argc; ++i) {
-    if (strcmp(argv[i], "--") == 0)
+    if (streq(argv[i], "--"))
       break;
-    if (strcmp(argv[i], "-o") == 0 && i + 1 < argc) {
+    if (streq(argv[i], "-o") && i + 1 < argc) {
       args.output = argv[i + 1];
       i++;
-    } else if (strcmp(argv[i], "--line") == 0 && i + 1 < argc) {
-      args.line = atoi(argv[i + 1]);
-      i++;
-    } else if (strcmp(argv[i], "--column") == 0 && i + 1 < argc) {
-      args.column = atoi(argv[i + 1]);
-      i++;
-    } else if (strcmp(argv[i], "--uri") == 0 && i + 1 < argc) {
-      args.uri = argv[i + 1];
-      i++;
-    } else if (strcmp(argv[i], "-d") == 0 || strcmp(argv[i], "--debug") == 0) {
+    } else if (streq(argv[i], "-d") || streq(argv[i], "--debug")) {
       args.debug = true;
     } else {
       int len = strlen(argv[i]);
-      if (len > 4 && strcmp(argv[i] + (len - 4), ".jnq") == 0)
+      if (len > 4 && streq(argv[i] + (len - 4), ".jnq"))
         main_file = i;
     }
   }
@@ -5355,7 +5339,7 @@ CommandLineArgs parse_command_line(int argc, char *argv[]) {
 
 Module *parse_main(Program *p) {
   int jnq_len = strlen(p->main_file);
-  if (jnq_len < 4 || strcmp(p->main_file + (jnq_len - 4), ".jnq") != 0)
+  if (jnq_len < 4 || !streq(p->main_file + (jnq_len - 4), ".jnq"))
     FATALX("invalid input file '%s'\n", p->main_file);
 
   BuffString main_mod = (BuffString){};
@@ -5404,15 +5388,15 @@ int compile(CommandLineArgs *cmd, const char *main_c, int argc, char *argv[]) {
   const int start = 2;
   bool output_defined = false;
   for (int i = start; i < argc; ++i) {
-    if (strcmp(argv[i], "--") == 0)
+    if (streq(argv[i], "--"))
       break;
-    if (strcmp(argv[i], "-d") == 0)
+    if (streq(argv[i], "-d"))
       continue;
-    if (strcmp(argv[i], "-o") == 0)
+    if (streq(argv[i], "-o"))
       output_defined = true;
 
     int len = strlen(argv[i]);
-    if (len > 4 && strcmp(argv[i] + len - 4, ".jnq") == 0)
+    if (len > 4 && streq(argv[i] + len - 4, ".jnq"))
       continue;
 
     strcat(clang_call, argv[i]);
@@ -5444,7 +5428,7 @@ int run(Program *p, const char *exec, int argc, char *argv[]) {
       strcat(exec_call, argv[i]);
       strcat(exec_call, " ");
     } else
-      add = strcmp(argv[i], "--") == 0;
+      add = streq(argv[i], "--");
   }
 
   int error = system(exec_call);
