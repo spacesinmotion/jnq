@@ -46,6 +46,27 @@ fn simple_int()
   delete aa
 }
 
+fn len_cap_as_member()
+{
+  print(" .len_cap_as_member")
+
+  aa := [32]i32{}
+  a := aa[0: 32]
+
+  ASSERT(32u == a.len_s)
+  ASSERT(32u == a.cap_s)
+  ASSERT(32 == a.len)
+  ASSERT(32 == a.cap)
+
+  a_ptr := &a
+  // ASSERT(len(a_ptr) == 2)
+  // ASSERT(cap(a_ptr) == 2)
+  ASSERT(a_ptr.len == 32)
+  ASSERT(a_ptr.cap == 32)
+  ASSERT(a_ptr.len_s == 32ul)
+  ASSERT(a_ptr.cap_s == 32ul)
+}
+
 fn simple_struct()
 {
   print(" .simple_struct")
@@ -301,6 +322,7 @@ fn main() i32 {
 
   starting_test()
   simple_int()
+  len_cap_as_member()
   simple_struct()
   as_members()
   qsort_any_slice()

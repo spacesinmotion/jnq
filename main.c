@@ -31,6 +31,8 @@
 #define PACK(__Declaration__) __pragma(pack(push, 1)) __Declaration__ __pragma(pack(pop))
 #endif
 
+bool streq(const char *a, const char *b) { return strcmp(a, b) == 0; }
+
 char lib_path[256] = {0};
 
 typedef PACK(struct Location {
@@ -3381,6 +3383,10 @@ bool c_check_macro(FILE *f, Call *ca, LocationRange l) {
       return true;
     }
 
+    bool pointer = arg_type->kind == PointerT;
+    if (pointer)
+      arg_type = arg_type->child;
+
     switch ((TypeKind)arg_type->kind) {
     case DynArrayT:
       if (strcmp(ca->o->id->name, "len") == 0 || strcmp(ca->o->id->name, "cap") == 0)
@@ -3399,7 +3405,7 @@ bool c_check_macro(FILE *f, Call *ca, LocationRange l) {
       if (strcmp(ca->o->id->name, "len") == 0 || strcmp(ca->o->id->name, "cap") == 0)
         fprintf(f, "(int32_t)");
       c_expression(f, ca->p.p[0].p);
-      fprintf(f, ".l)");
+      fprintf(f, "%sl)", (pointer ? "->" : "."));
       return true;
 
     case UseT:
@@ -3604,6 +3610,57 @@ void c_expression(FILE *f, Expression *e) {
   case MemberAccessE: {
     if (!e->member->o_type)
       FATALR(e->range, "missing type for access");
+
+    TypeKind array_kind = e->member->o_type->kind;
+    if (array_kind == PointerT &&
+        (e->member->o_type->child->kind == DynArrayT || e->member->o_type->child->kind == ArrayT ||
+         e->member->o_type->child->kind == SliceT))
+      array_kind = e->member->o_type->child->kind;
+
+    if (array_kind == ArrayT) {
+      if (streq(e->member->member->name, "len") || streq(e->member->member->name, "cap") ||
+          streq(e->member->member->name, "len_s") || streq(e->member->member->name, "cap_s"))
+        fprintf(f, "(%d)", e->member->o_type->array_count);
+      else
+        FATALR(e->range, "missing member access impl for array member '%s'", e->member->member->name);
+      break;
+
+    } else if (array_kind == DynArrayT) {
+      fprintf(f, "(");
+      if (streq(e->member->member->name, "len") || streq(e->member->member->name, "cap"))
+        fprintf(f, "(int32_t)(");
+
+      if (streq(e->member->member->name, "len") || streq(e->member->member->name, "len_s"))
+        fprintf(f, "_len_array((char*)");
+      else if (streq(e->member->member->name, "cap") || streq(e->member->member->name, "cap_s"))
+        fprintf(f, "_cap_array((char*)");
+      else
+        FATALR(e->range, "missing member access impl for dynamic array member '%s'", e->member->member->name);
+      c_expression(f, e->member->o);
+      if (streq(e->member->member->name, "len") || streq(e->member->member->name, "cap"))
+        fprintf(f, ")");
+      fprintf(f, "))");
+      break;
+
+    } else if (array_kind == SliceT) {
+      fprintf(f, "(");
+      if (streq(e->member->member->name, "len") || streq(e->member->member->name, "cap"))
+        fprintf(f, "(int32_t)(");
+
+      c_expression(f, e->member->o);
+      if (streq(e->member->member->name, "len") || streq(e->member->member->name, "cap"))
+        fprintf(f, "%s%s", (e->member->o_type->kind == PointerT ? "->" : "."), "l");
+      else if (streq(e->member->member->name, "len_s") || streq(e->member->member->name, "cap_s"))
+        fprintf(f, "%s%s", (e->member->o_type->kind == PointerT ? "->" : "."), "l");
+      else
+        FATALR(e->range, "missing member access impl for slice member '%s'", e->member->member->name);
+
+      if (streq(e->member->member->name, "len") || streq(e->member->member->name, "cap"))
+        fprintf(f, ")");
+      fprintf(f, ")");
+      break;
+    }
+
     if (e->member->o_type->kind == EnumT || e->member->o_type->kind == CEnumT) {
       if (e->member->member->type->kind == EnumT)
         fprintf(f, "%s%s", Type_defined_module(e->member->member->type)->c_name, e->member->member->name);
@@ -3641,7 +3698,6 @@ void c_expression(FILE *f, Expression *e) {
       fprintf(f, "%s%s", (e->member->o_type->kind == PointerT ? "->" : "."), e->member->member->name);
       break;
 
-      break;
     case MacroT:
     case FnT:
       FATALR(e->range, "internal error creating member function call!");
@@ -4522,9 +4578,19 @@ Type *c_Expression_make_variables_typed(VariableStack *s, Program *p, Module *m,
     e->member->o_type = t;
     if (t->kind == PointerT)
       t = t->child;
+
+    if (t->kind == ArrayT || t->kind == DynArrayT || t->kind == SliceT) {
+      if (streq(e->member->member->name, "len") || streq(e->member->member->name, "cap"))
+        return e->member->member->type = &i32;
+      if (streq(e->member->member->name, "len_s") || streq(e->member->member->name, "cap_s"))
+        return e->member->member->type = &u64;
+
+      const char *tn = t->kind == ArrayT ? "array" : (t->kind == DynArrayT ? "dynamic array" : "slice");
+      FATALR(e->range, "unknown %s member '%s'", tn, e->member->member->name);
+    }
     if (t->kind != StructT && t->kind != CStructT && t->kind != UnionT && t->kind != InterfaceT && t->kind != EnumT &&
         t->kind != CEnumT)
-      FATALR(e->range, "Expect non pointer type for member access got '%s'", Type_name(t).s);
+      FATALR(e->range, "Expect structure type for member access got '%s'", Type_name(t).s);
     if (!(e->member->member->type = Module_find_member(t, e->member->member->name)))
       FATALR(e->range, "unknown member '%s' for '%s'", e->member->member->name, Type_name(t).s);
     if (e->member->member->type->kind == FnT)
@@ -4926,8 +4992,11 @@ void c_Statement_make_variables_typed(VariableStack *s, Program *p, Module *m, S
 
 void c_Function_make_variables_typed(VariableStack *s, Program *p, Module *m, Function *f) {
   int size = s->stackSize;
-  for (Variable *p = f->d.parameter.v; p < f->d.parameter.v + f->d.parameter.len; ++p)
+  for (Variable *p = f->d.parameter.v; p < f->d.parameter.v + f->d.parameter.len; ++p) {
+    if (p->type->kind == ArrayT)
+      FATALR(p->location, "Array type parameter is not allowed '%s'", Type_name(p->type).s);
     VariableStack_push(s, p->name, p->type);
+  }
 
   c_Statement_make_variables_typed(s, p, m, f->body);
 

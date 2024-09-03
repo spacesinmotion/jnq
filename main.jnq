@@ -1,115 +1,59 @@
 
-use * from tests.src.Program
-
-type StatementType enum {
-  ExpressionS,
-  Return,
-  Break,
-  Continue,
-  Case,
-  Default,
-  Scope,
-  If,
-  For,
-  While,
-  DoWhile,
-  Switch,
+fn array_ptr_check(vvv *[*]i32) {
+  ASSERT(len(vvv) == 32)
+  ASSERT((*vvv)[0] == 0)
+  (*vvv)[0] = 42
 }
 
-type State struct {
-  file *char
-  c *char
-  line int
+fn main(argc i32, argv **char) i32 {
+  print("hallo len cap member")
 
-  column i32
-}
-
-fn at(st *State, i i32) *State {
-  return &st[i]
-}
-
-fn sum(st[*]State) i32 {
-  return st[st[8].column].line
-}
-
-fn sub(st State) i32 {
-  return st.line / st.column
-}
-
-fn StartState(c *char, file *char) State {
-  return State{
-    file: file,
-    c: c,
-    line: 1,
-    column: 1
-  }
-}
-
-fn count(t[]char) i32 {
-  return len(t)
-}
-
-type SomeAble interface {
-  fn id(s *SomeAble, f int) int
-  fn val(s *SomeAble) i32
-}
-
-A_CONST := 123545
-B_CONST := true
-C_CONST := [1, 2, 3]
-
-fn slice_from_c_array()
-{
-  print(" .slice_from_c_array")
-
-  aax := [12]int{}
-  for (i := 0; i < len(aax); ++i)
-    aax[i] = 2 * i
-  aa := &aax[0]
-
-  bb := aa[0 : 8]
-  cc := aa[4 : 8]
-  dd := aa[3 : -1]
-
-  print(len(bb), len(cc), len(dd))
-}
-
-fn main(argc i32, argv **char) int {
-  more_text := [
-    "A", "B", "C"
-  ]
-
-  text := "Hello World"
-  print(len(text), text)
-  sub := text[6: 8]
-  print(len(sub), sub)
-
-  {
-    text := 123
-    print(text, sub, more_text[2])
-  }
-
-  stuff := MemoryArena{}
-  print(stuff.check())
-
-  switch (StatementType.Break) {
-    case StatementType.Break:
-    x := 1
-    print(1)
-  case StatementType.Case:
-    o := "hello"
-    print(o, text)
-  }
-
-  print(argc, text[-4: -2], A_CONST, B_CONST)
-
-  ASSERT(len(C_CONST) == 3)
-
-  print("...", 1, 2, 3, count("okok"))
+  more_text := ["A", "B", "C"]
+  ASSERT(len(more_text) == 3)
+  ASSERT(cap(more_text) == 3)
+  ASSERT(more_text.len == 3)
+  ASSERT(more_text.cap == 3)
+  ASSERT(more_text.len_s == 3u)
+  ASSERT(more_text.cap_s == 3u)
 
   vvv := more_text[0: 2]
-  print(len(vvv), vvv[0])
   ASSERT(len(vvv) == 2)
+  ASSERT(cap(vvv) == 2)
+  ASSERT(vvv.len == 2)
+  ASSERT(vvv.cap == 2)
+  ASSERT(vvv.len_s == 2ul)
+  ASSERT(vvv.cap_s == 2ul)
+
+  vvv_ptr := &vvv
+  ASSERT(len(vvv_ptr) == 2)
+  ASSERT(cap(vvv_ptr) == 2)
+  ASSERT(vvv_ptr.len == 2)
+  ASSERT(vvv_ptr.cap == 2)
+  ASSERT(vvv_ptr.len_s == 2ul)
+  ASSERT(vvv_ptr.cap_s == 2ul)
+
+  a := new[32]i32{}
+  for (i := 0; i < 32; ++i)
+    a[i] = i * 2
+
+  ASSERT(a[0] == 0)
+  array_ptr_check(a)
+  ASSERT(a[0] == 42)
+
+  ASSERT(len(a) == 32)
+  ASSERT(cap(a) == 32)
+  ASSERT(a.len == 32)
+  ASSERT(a.cap == 32)
+  ASSERT(a.len_s == 32ul)
+  ASSERT(a.cap_s == 32ul)
+
+  a_ptr := &a
+  ASSERT(a_ptr.len == 32)
+  ASSERT(a_ptr.cap == 32)
+  ASSERT(a_ptr.len_s == 32ul)
+  ASSERT(a_ptr.cap_s == 32ul)
+
+  delete a
 
   print("ok")
   return 0

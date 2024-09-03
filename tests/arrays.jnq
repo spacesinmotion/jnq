@@ -1,7 +1,6 @@
-use printf from C.stdio
 
 fn simple() {
-  printf(" .simple\n")
+  print(" .simple")
 
   a := [3]int{}
   a[0] = 1
@@ -18,7 +17,7 @@ fn simple() {
 }
 
 fn multidimension() {
-  printf(" .multidimension\n")
+  print(" .multidimension")
 
   a := [2][3][4]int{}
   a[0][0][0] = 1
@@ -29,7 +28,7 @@ fn multidimension() {
 }
 
 fn construct_assign() {
-  printf(" .construct_assign\n")
+  print(" .construct_assign")
 
   a := [3]int{6, 2, 153}
   ASSERT(a[0] == 6)
@@ -44,7 +43,7 @@ fn construct_assign() {
 }
 
 fn matrix_test() {
-  printf(" .matrix_test\n")
+  print(" .matrix_test")
 
   m := [4][4]int{}
   for (i := 0; i < 4; ++i)
@@ -74,7 +73,7 @@ type Comp struct {
 }
 
 fn array_construct_test() {
-  printf(" .array_construct_test\n")
+  print(" .array_construct_test")
 
   d := [1, 2, 3]
   ASSERT(len(d) == 3)
@@ -111,15 +110,26 @@ fn array_construct_test() {
   ASSERT(com[1].tri[2].f[0] == 0.2f)
 }
 
-fn main() int {
-  printf("array test\n")
+fn array_len_and_cap_member() {
+  print(" .array_len_and_cap_member")
+
+  d := [1, 2, 3, 5, 7]
+  ASSERT(d.len == 5)
+  ASSERT(d.len_s == 5u)
+  ASSERT(d.cap == 5)
+  ASSERT(d.cap_s == 5u)
+}
+
+fn main() i32 {
+  print("array test")
 
   simple()
   construct_assign()
   multidimension()
   matrix_test()
   array_construct_test()
+  array_len_and_cap_member()
 
-  printf(" ...ok\n")
+  print(" ...ok")
   return 0
 }
