@@ -105,11 +105,11 @@ typedef struct BufString {
   char s[256];
 } BuffString;
 
-BuffString str(const char *format, ...) {
+const char *str(const char *format, ...) {
   va_list args;
-  BuffString s;
+  static char s[256];
   va_start(args, format);
-  vsnprintf(s.s, sizeof(s.s), format, args);
+  vsnprintf(s, sizeof(s), format, args);
   va_end(args);
   return s;
 }
@@ -725,7 +725,7 @@ char *Program_copy_string(Program *p, StringView s) {
   return id;
 }
 
-char *Program_copy_str(Program *p, BuffString s) { return Program_copy_string(p, c_sv(s.s)); }
+char *Program_copy_str(Program *p, const char *s) { return Program_copy_string(p, c_sv(s)); }
 
 char *readFile(const char *filename) {
   char *buffer = 0;
@@ -1796,8 +1796,8 @@ FnVec Program_parse_interface_fns(Program *p, Module *m, Type *in, State *st) {
     State old = *st;
     if (!check_identifier(st))
       FATAL(st->location, "missing function name!");
-    BuffString sn = str("%s%.*s", in->name, (int)(st->c - old.c), old.c);
-    tt[tt_len].name = Program_copy_string(p, c_sv(sn.s));
+    const char *sn = str("%s%.*s", in->name, (int)(st->c - old.c), old.c);
+    tt[tt_len].name = Program_copy_string(p, c_sv(sn));
     tt[tt_len].kind = FnT;
     tt[tt_len].fnT = (Function *)Program_alloc(p, sizeof(Function));
     tt[tt_len].fnT->module = m;
@@ -5283,7 +5283,8 @@ BuffString write_c_file(Program *p, Module *m) {
     FATALX("failed to create temp directory '.jnq/' %d", errno);
 
   int jnq_len = strlen(p->main_file);
-  BuffString main_c = p->mode == Transpile ? str("%s.c", p->output) : str(".jnq/%.*s.c", jnq_len - 4, p->main_file);
+  BuffString main_c;
+  strcpy(main_c.s, p->mode == Transpile ? str("%s.c", p->output) : str(".jnq/%.*s.c", jnq_len - 4, p->main_file));
 
   FILE *c_tmp_file = fopen(main_c.s, "w");
   if (!c_tmp_file)
@@ -5388,7 +5389,6 @@ int main(int argc, char *argv[]) {
   BuffString main_c = write_c_file(&p, m);
 
   int error = *main_c.s == '\0' ? 1 : 0;
-
   if (error == 0 && p.mode != Transpile)
     error = compile(&args, main_c.s, argc, argv);
 
