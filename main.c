@@ -3079,6 +3079,8 @@ Type *c_expression_get_type(Expression *e) {
   }
   case AccessE: {
     Type *t = c_expression_get_type(e->access->o);
+    if (t->kind == ConstantWrapperT)
+      t = t->child;
     if (t == &String)
       return &Char;
     if (!t->child)
@@ -3121,7 +3123,7 @@ Type *c_expression_get_type(Expression *e) {
   }
 
   case UnaryPrefixE: {
-    Type *st = c_expression_get_type(e->unpost->o);
+    Type *st = c_expression_get_type(e->unpre->o);
     if (streq(e->unpre->op, "&")) {
       Module *cm = Type_defined_module(st);
       if (!cm)
