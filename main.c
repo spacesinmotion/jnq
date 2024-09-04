@@ -761,6 +761,41 @@ char *Program_copy_string(Program *p, StringView s) {
   return id;
 }
 
+char need_escape(char c) {
+  static const char escaped_chars[] = {"\aa\bb\ff\nn\rr\tt\vv\\\\\"\"\'\'\?\?"};
+  for (int i = 0; escaped_chars[i] != '\0'; i += 2)
+    if (escaped_chars[i] == c)
+      return escaped_chars[i + 1];
+  return '\0';
+}
+
+char *Program_copy_raw_string(Program *p, StringView s) {
+  int size = 0;
+  for (int i = 0; i < s.size; ++i) {
+    if (s.text[i] == '\\' && s.text[i + 1] == '`')
+      continue;
+    size += need_escape(s.text[i]) != '\0' ? 2 : 1;
+  }
+
+  if (size == s.size)
+    return Program_copy_string(p, s);
+
+  char *id = (char *)Program_alloc(p, size + 1);
+  int x = 0;
+  for (int i = 0; i < s.size; ++i) {
+    if (s.text[i] == '\\' && s.text[i + 1] == '`')
+      continue;
+    char e = need_escape(s.text[i]);
+    if (e != '\0') {
+      id[x++] = '\\';
+      id[x++] = e;
+    } else
+      id[x++] = s.text[i];
+  }
+  id[size] = '\0';
+  return id;
+}
+
 char *Program_copy_str(Program *p, const char *s) { return Program_copy_string(p, c_sv(s)); }
 
 char *readFile(const char *filename) {
@@ -1926,7 +1961,9 @@ Expression *Program_parse_atom(Program *p, State *st) {
     return e;
   }
 
-  if (check_op(st, "'")) {
+  const char start_char = st->c[0];
+  if (start_char == '\'') {
+    State_skip(st, 1);
     Expression *e = Program_new_Expression(p, BaseA);
     e->baseconst->type = &Char;
     if (!st->c[0])
@@ -1945,23 +1982,26 @@ Expression *Program_parse_atom(Program *p, State *st) {
     return e;
   }
 
-  if (check_op(st, "\"")) {
-    Expression *e = Program_new_Expression(p, BaseA);
-    e->baseconst->type = &String;
+  if (start_char == '"' || start_char == '`') {
+    State_skip(st, 1);
     bool slash_escaped = false;
-    if (st->c[0] != '"') {
-      while (st->c[1] != '"' || (st->c[0] == '\\' && !slash_escaped)) {
+    if (st->c[0] != start_char) {
+      while (st->c[1] != start_char || (st->c[0] == '\\' && !slash_escaped)) {
         if (!st->c[0])
           FATAL(old.location, "unclosed string constant");
+        if (start_char == '"' && st->c[0] == '\n')
+          FATAL(st->location, "line break in string constant");
         slash_escaped = st->c[0] == '\\';
         State_skip(st, 1);
       }
       State_skip(st, 1);
     }
-
-    e->baseconst->text = Program_copy_string(p, be_sv(old.c + 1, st->c));
-    e->location = old.location;
     State_skip(st, 1);
+    Expression *e = Program_new_Expression(p, BaseA);
+    e->baseconst->type = &String;
+    e->baseconst->text = start_char == '"' ? Program_copy_string(p, be_sv(old.c + 1, st->c - 1))
+                                           : Program_copy_raw_string(p, be_sv(old.c + 1, st->c - 1));
+    e->location = old.location;
     return e;
   }
 
