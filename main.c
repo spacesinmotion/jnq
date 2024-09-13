@@ -3543,6 +3543,11 @@ Type *c_expression(FILE *f, Expression *e) {
     } else
       FATAL(e->location, "Problem with slice creation for '%s'", Type_name(type_to_access));
 
+    if ((TypeKind)type_to_access->kind == ArrayT && e->slice->o->type == ConstructE) {
+      fprintf(f, "(");
+      c_type_declare(f, type_to_access->child, e->location, "");
+      fprintf(f, "[])");
+    }
     c_expression(f, e->slice->o);
     fprintf(f, ", sizeof(");
     if (type_to_access == &String)
@@ -3552,9 +3557,13 @@ Type *c_expression(FILE *f, Expression *e) {
     else
       c_type_declare(f, type_to_access->child, e->location, "");
     fprintf(f, "), ");
-    if ((TypeKind)type_to_access->kind == ArrayT || type_to_access == &String) {
+    if (type_to_access == &String) {
       fprintf(f, "sizeof(");
       c_expression(f, e->slice->o);
+      fprintf(f, "), ");
+    } else if ((TypeKind)type_to_access->kind == ArrayT) {
+      fprintf(f, "%d * sizeof(", type_to_access->array_count);
+      c_type_declare(f, type_to_access->child, e->location, "");
       fprintf(f, "), ");
     }
     c_expression(f, e->slice->begin);

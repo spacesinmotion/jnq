@@ -234,6 +234,13 @@ fn array_default_cast_to_slices()
   default_cast_check_size_char("some", 4)
 }
 
+fn array_construction_as_slice_parameter()
+{
+  print(" .array_construction_as_slice_parameter")
+
+  default_cast_check_size([1, 2, 3, 4], 4)
+}
+
 fn dynamic_array_default_cast_to_slices()
 {
   print(" .dynamic_array_default_cast_to_slices")
@@ -329,6 +336,7 @@ fn main() i32 {
   interface_in_slice()
   slices_as_return_value_test()
   array_default_cast_to_slices()
+  array_construction_as_slice_parameter()
   dynamic_array_default_cast_to_slices()
   slice_from_slices()
   negative_indices()
